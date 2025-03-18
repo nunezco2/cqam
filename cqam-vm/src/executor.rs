@@ -4,19 +4,82 @@ use crate::context::ExecutionContext;
 use cqam_core::instruction::Instruction;
 use cqam_core::register::{CValue};
 
-/// Parse a line of CQAM assembly into an Instruction (temporary stub parser)
+/// Parse a line of CQAM assembly into an Instruction.
 pub fn parse_instruction(line: &str) -> Instruction {
-    if line.trim().starts_with("CL:LOAD") {
-        // Example: CL:LOAD R1, 42
-        let tokens: Vec<&str> = line.trim().split_whitespace().collect();
-        if tokens.len() >= 3 {
-            let dst = tokens[1].trim_end_matches(',').to_string();
-            let src = tokens[2].to_string();
-            return Instruction::ClLoad { dst, src };
+    let line = line.trim();
+
+    // Robust split by colon and instruction type
+    if let Some(rest) = line.strip_prefix("CL:LOAD") {
+        let parts = split_operands(rest, 2);
+        if let [dst, src] = &parts[..] {
+            return Instruction::ClLoad {
+                dst: dst.clone(),
+                src: src.clone(),
+            };
         }
     }
 
-    Instruction::NoOp // Default fallback
+    if let Some(rest) = line.strip_prefix("CL:ADD") {
+        let parts = split_operands(rest, 3);
+        if let [dst, lhs, rhs] = &parts[..] {
+            return Instruction::ClAdd {
+                dst: dst.clone(),
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            };
+        }
+    }
+
+    if let Some(rest) = line.strip_prefix("CL:SUB") {
+        let parts = split_operands(rest, 3);
+        if let [dst, lhs, rhs] = &parts[..] {
+            return Instruction::ClSub {
+                dst: dst.clone(),
+                lhs: lhs.clone(),
+                rhs: rhs.clone(),
+            };
+        }
+    }
+
+    if let Some(rest) = line.strip_prefix("CL:STORE") {
+        let parts = split_operands(rest, 2);
+        if let [addr, src] = &parts[..] {
+            return Instruction::ClStore {
+                addr: addr.clone(),
+                src: src.clone(),
+            };
+        }
+    }
+
+    if let Some(rest) = line.strip_prefix("CL:JMP") {
+        let label = rest.trim().to_string();
+        return Instruction::ClJump { label };
+    }
+
+    if let Some(rest) = line.strip_prefix("CL:IF") {
+        let parts = split_operands(rest, 2);
+        if let [pred, label] = &parts[..] {
+            return Instruction::ClIf {
+                pred: pred.clone(),
+                label: label.clone(),
+            };
+        }
+    }
+
+    if let Some(label) = line.strip_prefix("LABEL:") {
+        return Instruction::Label(label.trim().to_string());
+    }
+
+    Instruction::NoOp
+}
+
+/// Helper function to split comma-separated operands and trim whitespace.
+fn split_operands(input: &str, expected: usize) -> Vec<String> {
+    input
+        .split(',')
+        .map(|s| s.trim().to_string())
+        .take(expected)
+        .collect()
 }
 
 /// Execute a single instruction (with optional input override)
