@@ -36,6 +36,79 @@ fn test_hyb_cond_exec_jump_on_qf() {
 }
 
 #[test]
+fn test_hyb_cond_exec_does_not_jump_on_false_flag() {
+    let mut ctx = ExecutionContext::new(vec![
+        Instruction::Label("THEN".into()),
+        Instruction::ClLoad { dst: "R1".into(), src: "42".into() },
+    ]);
+    ctx.psw.qf = false;
+    ctx.pc = 0;
+
+    execute_hybrid(&mut ctx, Instruction::HybCondExec {
+        flag: "QF".into(),
+        then_label: "THEN".into(),
+    });
+
+    assert_eq!(ctx.pc, 1); // PC just advances without jumping
+}
+
+#[test]
+fn test_hyb_fork_merge_flow_simulation() {
+    let program = vec![
+        Instruction::HybFork,
+        Instruction::ClLoad { dst: "R1".into(), src: "5".into() },
+        Instruction::HybMerge,
+    ];
+
+    let mut ctx = ExecutionContext::new(program.clone());
+
+    for instr in program {
+        match instr {
+            Instruction::HybFork | Instruction::HybMerge | Instruction::HybCondExec { .. } | Instruction::HybReduce { .. } => {
+                cqam_vm::hybrid::execute_hybrid(&mut ctx, instr);
+            }
+            _ => {
+                cqam_vm::executor::execute_instruction(&mut ctx, instr);
+            }
+        }
+    }
+
+    assert!(ctx.psw.forked);
+    assert!(ctx.psw.merged);
+    assert_eq!(ctx.registers.load_c("R1"), Some(&CValue::Int(5)));
+}
+
+#[test]
+fn test_hyb_cond_exec_and_fork_combined() {
+    let program = vec![
+        Instruction::HybFork,
+        Instruction::Label("THEN".into()),
+        Instruction::ClLoad { dst: "R2".into(), src: "7".into() },
+        Instruction::HybCondExec { flag: "QF".into(), then_label: "THEN".into() },
+        Instruction::HybMerge,
+    ];
+
+    let mut ctx = ExecutionContext::new(program.clone());
+    ctx.psw.qf = true;
+    ctx.pc = 0;
+
+    for instr in program {
+        match instr {
+            Instruction::HybFork | Instruction::HybMerge | Instruction::HybCondExec { .. } | Instruction::HybReduce { .. } => {
+                cqam_vm::hybrid::execute_hybrid(&mut ctx, instr);
+            }
+            _ => {
+                cqam_vm::executor::execute_instruction(&mut ctx, instr);
+            }
+        }
+    }
+
+    assert!(ctx.psw.forked);
+    assert!(ctx.psw.merged);
+    assert_eq!(ctx.registers.load_c("R2"), Some(&CValue::Int(7)));
+}
+
+#[test]
 fn test_hyb_reduce_all_modes() {
     let inputs = vec![
         ("round", 3),
