@@ -2,7 +2,7 @@
 
 use cqam_core::instruction::Instruction;
 use cqam_core::register::CValue;
-use cqam_sim::qdist::QDist;
+use cqam_sim::qdist::{QDist, Measurable};
 use cqam_sim::kernel::Kernel;
 use cqam_sim::kernels::init::InitDist;
 use cqam_sim::kernels::entangle::Entangle;
@@ -27,22 +27,28 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: Instruction) {
                     _ => panic!("Unknown kernel"),
                 };
                 let result = k.apply(&qdist);
-                ctx.qmem.insert(&dst, result);
+                ctx.qmem.insert(&dst, result.clone());
+        
+                // Simulated fidelity levels (placeholders for now)
+                let superposition = 0.4; // example placeholder
+                let entanglement = 0.3;  // example placeholder
+        
+                ctx.psw.update_from_qmeta(
+                    superposition,
+                    entanglement,
+                    (
+                        ctx.config.min_superposition,
+                        ctx.config.min_entanglement,
+                    ),
+                );
             }
         }
 
         Instruction::QMeas { dst, src } => {
-            let qdist = ctx.qmem.get(&src);
-            if let Some(dist) = qdist {
-                let max_idx = dist
-                    .probabilities
-                    .iter()
-                    .enumerate()
-                    .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())
-                    .map(|(i, _)| dist.domain[i].clone());
-
-                if let Some(val) = max_idx {
-                    ctx.registers.store_c(&dst, CValue::Int(val.into()));
+            if let Some(qdist) = ctx.qmem.get(&src) {
+                if let Some(val) = qdist.measure() {
+                    ctx.registers.store_c(&dst, CValue::Int(val));
+                    ctx.psw.mark_measured();
                 }
             }
         }
