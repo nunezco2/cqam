@@ -5,3 +5,4 @@ pub mod qop;
 pub mod psw;
 pub mod simconfig;
 pub mod isr;
+pub mod hybrid;

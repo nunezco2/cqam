@@ -18,8 +18,10 @@ pub enum Instruction {
     QObserve { dst: String, src: String },
 
     // Hybrid instructions
+    HybFork,
+    HybMerge,
     HybReduce { dst: String, src: String, function: String },
-    HybCondExec { condition: String, then_block: String },
+    HybCondExec { flag: String, then_label: String },
 
     // Control instructions
     Label(String),

@@ -137,6 +137,17 @@ pub fn default_resource_for(instr: &Instruction) -> ResourceDelta {
         Instruction::QKernel { .. } => ResourceDelta { time: 3, space: 2, superposition: 0.5, entanglement: 0.7, ..Default::default() },
         Instruction::QMeas { .. } => ResourceDelta { time: 1, space: 1, ..Default::default() },
         Instruction::QObserve { .. } => ResourceDelta { time: 1, space: 1, interference: 0.3, ..Default::default() },
+        Instruction::HybFork => ResourceDelta { time: 1, space: 0, ..Default::default() },
+        Instruction::HybMerge => ResourceDelta { time: 1, space: 0, ..Default::default() },
+        Instruction::HybCondExec { .. } => ResourceDelta { time: 1, space: 0, ..Default::default() },
+        Instruction::HybReduce { function, .. } => {
+            match function.as_str() {
+                "round" | "floor" | "trunc" => ResourceDelta { time: 1, space: 1, ..Default::default() },
+                "ceil" | "abs" => ResourceDelta { time: 2, space: 1, ..Default::default() },
+                "negate" => ResourceDelta { time: 2, space: 1, interference: 0.2, ..Default::default() },
+                _ => ResourceDelta { time: 2, space: 1, ..Default::default() },
+            }
+        }
         
         _ => ResourceDelta::default(),
     }
