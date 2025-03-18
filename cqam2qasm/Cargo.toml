@@ -1,0 +1,8 @@
+[package]
+name = "cqam2qasm"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cqam-core = { path = "../cqam-core" }
+cqam-codegen = { path = "../cqam-codegen" }

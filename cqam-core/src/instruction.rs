@@ -25,5 +25,6 @@ pub enum Instruction {
 
     // Control instructions
     Label(String),
+    Halt,
     NoOp,
 }
