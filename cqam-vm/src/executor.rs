@@ -133,6 +133,11 @@ pub fn default_resource_for(instr: &Instruction) -> ResourceDelta {
         Instruction::ClStore { .. } => ResourceDelta { time: 1, space: 1, ..Default::default() },
         Instruction::ClJump { .. } => ResourceDelta { time: 1, space: 0, ..Default::default() },
         Instruction::ClIf { .. } => ResourceDelta { time: 1, space: 0, ..Default::default() },
+        Instruction::QPrep { .. } => ResourceDelta { time: 2, space: 2, superposition: 1.0, ..Default::default() },
+        Instruction::QKernel { .. } => ResourceDelta { time: 3, space: 2, superposition: 0.5, entanglement: 0.7, ..Default::default() },
+        Instruction::QMeas { .. } => ResourceDelta { time: 1, space: 1, ..Default::default() },
+        Instruction::QObserve { .. } => ResourceDelta { time: 1, space: 1, interference: 0.3, ..Default::default() },
+        
         _ => ResourceDelta::default(),
     }
 }
