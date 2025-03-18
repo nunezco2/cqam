@@ -2,6 +2,7 @@
 
 use cqam_core::memory::{CMEM, QMEM};
 use cqam_core::register::RegisterBank;
+use crate::resource::ResourceTracker;
 
 /// Represents the execution state of the CQAM interpreter.
 pub struct ExecutionContext {
@@ -9,10 +10,12 @@ pub struct ExecutionContext {
     pub cmem: CMEM,
     pub qmem: QMEM,
     pub registers: RegisterBank,
-    pub program: Vec<String>, // Later replaced by parsed Instruction
+    pub program: Vec<String>,
+    pub resource_tracker: ResourceTracker,
 }
 
 impl ExecutionContext {
+    
     pub fn new(program: Vec<String>) -> Self {
         Self {
             pc: 0,
@@ -20,6 +23,7 @@ impl ExecutionContext {
             qmem: QMEM::new(),
             registers: RegisterBank::new(),
             program,
+            resource_tracker: ResourceTracker::new(),
         }
     }
 
