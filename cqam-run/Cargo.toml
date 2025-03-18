@@ -1,0 +1,10 @@
+[package]
+name = "cqam-run"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+cqam-core = { path = "../cqam-core" }
+cqam-vm = { path = "../cqam-vm" }
+serde = { version = "1.0", features = ["derive"] }
+toml = "0.7"

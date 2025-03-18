@@ -26,8 +26,8 @@ impl ExecutionContext {
             registers: RegisterBank::new(),
             psw: ProgramStateWord::new(),
             config: QuantumFidelityThreshold::default(),
-            program,
             resource_tracker: ResourceTracker::new(),
+            program,
         }
     }
 

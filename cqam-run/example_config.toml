@@ -1,0 +1,3 @@
+fidelity_threshold = 0.98
+max_cycles = 500
+enable_interrupts = true
