@@ -1,5 +1,6 @@
 // cqam-vm/src/context.rs
 
+use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMEM, QMEM};
 use cqam_core::register::RegisterBank;
 use crate::resource::ResourceTracker;
@@ -13,12 +14,12 @@ pub struct ExecutionContext {
     pub registers: RegisterBank,
     pub psw: ProgramStateWord,
     pub config: QuantumFidelityThreshold,
-    pub program: Vec<String>,
+    pub program: Vec<Instruction>,
     pub resource_tracker: ResourceTracker,
 }
 
 impl ExecutionContext {
-    pub fn new(program: Vec<String>) -> Self {
+    pub fn new(program: Vec<Instruction>) -> Self {
         Self {
             pc: 0,
             cmem: CMEM::new(),
@@ -39,7 +40,7 @@ impl ExecutionContext {
         self.pc = 0;
     }
 
-    pub fn current_line(&self) -> Option<&String> {
+    pub fn current_line(&self) -> Option<&Instruction> {
         self.program.get(self.pc)
     }
 }

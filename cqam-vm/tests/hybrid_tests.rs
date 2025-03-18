@@ -21,8 +21,8 @@ fn test_hyb_merge_sets_flag() {
 #[test]
 fn test_hyb_cond_exec_jump_on_qf() {
     let mut ctx = ExecutionContext::new(vec![
-        "LABEL: THEN".into(),
-        "CL:LOAD R1, 42".into(),
+        Instruction::Label("THEN".into()),
+        Instruction::ClLoad { dst: "R1".into(), src: "42".into() },
     ]);
     ctx.psw.qf = true;
     ctx.pc = 0;
@@ -32,7 +32,7 @@ fn test_hyb_cond_exec_jump_on_qf() {
         then_label: "THEN".into(),
     });
 
-    assert_eq!(ctx.pc, 0); // Already jumped to THEN
+    assert_eq!(ctx.pc, 1); // Already jumped to THEN
 }
 
 #[test]

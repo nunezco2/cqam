@@ -2,7 +2,11 @@ use cqam_core::instruction::Instruction;
 use cqam_core::register::CValue;
 use crate::context::ExecutionContext;
 
-/// Execute hybrid control flow and reduction instructions
+
+pub fn is_label(instr: &Instruction, label: &str) -> bool {
+    matches!(instr, Instruction::Label(l) if l == label)
+}
+
 pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: Instruction) {
     match instr {
         Instruction::HybFork => {
@@ -29,9 +33,10 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: Instruction) {
 
             ctx.psw.update_from_predicate(cond);
             if cond {
-                if let Some(target) = ctx.program.iter().position(|line| line.trim() == format!("LABEL: {}", then_label)) {
+                if let Some(target) = ctx.program.iter().position(|instr| {
+                    matches!(instr, Instruction::Label(l) if *l == then_label)
+                }) {
                     ctx.pc = target;
-                    return;
                 }
             }
         }

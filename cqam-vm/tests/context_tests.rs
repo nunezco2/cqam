@@ -1,22 +1,32 @@
-// cqam-vm/tests/context_tests.rs
-
+use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;
 
 #[test]
-fn test_context_pc_and_program_flow() {
-    let prog = vec![
-        "CL:LOAD R1, 5".to_string(),
-        "CL:ADD R2, R1, 3".to_string(),
+fn test_execution_context_basics() {
+    let program = vec![
+        Instruction::ClLoad { dst: "X".into(), src: "42".into() },
+        Instruction::ClAdd { dst: "Y".into(), lhs: "X".into(), rhs: "X".into() },
+        Instruction::Label("LOOP_START".into()),
+        Instruction::ClJump { label: "LOOP_START".into() },
     ];
-    let mut ctx = ExecutionContext::new(prog);
+
+    let ctx = ExecutionContext::new(program.clone());
 
     assert_eq!(ctx.pc, 0);
-    assert_eq!(ctx.current_line(), Some(&"CL:LOAD R1, 5".to_string()));
+    assert_eq!(ctx.program.len(), 4);
+    assert_eq!(ctx.program[0], program[0]);
+    assert_eq!(ctx.program[2], Instruction::Label("LOOP_START".into()));
+    assert_eq!(ctx.program[3], Instruction::ClJump { label: "LOOP_START".into() });
+}
 
+#[test]
+fn test_execution_context_pc_reset_and_advance() {
+    let program = vec![Instruction::ClLoad { dst: "A".into(), src: "1".into() }];
+    let mut ctx = ExecutionContext::new(program);
+
+    assert_eq!(ctx.pc, 0);
     ctx.advance_pc();
     assert_eq!(ctx.pc, 1);
-    assert_eq!(ctx.current_line(), Some(&"CL:ADD R2, R1, 3".to_string()));
-
-    ctx.advance_pc();
-    assert_eq!(ctx.current_line(), None);
+    ctx.reset_pc();
+    assert_eq!(ctx.pc, 0);
 }

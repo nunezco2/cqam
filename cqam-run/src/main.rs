@@ -19,11 +19,16 @@ fn main() {
     let print_psw = args.contains(&"--psw-report".to_string());
     let print_resource = args.contains(&"--resource-usage".to_string());
 
-    let config = SimConfig::load(config_path);
+    let config_path = args.iter()
+        .position(|a| a == "--config")
+        .and_then(|i| args.get(i + 1))
+        .cloned()
+        .unwrap_or_else(|| "example_config.toml".to_string());
+    let config = SimConfig::load(&config_path);
     println!("Loaded simulator config: {:?}", config);
 
     let program = load_program(input_path);
-    let mut ctx = run_program(program);
+    let ctx = run_program(program);
 
     print_report(&ctx, print_state, print_psw, print_resource);
 }
