@@ -1,19 +1,32 @@
-use cqam_codegen::qasm::OpenQASMEmitter;
-use cqam_codegen::emitter::QASMEmitter;
 use cqam_core::instruction::Instruction;
+use cqam_codegen::qasm::{emit_qasm_program, QasmFormat};
 
 #[test]
-fn test_basic_qasm_emit() {
+fn test_emit_qasm_format_for_cladd() {
+    let instr = Instruction::ClAdd {
+        dst: "R1".into(),
+        lhs: "R2".into(),
+        rhs: "R3".into(),
+    };
+
+    let qasm = instr.to_qasm().unwrap();
+    assert!(qasm.contains("let R1 = R2 + R3"));
+}
+
+#[test]
+fn test_emit_qasm_program_with_multiple_lines() {
     let program = vec![
-        Instruction::QPrep { dst: "0".into(), dist_src: "".into() },
-        Instruction::QKernel { dst: "1".into(), src: "0".into(), kernel: "entangle".into(), ctx: None },
-        Instruction::QMeas { dst: "0".into(), src: "0".into() },
+        Instruction::Label("START".into()),
+        Instruction::ClLoad { dst: "R1".into(), src: "42".into() },
+        Instruction::ClAdd { dst: "R2".into(), lhs: "R1".into(), rhs: "5".into() },
+        Instruction::ClStore { addr: "result".into(), src: "R2".into() },
+        Instruction::Halt,
     ];
-    let emitter = OpenQASMEmitter;
-    let output = emitter.emit_program(&program);
-    println!("{}", output);
-    assert!(output.contains("OPENQASM 3.0"));
-    assert!(output.contains("reset q[0];"));
-    assert!(output.contains("cx q[0], q[1];"));
-    assert!(output.contains("c[0] = measure q[0];"));
+
+    let qasm_output = emit_qasm_program(&program);
+    assert!(qasm_output.contains("OPENQASM 3.0;"));
+    assert!(qasm_output.contains("let R1 = 42;"));
+    assert!(qasm_output.contains("let R2 = R1 + 5;"));
+    assert!(qasm_output.contains("result = R2;"));
+    assert!(qasm_output.contains("// HALT"));
 }

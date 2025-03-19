@@ -1,66 +1,61 @@
 use cqam_core::instruction::Instruction;
-use crate::emitter::QASMEmitter;
 
-pub struct OpenQASMEmitter;
+/// Trait for converting CQAM instructions into OpenQASM 3.0 strings
+pub trait QasmFormat {
+    fn to_qasm(&self) -> Option<String>;
+}
 
-impl QASMEmitter for OpenQASMEmitter {
-    fn emit_header(&self) -> String {
-        "OPENQASM 3.0;\ninclude \"stdgates.inc\";\n".to_string()
-    }
-
-    fn emit_register_declarations(&self) -> String {
-        "qubit[4] q;\nbit[4] c;\n".to_string()
-    }
-
-    fn emit_instruction(&self, instr: &Instruction) -> Option<String> {
-        match instr {
-            // Quantum
-            Instruction::QPrep { dst, .. } => Some(format!("reset q[{}];", dst)),
-            Instruction::QKernel { dst, src, kernel, .. } => match kernel.as_str() {
-                "entangle" => Some(format!("cx q[{}], q[{}];", src, dst)),
-                _ => Some(format!("// [QKernel] {} → {} via '{}'", src, dst, kernel)),
-            },
-            Instruction::QMeas { dst, src } =>
-                Some(format!("c[{}] = measure q[{}];", dst, src)),
-    
-            // Classical passthrough as comment
-            Instruction::ClAdd { dst, lhs, rhs } =>
-                Some(format!("// CL: {} = {} + {}", dst, lhs, rhs)),
-            Instruction::ClSub { dst, lhs, rhs } =>
-                Some(format!("// CL: {} = {} - {}", dst, lhs, rhs)),
-            Instruction::ClLoad { dst, src } =>
-                Some(format!("// CL: {} ← mem[{}]", dst, src)),
-            Instruction::ClStore { addr, src } =>
-                Some(format!("// CL: mem[{}] ← {}", addr, src)),
-            Instruction::ClIf { pred, label } =>
-                Some(format!("// CL: IF {} → jump {}", pred, label)),
-            Instruction::ClJump { label } =>
-                Some(format!("// CL: unconditional jump {}", label)),
-    
-            // Hybrid passthrough as comment
-            Instruction::HybFork => Some("// HYB: Fork control path".to_string()),
-            Instruction::HybMerge => Some("// HYB: Merge control paths".to_string()),
-            Instruction::HybCondExec { flag, then_label, .. } =>
-                Some(format!("// HYB: CondExec if {} → {}", flag, then_label)),
-            Instruction::HybReduce { src, dst, function } =>
-                Some(format!("// HYB: Reduce {} → {} using '{}'", src, dst, function)),
-    
-            // Label and Halt
-            Instruction::Label(label) => Some(format!("// Label: {}", label)),
+impl QasmFormat for Instruction {
+    fn to_qasm(&self) -> Option<String> {
+        match self {
+            Instruction::ClLoad { dst, src } => Some(format!("// CL:LOAD {}, {}\nlet {} = {};", dst, src, dst, src)),
+            Instruction::ClAdd { dst, lhs, rhs } => Some(format!("// CL:ADD {}, {}, {}\nlet {} = {} + {};", dst, lhs, rhs, dst, lhs, rhs)),
+            Instruction::ClSub { dst, lhs, rhs } => Some(format!("// CL:SUB {}, {}, {}\nlet {} = {} - {};", dst, lhs, rhs, dst, lhs, rhs)),
+            Instruction::ClStore { addr, src } => Some(format!("// CL:STORE {}, {}\n{} = {};", addr, src, addr, src)),
+            Instruction::ClJump { label } => Some(format!("// CL:JMP {}", label)),
+            Instruction::ClIf { pred, label } => Some(format!("// CL:IF {}, {}\nif ({}) {{ goto {}; }}", pred, label, pred, label)),
+            Instruction::Label(name) => Some(format!("// LABEL: {}", name)),
+            Instruction::HybFork => Some("// HYB: fork".to_string()),
+            Instruction::HybMerge => Some("// HYB: merge".to_string()),
+            Instruction::HybCondExec { flag, then_label } => Some(format!("// HYB:COND_EXEC {}, {}", flag, then_label)),
+            Instruction::HybReduce { src, dst, function } => Some(format!("// HYB:REDUCE {}, {}, {}\nlet {} = {}({});", src, dst, function, dst, function, src)),
+            Instruction::QPrep { dst, dist_src } => Some(format!("// QPREP: {} from {}", dst, dist_src)),
+            Instruction::QKernel { dst, src, kernel, ctx } => {
+                if let Some(c) = ctx {
+                    Some(format!("// QKERNEL: {} = {}({}) in context {}", dst, kernel, src, c))
+                } else {
+                    Some(format!("// QKERNEL: {} = {}({})", dst, kernel, src))
+                }
+            }
+            Instruction::QMeas { dst, src } => Some(format!("// QMEAS {}, {}\n{} = measure {}[0];", dst, src, dst, src)),
+            Instruction::QObserve { dst, src } => Some(format!("// QOBSERVE {}, {}", dst, src)),
             Instruction::Halt => Some("// HALT".to_string()),
-    
-            _ => Some("// [Unrecognized instruction]".to_string()),
+            Instruction::NoOp => None,
         }
-    }    
+    }
+}
 
-    fn emit_program(&self, program: &[Instruction]) -> String {
-        let mut output = self.emit_header();
-        output.push_str(&self.emit_register_declarations());
-        for instr in program {
-            if let Some(line) = self.emit_instruction(instr) {
-                output.push_str(&format!("{}\n", line));
+/// Emit a full OpenQASM 3.0 program from a CQAM program
+pub fn emit_qasm_program(program: &[Instruction]) -> String {
+    let mut lines = vec![];
+    lines.push("OPENQASM 3.0;".to_string());
+    lines.push("// --- BEGIN CQAM GENERATED QASM ---".to_string());
+
+    // Static declarations (placeholder, can be refined later)
+    lines.push("bit[1] m1;".to_string());
+    lines.push("qubit[1] q1;".to_string());
+    lines.push("int[32] R1;".to_string());
+    lines.push("int[32] R2;".to_string());
+    lines.push("int[32] result;".to_string());
+
+    for instr in program {
+        if let Some(line) = instr.to_qasm() {
+            for l in line.lines() {
+                lines.push(l.to_string());
             }
         }
-        output
     }
+
+    lines.push("// --- END CQAM GENERATED QASM ---".to_string());
+    lines.join("\n")
 }
