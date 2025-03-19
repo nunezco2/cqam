@@ -32,7 +32,7 @@ fn test_qasm_format_hybrid() {
 
     assert_eq!(fork.to_qasm(), Some("// HYB: fork".to_string()));
     assert_eq!(merge.to_qasm(), Some("// HYB: merge".to_string()));
-    assert_eq!(cond_exec.to_qasm(), Some("// HYB:COND_EXEC hf, LBL".to_string()));
+    assert_eq!(cond_exec.to_qasm(), Some("// HYB:COND_EXEC hf, LBL\n    if (hf) { goto LBL; }".to_string()));
     assert_eq!(reduce.to_qasm(), Some("// HYB:REDUCE in, out, round\n    let out = round(in);".to_string()));
 }
 
@@ -142,4 +142,15 @@ fn test_qasm_kernel_function_emission() {
     assert!(qasm.contains("apply_modexp(qX)") || qasm.contains("= apply_modexp(qX);"));
     assert!(qasm.contains("apply_modexp(qY)") || qasm.contains("= apply_modexp(qY);"));
     assert!(qasm.contains("other_kernel(qZ)") || qasm.contains("= other_kernel(qZ);"));
+}
+
+#[test]
+fn test_qasm_format_hyb_cond_exec_expansion() {
+    let instr = Instruction::HybCondExec {
+        flag: "qf".into(),
+        then_label: "THEN".into(),
+    };
+
+    let expected_qasm = "// HYB:COND_EXEC qf, THEN\n    if (qf) { goto THEN; }".to_string();
+    assert_eq!(instr.to_qasm(), Some(expected_qasm));
 }

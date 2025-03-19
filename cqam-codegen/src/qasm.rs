@@ -21,7 +21,7 @@ impl QasmFormat for Instruction {
             Instruction::Label(name) => Some(format!("// LABEL: {}", name)),
             Instruction::HybFork => Some("// HYB: fork".to_string()),
             Instruction::HybMerge => Some("// HYB: merge".to_string()),
-            Instruction::HybCondExec { flag, then_label } => Some(format!("// HYB:COND_EXEC {}, {}", flag, then_label)),
+            Instruction::HybCondExec { flag, then_label } => Some(format!("// HYB:COND_EXEC {}, {}\n    if ({}) {{ goto {}; }}", flag, then_label, flag, then_label)),
             Instruction::HybReduce { src, dst, function } => Some(format!("// HYB:REDUCE {}, {}, {}\n    let {} = {}({});", src, dst, function, dst, function, src)),
             Instruction::QPrep { dst, dist_src } => Some(format!("// QPREP: {} from {}", dst, dist_src)),
             Instruction::QKernel { dst, src, kernel, ctx } => {
