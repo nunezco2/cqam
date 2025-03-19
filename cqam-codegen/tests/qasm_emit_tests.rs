@@ -1,5 +1,6 @@
 use cqam_core::instruction::Instruction;
-use cqam_codegen::qasm::{emit_qasm_program, QasmFormat};
+use cqam_codegen::qasm::QasmFormat;
+use cqam_codegen::qasm::emit_qasm_program;
 
 #[test]
 fn test_emit_qasm_format_for_cladd() {

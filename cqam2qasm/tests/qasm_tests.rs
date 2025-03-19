@@ -1,6 +1,5 @@
 use cqam_core::instruction::Instruction;
-use cqam_codegen::qasm::QasmFormat;
-use cqam_codegen::qasm::emit_qasm_program;
+use cqam_codegen::qasm::{QasmFormat, emit_qasm_program};
 
 #[test]
 fn test_qasm_format_classical_ops() {
@@ -60,8 +59,8 @@ fn test_qasm_format_quantum_variants() {
     assert_eq!(qprep.to_qasm(), Some("// QPREP: q1 from distA".to_string()));
     assert_eq!(qmeas.to_qasm(), Some("// QMEAS m1, q1\n    m1 = measure q1[0];".to_string()));
     assert_eq!(qobserve.to_qasm(), Some("// QOBSERVE obs1, q2".to_string()));
-    assert_eq!(qkernel_basic.to_qasm(), Some("// QKERNEL: q3 = modexp(q2)".to_string()));
-    assert_eq!(qkernel_ctx.to_qasm(), Some("// QKERNEL: q4 = modexp(q2) in context qctx".to_string()));
+    assert_eq!(qkernel_basic.to_qasm(), Some("// QKERNEL: q3 = modexp(q2)\n    q3 = modexp(q2);".to_string()));
+    assert_eq!(qkernel_ctx.to_qasm(), Some("// QKERNEL: q4 = modexp(q2) in context qctx\n    q4 = modexp(q2);".to_string()));
 }
 
 #[test]
@@ -105,4 +104,42 @@ fn test_emit_qasm_program_basic() {
     assert!(qasm_output.contains("let R2 = R1 + 10;"));
     assert!(qasm_output.contains("result = R2;") || qasm_output.contains("// CL:STORE result, R2"));
     assert!(qasm_output.contains("// HALT"));
+}
+
+#[test]
+fn test_qasm_kernel_function_emission() {
+    let program = vec![
+        Instruction::QKernel {
+            dst: "qA".into(),
+            src: "qX".into(),
+            kernel: "apply_modexp".into(),
+            ctx: None,
+        },
+        Instruction::QKernel {
+            dst: "qB".into(),
+            src: "qY".into(),
+            kernel: "apply_modexp".into(),
+            ctx: None,
+        },
+        Instruction::QKernel {
+            dst: "qC".into(),
+            src: "qZ".into(),
+            kernel: "other_kernel".into(),
+            ctx: None,
+        },
+    ];
+
+    let qasm = emit_qasm_program(&program);
+
+    print!("{}", qasm);
+
+    // Ensure each kernel function appears only once
+    let modexp_def_count = qasm.matches("def apply_modexp(qbit x)").count();
+    let other_def_count = qasm.matches("def other_kernel(qbit x)").count();
+
+    assert_eq!(modexp_def_count, 1);
+    assert_eq!(other_def_count, 1);
+    assert!(qasm.contains("apply_modexp(qX)") || qasm.contains("= apply_modexp(qX);"));
+    assert!(qasm.contains("apply_modexp(qY)") || qasm.contains("= apply_modexp(qY);"));
+    assert!(qasm.contains("other_kernel(qZ)") || qasm.contains("= other_kernel(qZ);"));
 }
