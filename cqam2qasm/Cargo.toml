@@ -2,7 +2,15 @@
 name = "cqam2qasm"
 version = "0.1.0"
 edition = "2021"
+authors = ["Santiago Nunez-Corrales"]
+description = "CLI tool for converting CQAM assembly files into OpenQASM 3.0"
+license = "MIT"
 
 [dependencies]
 cqam-core = { path = "../cqam-core" }
 cqam-codegen = { path = "../cqam-codegen" }
+cqam-vm = { path = "../cqam-vm" }
+
+[[bin]]
+name = "cqam2qasm"
+path = "src/main.rs"
