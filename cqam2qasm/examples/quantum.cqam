@@ -1,0 +1,4 @@
+QPREP q1, dist_uniform
+QKERNEL q2, q1, apply_modexp
+QMEAS m1, q2
+CL:STORE outcome, m1
