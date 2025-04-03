@@ -58,7 +58,7 @@ fn main() {
         program.push(parse_instruction(line));
     }
 
-    let output = emit_qasm_program(&program);
+    let output = emit_qasm_program(&program, true);
 
     if let Some(out_path) = output_path {
         fs::write(out_path, output).expect("Failed to write output file");
