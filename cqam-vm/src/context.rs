@@ -44,7 +44,7 @@ pub struct ExecutionContext {
     pub cmem: CMem,
 
     /// Quantum memory: 256 slots of DensityMatrix.
-    pub qmem: QMem,
+    pub qmem: QMem<DensityMatrix>,
 
     /// Call stack for CALL/RET instructions.
     /// Each entry is the return address (PC value to resume at).

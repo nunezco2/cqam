@@ -2,6 +2,7 @@
 //
 // Phase 2: Test numeric-addressed CMem and QMem.
 // Phase 2 (density matrix): QMem tests updated for DensityMatrix.
+// Phase 3: QMem is now generic; tests use explicit QMem<DensityMatrix>.
 
 use cqam_core::memory::{CMem, QMem};
 use cqam_sim::density_matrix::DensityMatrix;
@@ -93,7 +94,7 @@ fn test_cmem_default() {
 
 #[test]
 fn test_qmem_new_all_empty() {
-    let qmem = QMem::new();
+    let qmem: QMem<DensityMatrix> = QMem::new();
     for addr in 0..=255u8 {
         assert!(qmem.load(addr).is_none());
     }
@@ -101,7 +102,7 @@ fn test_qmem_new_all_empty() {
 
 #[test]
 fn test_qmem_store_and_load() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     let dm = DensityMatrix::new_zero_state(2);
 
     qmem.store(10, dm);
@@ -115,7 +116,7 @@ fn test_qmem_store_and_load() {
 
 #[test]
 fn test_qmem_take_removes_slot() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     let dm = DensityMatrix::new_uniform(2);
     qmem.store(5, dm);
 
@@ -128,7 +129,7 @@ fn test_qmem_take_removes_slot() {
 
 #[test]
 fn test_qmem_take_returns_correct_value() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     let dm = DensityMatrix::new_bell();
     qmem.store(42, dm);
 
@@ -140,13 +141,13 @@ fn test_qmem_take_returns_correct_value() {
 
 #[test]
 fn test_qmem_take_empty_slot_returns_none() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     assert!(qmem.take(100).is_none());
 }
 
 #[test]
 fn test_qmem_is_occupied() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     assert!(!qmem.is_occupied(0));
     qmem.store(0, DensityMatrix::new_zero_state(1));
     assert!(qmem.is_occupied(0));
@@ -154,7 +155,7 @@ fn test_qmem_is_occupied() {
 
 #[test]
 fn test_qmem_overwrite() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     qmem.store(0, DensityMatrix::new_zero_state(1));
     qmem.store(0, DensityMatrix::new_uniform(2));
 
@@ -164,7 +165,7 @@ fn test_qmem_overwrite() {
 
 #[test]
 fn test_qmem_max_address() {
-    let mut qmem = QMem::new();
+    let mut qmem: QMem<DensityMatrix> = QMem::new();
     qmem.store(255, DensityMatrix::new_zero_state(1));
     assert!(qmem.is_occupied(255));
     let loaded = qmem.load(255).unwrap();
@@ -173,7 +174,7 @@ fn test_qmem_max_address() {
 
 #[test]
 fn test_qmem_default() {
-    let qmem = QMem::default();
+    let qmem: QMem<DensityMatrix> = QMem::default();
     assert!(!qmem.is_occupied(0));
     assert!(!qmem.is_occupied(255));
 }

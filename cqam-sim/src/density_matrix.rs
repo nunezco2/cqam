@@ -6,6 +6,7 @@
 // matrix with Tr(rho) = 1. Stored as a flat row-major Vec<C64>.
 
 use crate::complex::{self, C64, cx_add, cx_mul, cx_conj, cx_scale, cx_norm_sq};
+use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
 
 /// Maximum number of qubits supported by the full density matrix.
@@ -374,5 +375,27 @@ impl std::fmt::Display for DensityMatrix {
         }
         write!(f, "  Purity: {:.6}, Trace: ({:.6}, {:.6})",
             self.purity(), self.trace().0, self.trace().1)
+    }
+}
+
+// =============================================================================
+// QuantumState trait implementation (Phase 3)
+// =============================================================================
+
+impl QuantumState for DensityMatrix {
+    fn num_qubits(&self) -> u8 {
+        DensityMatrix::num_qubits(self)
+    }
+
+    fn dimension(&self) -> usize {
+        DensityMatrix::dimension(self)
+    }
+
+    fn diagonal_probabilities(&self) -> Vec<f64> {
+        DensityMatrix::diagonal_probabilities(self)
+    }
+
+    fn purity(&self) -> f64 {
+        DensityMatrix::purity(self)
     }
 }

@@ -1,9 +1,9 @@
 // cqam-core/src/memory.rs
 //
 // Phase 2: Numeric-addressed memory with fixed sizes.
-// Phase 2 (density matrix): QMem slots changed from QDist<u16> to DensityMatrix.
+// Phase 3: QMem made generic over QuantumState to decouple from cqam-sim.
 
-use cqam_sim::density_matrix::DensityMatrix;
+use crate::quantum_state::QuantumState;
 
 /// Classical memory: 65536 cells of i64, addressed by u16.
 ///
@@ -66,17 +66,24 @@ impl CMem {
     }
 }
 
-/// Quantum memory: 256 slots of DensityMatrix, addressed by u8.
+// =============================================================================
+// QMem<Q> (Phase 3: generic over QuantumState)
+// =============================================================================
+
+/// Quantum memory: 256 slots of quantum state, addressed by u8.
+///
+/// Generic over `Q: QuantumState` so that cqam-core has zero dependency
+/// on the concrete simulation backend (cqam-sim).
 ///
 /// Each slot is initially unoccupied (None). Slots are populated by QStore
 /// and read by QLoad. This is separate from the quantum register file
 /// (Q0-Q7 in ExecutionContext).
 #[derive(Debug, Clone)]
-pub struct QMem {
-    slots: Vec<Option<DensityMatrix>>,
+pub struct QMem<Q: QuantumState> {
+    slots: Vec<Option<Q>>,
 }
 
-impl Default for QMem {
+impl<Q: QuantumState> Default for QMem<Q> {
     fn default() -> Self {
         Self {
             slots: (0..256).map(|_| None).collect(),
@@ -84,30 +91,30 @@ impl Default for QMem {
     }
 }
 
-impl QMem {
+impl<Q: QuantumState> QMem<Q> {
     /// Create a new quantum memory with 256 empty slots.
     pub fn new() -> Self {
         Self::default()
     }
 
-    /// Load the density matrix at QMEM[addr].
+    /// Load the quantum state at QMEM[addr].
     ///
     /// Returns None if the slot is unoccupied.
-    pub fn load(&self, addr: u8) -> Option<&DensityMatrix> {
+    pub fn load(&self, addr: u8) -> Option<&Q> {
         self.slots[addr as usize].as_ref()
     }
 
-    /// Store a density matrix at QMEM[addr].
+    /// Store a quantum state at QMEM[addr].
     ///
-    /// Overwrites any existing density matrix in that slot.
-    pub fn store(&mut self, addr: u8, dm: DensityMatrix) {
-        self.slots[addr as usize] = Some(dm);
+    /// Overwrites any existing state in that slot.
+    pub fn store(&mut self, addr: u8, state: Q) {
+        self.slots[addr as usize] = Some(state);
     }
 
-    /// Take (remove and return) the density matrix at QMEM[addr].
+    /// Take (remove and return) the quantum state at QMEM[addr].
     ///
     /// Leaves the slot empty (None). Useful for destructive operations.
-    pub fn take(&mut self, addr: u8) -> Option<DensityMatrix> {
+    pub fn take(&mut self, addr: u8) -> Option<Q> {
         self.slots[addr as usize].take()
     }
 
