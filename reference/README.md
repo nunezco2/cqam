@@ -1,13 +1,19 @@
 # CQAM Reference Index
 
-Welcome to the CQAM architecture documentation.
-This directory contains supporting materials, examples, and specifications for the Classical-Quantum Abstract Machine.
+This directory contains the reference documentation for the Classical-Quantum
+Abstract Machine.
 
 ## Contents
 
-- [Instruction Examples](./examples.md) — Format and usage of all CQAM instruction types.
-- [Specification](./spec.md) — (Upcoming) Formal machine model and memory structure.
-- [QASM Codegen Reference](./qasm.md) — (Upcoming) Notes on OpenQASM generation semantics.
+- [Machine Specification](./spec.md) -- Formal machine model, register files,
+  memory banks, interrupt model, and execution semantics.
+- [Binary Opcode Reference](./opcodes.md) -- 32-bit instruction word encoding
+  formats and complete opcode table.
+- [QASM Generation Semantics](./qasm.md) -- How CQAM instructions translate to
+  OpenQASM 3.0 output, including template expansion.
+- [Instruction Examples](./examples.md) -- Format and usage examples for all
+  CQAM instruction types.
 
 ---
-For additional resources, see the main project README or module-level docs in `cqam-core` and `cqam-codegen` crates.
+For additional resources, see the main project README or module-level docs in
+`cqam-core` and `cqam-codegen` crates.

@@ -1,5 +1,10 @@
 // cqam-vm/src/psw.rs
+//
+// Phase 2: Add get_flag() method for numeric flag access.
+// The Trap enum is removed (replaced by the two-level model in isr.rs).
+// All other fields and methods are unchanged.
 
+/// Program Status Word: holds all condition and trap flags.
 #[derive(Debug, Default, Clone)]
 pub struct ProgramStateWord {
     // Classical condition flags
@@ -36,17 +41,25 @@ impl ProgramStateWord {
         *self = Self::default();
     }
 
+    /// Update arithmetic flags from an integer result value.
     pub fn update_from_arithmetic(&mut self, value: i64) {
         self.zf = value == 0;
         self.nf = value < 0;
-        self.of = false; // Add overflow check later
+        self.of = false; // TODO: real overflow detection
     }
 
+    /// Update the predicate flag from a boolean result.
     pub fn update_from_predicate(&mut self, result: bool) {
         self.pf = result;
     }
 
-    pub fn update_from_qmeta(&mut self, superposition: f64, entanglement: f64, threshold: (f64, f64)) {
+    /// Update quantum state flags from fidelity metrics.
+    pub fn update_from_qmeta(
+        &mut self,
+        superposition: f64,
+        entanglement: f64,
+        threshold: (f64, f64),
+    ) {
         self.qf = true;
         self.sf = superposition > 0.0;
         self.ef = entanglement > 0.0;
@@ -58,30 +71,65 @@ impl ProgramStateWord {
         }
     }
 
+    /// Mark a quantum register as measured/collapsed.
     pub fn mark_measured(&mut self) {
         self.df = true;
         self.cf = true;
     }
 
-    pub fn check_interrupts(&self) -> Option<Trap> {
-        if self.trap_arith {
-            Some(Trap::Arithmetic)
-        } else if self.trap_halt {
-            Some(Trap::Halt)
+    /// Read a PSW flag by numeric ID.
+    ///
+    /// Flag IDs (matching `flag_id` constants in `instruction.rs`):
+    ///   0 = ZF (zero)
+    ///   1 = NF (negative)
+    ///   2 = OF (overflow)
+    ///   3 = PF (predicate)
+    ///   4 = QF (quantum active)
+    ///   5 = SF (superposition)
+    ///   6 = EF (entanglement)
+    ///   7 = HF (hybrid mode)
+    ///
+    /// Returns `false` for any unrecognized flag ID.
+    pub fn get_flag(&self, flag_id: u8) -> bool {
+        match flag_id {
+            0 => self.zf,
+            1 => self.nf,
+            2 => self.of,
+            3 => self.pf,
+            4 => self.qf,
+            5 => self.sf,
+            6 => self.ef,
+            7 => self.hf,
+            _ => false,
+        }
+    }
+
+    /// Check for pending interrupts.
+    ///
+    /// Returns the highest-priority pending trap, if any.
+    /// Priority order: trap_halt > trap_arith > int_quantum_err > int_sync_fail.
+    pub fn check_pending_traps(&self) -> Option<PendingTrap> {
+        if self.trap_halt {
+            Some(PendingTrap::Halt)
+        } else if self.trap_arith {
+            Some(PendingTrap::Arithmetic)
         } else if self.int_quantum_err {
-            Some(Trap::QuantumError)
+            Some(PendingTrap::QuantumError)
         } else if self.int_sync_fail {
-            Some(Trap::SyncFailure)
+            Some(PendingTrap::SyncFailure)
         } else {
             None
         }
     }
 }
 
+/// Simple pending trap enumeration for PSW's check method.
+/// This is a local convenience type; the authoritative trap hierarchy
+/// is defined in `isr.rs` as `NmiTrap`/`MaskableTrap`/`Trap`.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum Trap {
-    Arithmetic,
+pub enum PendingTrap {
     Halt,
+    Arithmetic,
     QuantumError,
     SyncFailure,
 }

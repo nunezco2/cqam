@@ -1,0 +1,15 @@
+[package]
+name = "cqam-as"
+version = "0.1.0"
+edition = "2021"
+description = "Assembler and disassembler for the CQAM binary instruction format"
+
+[[bin]]
+name = "cqam-as"
+path = "src/main.rs"
+
+[dependencies]
+cqam-core = { path = "../cqam-core" }
+
+[dev-dependencies]
+tempfile = "3"

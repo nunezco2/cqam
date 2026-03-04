@@ -1,34 +1,55 @@
+// cqam2qasm/src/main.rs
+//
+// Phase 7: Updated to use EmitConfig for QASM emission.
+
 use std::env;
 use std::fs;
+use std::process;
 
-use cqam_codegen::qasm::emit_qasm_program;
-use cqam_core::parser::parse_instruction;
+use cqam_codegen::qasm::{EmitConfig, EmitMode, emit_qasm_program};
+use cqam_core::parser::parse_program;
 
 fn print_help() {
-    println!("Usage: cqam2qasm <input_file.cqam> [--out output.qasm] [--doc] [--version]");
+    println!("Usage: cqam2qasm <input_file.cqam> [OPTIONS]");
+    println!();
+    println!("Options:");
     println!("  --out <file>     Specify output file path");
+    println!("  --fragment       Emit body only (no header, declarations, gate stubs)");
+    println!("  --expand         Enable kernel template expansion");
+    println!("  --no-expand      Disable kernel template expansion");
     println!("  --doc            Print CQAM instruction reference");
     println!("  --version        Show tool version");
+    println!("  --help           Show this help message");
 }
 
 fn print_version() {
-    println!("cqam2qasm version 0.1.0");
+    println!("cqam2qasm version 0.3.0");
 }
 
+/// Print the updated ISA reference for the flat-prefix syntax.
 fn print_doc_reference() {
-    println!("CQAM Instruction Reference:\n");
-    println!("  CL:LOAD dst, src");
-    println!("  CL:ADD dst, lhs, rhs");
-    println!("  CL:SUB dst, lhs, rhs");
-    println!("  CL:STORE addr, src");
-    println!("  CL:JMP label");
-    println!("  CL:IF pred, label");
-    println!("  HYB:FORK, MERGE, COND_EXEC, REDUCE");
-    println!("  QPREP dst, dist");
-    println!("  QKERNEL dst, src, kernel");
-    println!("  QMEAS dst, src");
-    println!("  QOBSERVE dst, src");
-    println!("  HALT");
+    println!("CQAM Instruction Reference (Phase 2 ISA):\n");
+    println!("  Integer arithmetic:   IADD  ISUB  IMUL  IDIV  IMOD");
+    println!("  Integer bitwise:      IAND  IOR   IXOR  INOT  ISHL  ISHR");
+    println!("  Integer memory:       ILDI  ILDM  ISTR");
+    println!("  Integer comparison:   IEQ   ILT   IGT");
+    println!();
+    println!("  Float arithmetic:     FADD  FSUB  FMUL  FDIV");
+    println!("  Float memory:         FLDI  FLDM  FSTR");
+    println!("  Float comparison:     FEQ   FLT   FGT");
+    println!();
+    println!("  Complex arithmetic:   ZADD  ZSUB  ZMUL  ZDIV");
+    println!("  Complex memory:       ZLDI  ZLDM  ZSTR");
+    println!();
+    println!("  Type conversion:      CVTIF  CVTFI  CVTFZ  CVTZF");
+    println!();
+    println!("  Control flow:         JMP   JIF   CALL  RET   HALT");
+    println!("                        LABEL (pseudo-instruction)");
+    println!();
+    println!("  Quantum:              QPREP  QKERNEL  QOBSERVE");
+    println!("                        QLOAD  QSTORE");
+    println!();
+    println!("  Hybrid:               HFORK  HMERGE  HCEXEC  HREDUCE");
 }
 
 fn main() {
@@ -52,16 +73,52 @@ fn main() {
     let input_path = args[1].clone();
     let output_path = args.iter().position(|a| a == "--out").and_then(|i| args.get(i + 1));
 
-    let input = fs::read_to_string(&input_path).expect("Failed to read input file");
-    let mut program = vec![];
-    for line in input.lines() {
-        program.push(parse_instruction(line));
-    }
+    let input = match fs::read_to_string(&input_path) {
+        Ok(content) => content,
+        Err(e) => {
+            eprintln!("Error reading input file: {}", e);
+            process::exit(1);
+        }
+    };
 
-    let output = emit_qasm_program(&program, true);
+    let program = match parse_program(&input) {
+        Ok(p) => p,
+        Err(e) => {
+            eprintln!("Parse error: {}", e);
+            process::exit(1);
+        }
+    };
+
+    // Build EmitConfig from CLI flags
+    let is_fragment = args.contains(&"--fragment".to_string());
+    let has_expand = args.contains(&"--expand".to_string());
+    let has_no_expand = args.contains(&"--no-expand".to_string());
+
+    let mode = if is_fragment {
+        EmitMode::Fragment
+    } else {
+        EmitMode::Standalone
+    };
+
+    // Template expansion defaults:
+    //   Standalone -> true (expand by default)
+    //   Fragment   -> false (no expansion by default)
+    // --expand / --no-expand override the default
+    let expand_templates = has_expand || (!has_no_expand && !is_fragment);
+
+    let config = EmitConfig {
+        mode,
+        expand_templates,
+        template_dir: "kernels/qasm_templates".to_string(),
+    };
+
+    let output = emit_qasm_program(&program, &config);
 
     if let Some(out_path) = output_path {
-        fs::write(out_path, output).expect("Failed to write output file");
+        if let Err(e) = fs::write(out_path, output) {
+            eprintln!("Error writing output file: {}", e);
+            process::exit(1);
+        }
     } else {
         println!("{}", output);
     }

@@ -1,119 +1,29 @@
 [[kernel]]
-name = "QFourier"
-instruction = "QFourier"
-description = "Applies Quantum Fourier Transform to a quantum register."
-interference = "high"
-entropy = "neutral"
-signal_amplification = "medium"
-entanglement_mode = "global"
-qasm_template = "kernels/qasm_templates/qfourier.qasm"
+name = "init"
+id = 0
+description = "Initializes quantum register to uniform superposition."
+qasm_template = "kernels/qasm_templates/init.qasm"
 
 [[kernel]]
-name = "QOracle"
-instruction = "QOracle"
-description = "Applies a black-box oracle function to a quantum register."
-interference = "low"
-entropy = "neutral"
-signal_amplification = "problem-dependent"
-entanglement_mode = "local"
-qasm_template = "kernels/qasm_templates/qoracle.qasm"
+name = "entangle"
+id = 1
+description = "Creates entanglement between qubits."
+qasm_template = "kernels/qasm_templates/entangle.qasm"
 
 [[kernel]]
-name = "QPhaseKick"
-instruction = "QPhaseKick"
-description = "Applies a global or conditional phase shift to the ensemble."
-interference = "high"
-entropy = "neutral"
-signal_amplification = "high"
-entanglement_mode = "none"
-qasm_template = "kernels/qasm_templates/qphasekick.qasm"
+name = "fourier"
+id = 2
+description = "Applies Quantum Fourier Transform."
+qasm_template = "kernels/qasm_templates/fourier.qasm"
 
 [[kernel]]
-name = "QDiffuse"
-instruction = "QDiffuse"
-description = "Applies Grover's diffusion operator (inversion about the mean)."
-interference = "high"
-entropy = "neutral"
-signal_amplification = "high"
-entanglement_mode = "global"
-qasm_template = "kernels/qasm_templates/qdiffuse.qasm"
+name = "diffuse"
+id = 3
+description = "Applies Grover diffusion operator (inversion about the mean)."
+qasm_template = "kernels/qasm_templates/diffuse.qasm"
 
 [[kernel]]
-name = "QReflect"
-instruction = "QReflect"
-description = "Reflects ensemble around reference state."
-interference = "medium"
-entropy = "neutral"
-signal_amplification = "medium"
-entanglement_mode = "local"
-qasm_template = "kernels/qasm_templates/qreflect.qasm"
-
-[[kernel]]
-name = "QEntangle"
-instruction = "QEntangle"
-description = "Generates GHZ or Bell-type entanglement structures across ensemble."
-interference = "medium"
-entropy = "neutral"
-signal_amplification = "low"
-entanglement_mode = "global"
-qasm_template = "kernels/qasm_templates/qentangle.qasm"
-
-[[kernel]]
-name = "QSwapNet"
-instruction = "QSwapNet"
-description = "Applies qubit swaps based on a defined network topology."
-interference = "neutral"
-entropy = "neutral"
-signal_amplification = "none"
-entanglement_mode = "local"
-qasm_template = "kernels/qasm_templates/qswapnet.qasm"
-
-[[kernel]]
-name = "QWalkStep"
-instruction = "QWalkStep"
-description = "Applies a step in a quantum walk evolution."
-interference = "medium"
-entropy = "slight-increase"
-signal_amplification = "medium"
-entanglement_mode = "problem-dependent"
-qasm_template = "kernels/qasm_templates/qwalkstep.qasm"
-
-[[kernel]]
-name = "QParityMeasure"
-instruction = "QParityMeasure"
-description = "Measures parity observable and stores reduction in classical register."
-interference = "medium"
-entropy = "slight-decrease"
-signal_amplification = "medium"
-entanglement_mode = "local"
-qasm_template = "kernels/qasm_templates/qparitymeasure.qasm"
-
-[[kernel]]
-name = "QApplyUnitary"
-instruction = "QApplyUnitary"
-description = "Applies arbitrary unitary transformation from kernel library."
-interference = "variable"
-entropy = "variable"
-signal_amplification = "variable"
-entanglement_mode = "any"
-qasm_template = "kernels/qasm_templates/qapplyunitary.qasm"
-
-[[kernel]]
-name = "QPhaseAmplify"
-instruction = "QPhaseAmplify"
-description = "Amplifies state amplitudes using phase rotations."
-interference = "high"
-entropy = "neutral"
-signal_amplification = "high"
-entanglement_mode = "hybrid"
-qasm_template = "kernels/qasm_templates/qphaseamplify.qasm"
-
-[[kernel]]
-name = "QGroverIter"
-instruction = "QGroverIter"
-description = "Performs one iteration of Grover search (oracle + diffusion)."
-interference = "high"
-entropy = "slight-decrease"
-signal_amplification = "very-high"
-entanglement_mode = "global"
-qasm_template = "kernels/qasm_templates/qgroveriter.qasm"
+name = "grover_iter"
+id = 4
+description = "One full Grover iteration (oracle + diffusion)."
+qasm_template = "kernels/qasm_templates/grover_iter.qasm"

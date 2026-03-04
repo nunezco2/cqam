@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 cqam-core = { path = "../cqam-core" }
 cqam-sim = { path = "../cqam-sim" }
+log = "0.4"

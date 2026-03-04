@@ -1,4 +1,4 @@
-CL:LOAD x, 5
-CL:ADD z, x, y
-QPREP q1, distA
-QMEAS m1, q1
+ILDI R0, 5
+IADD R1, R0, R0
+QPREP Q0, 0
+QOBSERVE H0, Q0

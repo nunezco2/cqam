@@ -1,0 +1,35 @@
+# examples/grover.cqam
+# Full Grover search: find target state in 4-element search space
+
+# Classical setup
+ILDI R0, 2           # R0 = target state to search for
+ILDI R1, 0           # R1 = unused ctx1 parameter
+ILDI R2, 3           # R2 = iteration counter (3 iterations)
+ILDI R3, 1           # R3 = constant 1 for decrementing
+
+# Prepare Q0 with uniform distribution (dist ID 0)
+QPREP Q0, 0
+
+# Grover iteration loop
+LABEL: grover_loop
+
+# Apply grover_iter kernel (kernel ID 4)
+# ctx0 = R0 (target state), ctx1 = R1
+QKERNEL Q0, Q0, 4, R0, R1
+
+# Decrement iteration counter
+ISUB R2, R2, R3       # R2 = R2 - 1
+
+# If R2 != 0, loop again
+JIF  R2, grover_loop
+
+# Observe the final quantum state
+QOBSERVE H0, Q0
+
+# Extract the mode (most probable state) into R4
+HREDUCE H0, R4, 11   # func 11 = MODE -> R4
+
+# Extract the mean into F0
+HREDUCE H0, F0, 10   # func 10 = MEAN -> F0
+
+HALT
