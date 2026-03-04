@@ -132,6 +132,14 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
         "ZLDM" => parse_reg_u16(&ops, |dst, addr| Instruction::ZLdm { dst, addr }, "ZLDM", line_num),
         "ZSTR" => parse_reg_u16(&ops, |src, addr| Instruction::ZStr { src, addr }, "ZSTR", line_num),
 
+        // -- Register-indirect memory -----------------------------------------
+        "ILDX"  => parse_rr(&ops, |dst, addr_reg| Instruction::ILdx { dst, addr_reg }, "ILDX", line_num),
+        "ISTRX" => parse_rr(&ops, |src, addr_reg| Instruction::IStrx { src, addr_reg }, "ISTRX", line_num),
+        "FLDX"  => parse_rr(&ops, |dst, addr_reg| Instruction::FLdx { dst, addr_reg }, "FLDX", line_num),
+        "FSTRX" => parse_rr(&ops, |src, addr_reg| Instruction::FStrx { src, addr_reg }, "FSTRX", line_num),
+        "ZLDX"  => parse_rr(&ops, |dst, addr_reg| Instruction::ZLdx { dst, addr_reg }, "ZLDX", line_num),
+        "ZSTRX" => parse_rr(&ops, |src, addr_reg| Instruction::ZStrx { src, addr_reg }, "ZSTRX", line_num),
+
         // -- Type conversion --------------------------------------------------
         "CVTIF" => parse_rr(&ops, |dst_f, src_i| Instruction::CvtIF { dst_f, src_i }, "CVTIF", line_num),
         "CVTFI" => parse_rr(&ops, |dst_i, src_f| Instruction::CvtFI { dst_i, src_f }, "CVTFI", line_num),

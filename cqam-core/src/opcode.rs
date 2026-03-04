@@ -88,6 +88,14 @@ pub mod op {
     pub const QLOAD: u8 = 0x33;
     pub const QSTORE: u8 = 0x34;
 
+    // -- Register-indirect memory (0x35-0x37, 0x3C-0x3E) ---------------------
+    pub const ILDX: u8 = 0x35;
+    pub const ISTRX: u8 = 0x36;
+    pub const FLDX: u8 = 0x37;
+    pub const FSTRX: u8 = 0x3C;
+    pub const ZLDX: u8 = 0x3D;
+    pub const ZSTRX: u8 = 0x3E;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;
@@ -207,6 +215,14 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::FStr { src, addr } => encode_ra(op::FSTR, *src, *addr),
         Instruction::ZLdm { dst, addr } => encode_ra(op::ZLDM, *dst, *addr),
         Instruction::ZStr { src, addr } => encode_ra(op::ZSTR, *src, *addr),
+
+        // -- RR-format (register-indirect memory) -----------------------------
+        Instruction::ILdx { dst, addr_reg } => encode_rr(op::ILDX, *dst, *addr_reg),
+        Instruction::IStrx { src, addr_reg } => encode_rr(op::ISTRX, *src, *addr_reg),
+        Instruction::FLdx { dst, addr_reg } => encode_rr(op::FLDX, *dst, *addr_reg),
+        Instruction::FStrx { src, addr_reg } => encode_rr(op::FSTRX, *src, *addr_reg),
+        Instruction::ZLdx { dst, addr_reg } => encode_rr(op::ZLDX, *dst, *addr_reg),
+        Instruction::ZStrx { src, addr_reg } => encode_rr(op::ZSTRX, *src, *addr_reg),
 
         // -- J-format (24-bit jump address) -----------------------------------
         Instruction::Jmp { target } => {
@@ -355,6 +371,38 @@ pub fn decode_with_debug(
             let dst_f = extract_reg4(word, 20);
             let src_z = extract_reg4(word, 16);
             Ok(Instruction::CvtZF { dst_f, src_z })
+        }
+
+        // -- RR-format (register-indirect memory) -----------------------------
+        op::ILDX => {
+            let dst = extract_reg4(word, 20);
+            let addr_reg = extract_reg4(word, 16);
+            Ok(Instruction::ILdx { dst, addr_reg })
+        }
+        op::ISTRX => {
+            let src = extract_reg4(word, 20);
+            let addr_reg = extract_reg4(word, 16);
+            Ok(Instruction::IStrx { src, addr_reg })
+        }
+        op::FLDX => {
+            let dst = extract_reg4(word, 20);
+            let addr_reg = extract_reg4(word, 16);
+            Ok(Instruction::FLdx { dst, addr_reg })
+        }
+        op::FSTRX => {
+            let src = extract_reg4(word, 20);
+            let addr_reg = extract_reg4(word, 16);
+            Ok(Instruction::FStrx { src, addr_reg })
+        }
+        op::ZLDX => {
+            let dst = extract_reg4(word, 20);
+            let addr_reg = extract_reg4(word, 16);
+            Ok(Instruction::ZLdx { dst, addr_reg })
+        }
+        op::ZSTRX => {
+            let src = extract_reg4(word, 20);
+            let addr_reg = extract_reg4(word, 16);
+            Ok(Instruction::ZStrx { src, addr_reg })
         }
 
         // -- RRS-format (2-register + shift) ----------------------------------
@@ -598,6 +646,12 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QOBSERVE => Some("QOBSERVE"),
         op::QLOAD => Some("QLOAD"),
         op::QSTORE => Some("QSTORE"),
+        op::ILDX => Some("ILDX"),
+        op::ISTRX => Some("ISTRX"),
+        op::FLDX => Some("FLDX"),
+        op::FSTRX => Some("FSTRX"),
+        op::ZLDX => Some("ZLDX"),
+        op::ZSTRX => Some("ZSTRX"),
         op::HFORK => Some("HFORK"),
         op::HMERGE => Some("HMERGE"),
         op::HCEXEC => Some("HCEXEC"),

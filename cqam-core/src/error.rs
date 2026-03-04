@@ -65,6 +65,9 @@ pub enum CqamError {
 
     /// Invalid binary file (bad magic, truncated, etc.).
     InvalidBinary(String),
+
+    /// Memory address out of range during register-indirect access.
+    AddressOutOfRange { instruction: String, address: i64 },
 }
 
 impl fmt::Display for CqamError {
@@ -139,6 +142,13 @@ impl fmt::Display for CqamError {
             }
             CqamError::InvalidBinary(msg) => {
                 write!(f, "Invalid binary: {}", msg)
+            }
+            CqamError::AddressOutOfRange { instruction, address } => {
+                write!(
+                    f,
+                    "Address out of range in {}: {} is not a valid CMEM address (0..65535)",
+                    instruction, address
+                )
             }
         }
     }

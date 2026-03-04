@@ -282,6 +282,33 @@ impl QasmFormat for Instruction {
                 ]
             }
 
+            // -- Register-indirect memory ------------------------------------
+
+            Instruction::ILdx { dst, addr_reg } => {
+                vec![format!("R{} = CMEM[R{}];  // indirect", dst, addr_reg)]
+            }
+            Instruction::IStrx { src, addr_reg } => {
+                vec![format!("CMEM[R{}] = R{};  // indirect", addr_reg, src)]
+            }
+            Instruction::FLdx { dst, addr_reg } => {
+                vec![format!("F{} = CMEM[R{}];  // indirect", dst, addr_reg)]
+            }
+            Instruction::FStrx { src, addr_reg } => {
+                vec![format!("CMEM[R{}] = F{};  // indirect", addr_reg, src)]
+            }
+            Instruction::ZLdx { dst, addr_reg } => {
+                vec![
+                    format!("Z{}_re = CMEM[R{}];  // indirect", dst, addr_reg),
+                    format!("Z{}_im = CMEM[R{} + 1];  // indirect", dst, addr_reg),
+                ]
+            }
+            Instruction::ZStrx { src, addr_reg } => {
+                vec![
+                    format!("CMEM[R{}] = Z{}_re;  // indirect", addr_reg, src),
+                    format!("CMEM[R{} + 1] = Z{}_im;  // indirect", addr_reg, src),
+                ]
+            }
+
             // -- Type conversion ---------------------------------------------
 
             Instruction::CvtIF { dst_f, src_i } => {
@@ -527,6 +554,38 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         }
         Instruction::ZStr { src, .. } => {
             used.complex_regs.insert(*src);
+            used.uses_cmem = true;
+        }
+
+        // -- Register-indirect memory --
+        Instruction::ILdx { dst, addr_reg } => {
+            used.int_regs.insert(*dst);
+            used.int_regs.insert(*addr_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::IStrx { src, addr_reg } => {
+            used.int_regs.insert(*src);
+            used.int_regs.insert(*addr_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::FLdx { dst, addr_reg } => {
+            used.float_regs.insert(*dst);
+            used.int_regs.insert(*addr_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::FStrx { src, addr_reg } => {
+            used.float_regs.insert(*src);
+            used.int_regs.insert(*addr_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::ZLdx { dst, addr_reg } => {
+            used.complex_regs.insert(*dst);
+            used.int_regs.insert(*addr_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::ZStrx { src, addr_reg } => {
+            used.complex_regs.insert(*src);
+            used.int_regs.insert(*addr_reg);
             used.uses_cmem = true;
         }
 

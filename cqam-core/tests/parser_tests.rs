@@ -373,6 +373,96 @@ fn test_parse_zstr() {
 }
 
 // ===========================================================================
+// Register-indirect memory
+// ===========================================================================
+
+#[test]
+fn test_parse_ildx() {
+    assert_eq!(
+        parse_instruction("ILDX R3, R5").unwrap(),
+        Instruction::ILdx { dst: 3, addr_reg: 5 }
+    );
+}
+
+#[test]
+fn test_parse_istrx() {
+    assert_eq!(
+        parse_instruction("ISTRX R0, R1").unwrap(),
+        Instruction::IStrx { src: 0, addr_reg: 1 }
+    );
+}
+
+#[test]
+fn test_parse_fldx() {
+    assert_eq!(
+        parse_instruction("FLDX F2, R4").unwrap(),
+        Instruction::FLdx { dst: 2, addr_reg: 4 }
+    );
+}
+
+#[test]
+fn test_parse_fstrx() {
+    assert_eq!(
+        parse_instruction("FSTRX F7, R3").unwrap(),
+        Instruction::FStrx { src: 7, addr_reg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_zldx() {
+    assert_eq!(
+        parse_instruction("ZLDX Z1, R6").unwrap(),
+        Instruction::ZLdx { dst: 1, addr_reg: 6 }
+    );
+}
+
+#[test]
+fn test_parse_zstrx() {
+    assert_eq!(
+        parse_instruction("ZSTRX Z5, R2").unwrap(),
+        Instruction::ZStrx { src: 5, addr_reg: 2 }
+    );
+}
+
+#[test]
+fn test_parse_ildx_missing_operand() {
+    assert!(parse_instruction("ILDX R3").is_err());
+}
+
+#[test]
+fn test_parse_istrx_too_many_operands() {
+    assert!(parse_instruction("ISTRX R0, R1, R2").is_err());
+}
+
+#[test]
+fn test_parse_fldx_invalid_register() {
+    assert!(parse_instruction("FLDX F2, 100").is_err());
+}
+
+#[test]
+fn test_parse_zstrx_max_regs() {
+    assert_eq!(
+        parse_instruction("ZSTRX Z15, R15").unwrap(),
+        Instruction::ZStrx { src: 15, addr_reg: 15 }
+    );
+}
+
+#[test]
+fn test_parse_indirect_in_program() {
+    let source = "\
+ILDI R1, 100
+ILDI R0, 42
+ISTRX R0, R1
+ILDX R2, R1
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 5);
+    assert_eq!(program[2], Instruction::IStrx { src: 0, addr_reg: 1 });
+    assert_eq!(program[3], Instruction::ILdx { dst: 2, addr_reg: 1 });
+}
+
+// ===========================================================================
 // Type conversion
 // ===========================================================================
 

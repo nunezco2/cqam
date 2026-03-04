@@ -159,6 +159,26 @@ pub enum Instruction {
     /// CMEM[addr+1] = Z[src].1.to_bits() as i64
     ZStr { src: u8, addr: u16 },
 
+    // -- Register-indirect memory (Phase 4) -----------------------------------
+
+    /// Indirect integer load: R[dst] = CMEM[R[addr_reg] as u16]
+    ILdx { dst: u8, addr_reg: u8 },
+
+    /// Indirect integer store: CMEM[R[addr_reg] as u16] = R[src]
+    IStrx { src: u8, addr_reg: u8 },
+
+    /// Indirect float load: F[dst] = f64::from_bits(CMEM[R[addr_reg] as u16])
+    FLdx { dst: u8, addr_reg: u8 },
+
+    /// Indirect float store: CMEM[R[addr_reg] as u16] = F[src].to_bits()
+    FStrx { src: u8, addr_reg: u8 },
+
+    /// Indirect complex load: Z[dst] = complex from CMEM[R[addr_reg]]..+1
+    ZLdx { dst: u8, addr_reg: u8 },
+
+    /// Indirect complex store: CMEM[R[addr_reg]]..+1 = Z[src]
+    ZStrx { src: u8, addr_reg: u8 },
+
     // -- Type conversion ------------------------------------------------------
 
     /// Convert integer to float: F[dst_f] = R[src_i] as f64

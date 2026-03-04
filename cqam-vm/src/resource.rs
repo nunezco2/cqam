@@ -77,6 +77,24 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Register-indirect memory: same cost as direct memory
+        Instruction::ILdx { .. }
+        | Instruction::IStrx { .. }
+        | Instruction::FLdx { .. }
+        | Instruction::FStrx { .. } => ResourceDelta {
+            time: 1,
+            space: 1,
+            ..Default::default()
+        },
+
+        // Register-indirect complex memory: 2 cycles (two cells)
+        Instruction::ZLdx { .. }
+        | Instruction::ZStrx { .. } => ResourceDelta {
+            time: 2,
+            space: 1,
+            ..Default::default()
+        },
+
         // Integer comparison: 1 cycle, 1 register write
         Instruction::IEq { .. }
         | Instruction::ILt { .. }

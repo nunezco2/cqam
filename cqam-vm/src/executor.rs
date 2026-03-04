@@ -265,6 +265,54 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         }
 
         // =====================================================================
+        // Register-indirect memory (Phase 4)
+        // =====================================================================
+
+        Instruction::ILdx { dst, addr_reg } => {
+            let raw_addr = ctx.iregs.get(*addr_reg)?;
+            let addr = validate_indirect_addr(raw_addr, 0xFFFF, "ILDX")?;
+            let result = ctx.cmem.load(addr);
+            ctx.iregs.set(*dst, result)?;
+        }
+
+        Instruction::IStrx { src, addr_reg } => {
+            let raw_addr = ctx.iregs.get(*addr_reg)?;
+            let addr = validate_indirect_addr(raw_addr, 0xFFFF, "ISTRX")?;
+            let val = ctx.iregs.get(*src)?;
+            ctx.cmem.store(addr, val);
+        }
+
+        Instruction::FLdx { dst, addr_reg } => {
+            let raw_addr = ctx.iregs.get(*addr_reg)?;
+            let addr = validate_indirect_addr(raw_addr, 0xFFFF, "FLDX")?;
+            let bits = ctx.cmem.load(addr) as u64;
+            ctx.fregs.set(*dst, f64::from_bits(bits))?;
+        }
+
+        Instruction::FStrx { src, addr_reg } => {
+            let raw_addr = ctx.iregs.get(*addr_reg)?;
+            let addr = validate_indirect_addr(raw_addr, 0xFFFF, "FSTRX")?;
+            let bits = ctx.fregs.get(*src)?.to_bits() as i64;
+            ctx.cmem.store(addr, bits);
+        }
+
+        Instruction::ZLdx { dst, addr_reg } => {
+            let raw_addr = ctx.iregs.get(*addr_reg)?;
+            let addr = validate_indirect_addr(raw_addr, 0xFFFE, "ZLDX")?;
+            let re_bits = ctx.cmem.load(addr) as u64;
+            let im_bits = ctx.cmem.load(addr.wrapping_add(1)) as u64;
+            ctx.zregs.set(*dst, (f64::from_bits(re_bits), f64::from_bits(im_bits)))?;
+        }
+
+        Instruction::ZStrx { src, addr_reg } => {
+            let raw_addr = ctx.iregs.get(*addr_reg)?;
+            let addr = validate_indirect_addr(raw_addr, 0xFFFE, "ZSTRX")?;
+            let (re, im) = ctx.zregs.get(*src)?;
+            ctx.cmem.store(addr, re.to_bits() as i64);
+            ctx.cmem.store(addr.wrapping_add(1), im.to_bits() as i64);
+        }
+
+        // =====================================================================
         // Type conversion
         // =====================================================================
 
@@ -361,6 +409,20 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
     ctx.resource_tracker.apply_delta(&delta);
     ctx.advance_pc();
     Ok(())
+}
+
+/// Validate that an i64 register value is a legal CMEM address.
+///
+/// Returns the validated address as u16 on success.
+/// Returns CqamError::AddressOutOfRange if value is negative or > max_addr.
+fn validate_indirect_addr(val: i64, max_addr: u16, instruction: &str) -> Result<u16, CqamError> {
+    if val < 0 || val > max_addr as i64 {
+        return Err(CqamError::AddressOutOfRange {
+            instruction: instruction.to_string(),
+            address: val,
+        });
+    }
+    Ok(val as u16)
 }
 
 /// Run a full program to termination.

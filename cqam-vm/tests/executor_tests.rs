@@ -434,6 +434,301 @@ fn test_ishl_amt_64_does_not_panic() {
     assert_eq!(ctx.iregs.get(1).unwrap(), i64::MIN);
 }
 
+// ===========================================================================
+// Register-indirect memory (Phase 4)
+// ===========================================================================
+
+#[test]
+fn test_ildx_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Store 42 at CMEM[100]
+    ctx.cmem.store(100, 42);
+    // Set R1 = 100 (address register)
+    ctx.iregs.set(1, 100).unwrap();
+    // Execute ILDX R0, R1: R[0] = CMEM[R[1]]
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 42);
+}
+
+#[test]
+fn test_istrx_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 42).unwrap();
+    ctx.iregs.set(1, 200).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.cmem.load(200), 42);
+}
+
+#[test]
+fn test_fldx_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let val: f64 = 3.14;
+    ctx.cmem.store(50, val.to_bits() as i64);
+    ctx.iregs.set(1, 50).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }).unwrap();
+    assert!((ctx.fregs.get(0).unwrap() - 3.14).abs() < 1e-10);
+}
+
+#[test]
+fn test_fstrx_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(0, 3.14).unwrap();
+    ctx.iregs.set(1, 60).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }).unwrap();
+    let stored = f64::from_bits(ctx.cmem.load(60) as u64);
+    assert!((stored - 3.14).abs() < 1e-10);
+}
+
+#[test]
+fn test_zldx_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let re: f64 = 1.5;
+    let im: f64 = 2.5;
+    ctx.cmem.store(80, re.to_bits() as i64);
+    ctx.cmem.store(81, im.to_bits() as i64);
+    ctx.iregs.set(1, 80).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }).unwrap();
+    let (got_re, got_im) = ctx.zregs.get(0).unwrap();
+    assert!((got_re - 1.5).abs() < 1e-10);
+    assert!((got_im - 2.5).abs() < 1e-10);
+}
+
+#[test]
+fn test_zstrx_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.zregs.set(0, (1.0, 2.0)).unwrap();
+    ctx.iregs.set(1, 90).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }).unwrap();
+    let re = f64::from_bits(ctx.cmem.load(90) as u64);
+    let im = f64::from_bits(ctx.cmem.load(91) as u64);
+    assert!((re - 1.0).abs() < 1e-10);
+    assert!((im - 2.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_ildx_istrx_roundtrip() {
+    // Store via indirect, load via indirect, verify value preserved
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 9999).unwrap();
+    ctx.iregs.set(1, 300).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 2, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.iregs.get(2).unwrap(), 9999);
+}
+
+#[test]
+fn test_fldx_fstrx_roundtrip() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(0, std::f64::consts::E).unwrap();
+    ctx.iregs.set(1, 400).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 2, addr_reg: 1 }).unwrap();
+    assert!((ctx.fregs.get(2).unwrap() - std::f64::consts::E).abs() < 1e-15);
+}
+
+#[test]
+fn test_zldx_zstrx_roundtrip() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.zregs.set(0, (-3.7, 4.2)).unwrap();
+    ctx.iregs.set(1, 500).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 2, addr_reg: 1 }).unwrap();
+    let (re, im) = ctx.zregs.get(2).unwrap();
+    assert!((re - (-3.7)).abs() < 1e-15);
+    assert!((im - 4.2).abs() < 1e-15);
+}
+
+// -- Error cases: negative address --
+
+#[test]
+fn test_ildx_negative_address_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(1, -1).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Address out of range"), "Error message: {}", msg);
+    assert!(msg.contains("ILDX"), "Error message should mention ILDX: {}", msg);
+}
+
+#[test]
+fn test_istrx_negative_address_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 42).unwrap();
+    ctx.iregs.set(1, -5).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_fldx_negative_address_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(1, -100).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_fstrx_negative_address_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(0, 1.0).unwrap();
+    ctx.iregs.set(1, -1).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_zldx_negative_address_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(1, -1).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_zstrx_negative_address_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.zregs.set(0, (1.0, 2.0)).unwrap();
+    ctx.iregs.set(1, -1).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+// -- Error cases: address too large --
+
+#[test]
+fn test_ildx_address_too_large_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(1, 70000).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Address out of range"), "Error message: {}", msg);
+}
+
+#[test]
+fn test_istrx_address_too_large_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 42).unwrap();
+    ctx.iregs.set(1, 0x10000).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_fstrx_address_too_large_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(0, 1.0).unwrap();
+    ctx.iregs.set(1, 70000).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+// -- Error cases: ZLDX/ZSTRX boundary (needs two cells, max_addr = 0xFFFE) --
+
+#[test]
+fn test_zldx_address_65535_returns_error() {
+    // ZLDX needs two consecutive cells, so addr 65535 is out of range (max is 65534)
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(1, 65535).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("ZLDX"), "Error message should mention ZLDX: {}", msg);
+}
+
+#[test]
+fn test_zstrx_address_65535_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.zregs.set(0, (1.0, 2.0)).unwrap();
+    ctx.iregs.set(1, 65535).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 });
+    assert!(result.is_err());
+}
+
+// -- Boundary cases: max valid addresses --
+
+#[test]
+fn test_ildx_address_65535_succeeds() {
+    // For ILDX, max_addr is 0xFFFF, so 65535 is valid
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.cmem.store(65535, 77);
+    ctx.iregs.set(1, 65535).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 77);
+}
+
+#[test]
+fn test_istrx_address_65535_succeeds() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 88).unwrap();
+    ctx.iregs.set(1, 65535).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.cmem.load(65535), 88);
+}
+
+#[test]
+fn test_fldx_address_65535_succeeds() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let val: f64 = 2.718;
+    ctx.cmem.store(65535, val.to_bits() as i64);
+    ctx.iregs.set(1, 65535).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }).unwrap();
+    assert!((ctx.fregs.get(0).unwrap() - 2.718).abs() < 1e-10);
+}
+
+#[test]
+fn test_zldx_address_65534_succeeds() {
+    // For ZLDX, max_addr is 0xFFFE, so 65534 is valid (cells 65534 and 65535)
+    let mut ctx = ExecutionContext::new(vec![]);
+    let re: f64 = 5.0;
+    let im: f64 = 6.0;
+    ctx.cmem.store(65534, re.to_bits() as i64);
+    ctx.cmem.store(65535, im.to_bits() as i64);
+    ctx.iregs.set(1, 65534).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }).unwrap();
+    let (got_re, got_im) = ctx.zregs.get(0).unwrap();
+    assert!((got_re - 5.0).abs() < 1e-10);
+    assert!((got_im - 6.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_zstrx_address_65534_succeeds() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.zregs.set(0, (7.0, 8.0)).unwrap();
+    ctx.iregs.set(1, 65534).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }).unwrap();
+    let re = f64::from_bits(ctx.cmem.load(65534) as u64);
+    let im = f64::from_bits(ctx.cmem.load(65535) as u64);
+    assert!((re - 7.0).abs() < 1e-10);
+    assert!((im - 8.0).abs() < 1e-10);
+}
+
+// -- Boundary: address zero --
+
+#[test]
+fn test_ildx_address_zero_succeeds() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.cmem.store(0, 123);
+    ctx.iregs.set(1, 0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 123);
+}
+
+#[test]
+fn test_zldx_address_zero_succeeds() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.cmem.store(0, 1.0_f64.to_bits() as i64);
+    ctx.cmem.store(1, 2.0_f64.to_bits() as i64);
+    ctx.iregs.set(1, 0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }).unwrap();
+    assert_eq!(ctx.zregs.get(0).unwrap(), (1.0, 2.0));
+}
+
+// ===========================================================================
+// Shift overflow tests (Fix 2.4)
+// ===========================================================================
+
 #[test]
 fn test_ishr_amt_64_does_not_panic() {
     let mut ctx = ExecutionContext::new(vec![]);

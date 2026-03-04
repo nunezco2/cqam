@@ -160,6 +160,87 @@ fn test_scan_kernel_ids() {
     assert_eq!(used.kernel_ids.len(), 2);
 }
 
+// -- Register-indirect scan tests --
+
+#[test]
+fn test_scan_ildx_regs() {
+    let program = vec![
+        Instruction::ILdx { dst: 0, addr_reg: 3 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.int_regs.contains(&0));
+    assert!(used.int_regs.contains(&3));
+    assert!(used.uses_cmem);
+}
+
+#[test]
+fn test_scan_istrx_regs() {
+    let program = vec![
+        Instruction::IStrx { src: 5, addr_reg: 2 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.int_regs.contains(&5));
+    assert!(used.int_regs.contains(&2));
+    assert!(used.uses_cmem);
+}
+
+#[test]
+fn test_scan_fldx_regs() {
+    let program = vec![
+        Instruction::FLdx { dst: 1, addr_reg: 4 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.float_regs.contains(&1));
+    assert!(used.int_regs.contains(&4));
+    assert!(used.uses_cmem);
+}
+
+#[test]
+fn test_scan_fstrx_regs() {
+    let program = vec![
+        Instruction::FStrx { src: 7, addr_reg: 6 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.float_regs.contains(&7));
+    assert!(used.int_regs.contains(&6));
+    assert!(used.uses_cmem);
+}
+
+#[test]
+fn test_scan_zldx_regs() {
+    let program = vec![
+        Instruction::ZLdx { dst: 2, addr_reg: 8 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.complex_regs.contains(&2));
+    assert!(used.int_regs.contains(&8));
+    assert!(used.uses_cmem);
+}
+
+#[test]
+fn test_scan_zstrx_regs() {
+    let program = vec![
+        Instruction::ZStrx { src: 3, addr_reg: 9 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.complex_regs.contains(&3));
+    assert!(used.int_regs.contains(&9));
+    assert!(used.uses_cmem);
+}
+
+#[test]
+fn test_scan_indirect_no_qmem() {
+    // Indirect memory uses CMEM, not QMEM
+    let program = vec![
+        Instruction::ILdx { dst: 0, addr_reg: 1 },
+        Instruction::FStrx { src: 2, addr_reg: 3 },
+        Instruction::ZLdx { dst: 4, addr_reg: 5 },
+    ];
+    let used = scan_registers(&program);
+    assert!(used.uses_cmem);
+    assert!(!used.uses_qmem);
+}
+
 #[test]
 fn test_scan_cross_file_ops() {
     let program = vec![
@@ -649,6 +730,58 @@ fn test_emit_zstr() {
     assert_eq!(lines[1], "CMEM[201] = Z2_im;");
 }
 
+// -- Register-indirect memory --
+
+#[test]
+fn test_emit_ildx() {
+    let instr = Instruction::ILdx { dst: 0, addr_reg: 3 };
+    let lines = instr.to_qasm(&fragment_config());
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0], "R0 = CMEM[R3];  // indirect");
+}
+
+#[test]
+fn test_emit_istrx() {
+    let instr = Instruction::IStrx { src: 5, addr_reg: 2 };
+    let lines = instr.to_qasm(&fragment_config());
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0], "CMEM[R2] = R5;  // indirect");
+}
+
+#[test]
+fn test_emit_fldx() {
+    let instr = Instruction::FLdx { dst: 1, addr_reg: 4 };
+    let lines = instr.to_qasm(&fragment_config());
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0], "F1 = CMEM[R4];  // indirect");
+}
+
+#[test]
+fn test_emit_fstrx() {
+    let instr = Instruction::FStrx { src: 7, addr_reg: 6 };
+    let lines = instr.to_qasm(&fragment_config());
+    assert_eq!(lines.len(), 1);
+    assert_eq!(lines[0], "CMEM[R6] = F7;  // indirect");
+}
+
+#[test]
+fn test_emit_zldx() {
+    let instr = Instruction::ZLdx { dst: 2, addr_reg: 8 };
+    let lines = instr.to_qasm(&fragment_config());
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0], "Z2_re = CMEM[R8];  // indirect");
+    assert_eq!(lines[1], "Z2_im = CMEM[R8 + 1];  // indirect");
+}
+
+#[test]
+fn test_emit_zstrx() {
+    let instr = Instruction::ZStrx { src: 3, addr_reg: 9 };
+    let lines = instr.to_qasm(&fragment_config());
+    assert_eq!(lines.len(), 2);
+    assert_eq!(lines[0], "CMEM[R9] = Z3_re;  // indirect");
+    assert_eq!(lines[1], "CMEM[R9 + 1] = Z3_im;  // indirect");
+}
+
 // -- Type conversion --
 
 #[test]
@@ -1064,6 +1197,30 @@ fn test_standalone_has_footer() {
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
     assert!(output.contains("// === End CQAM Generated QASM ==="));
+}
+
+#[test]
+fn test_standalone_indirect_declarations() {
+    let program = vec![
+        Instruction::ILdx { dst: 0, addr_reg: 1 },
+        Instruction::FStrx { src: 2, addr_reg: 3 },
+        Instruction::ZLdx { dst: 4, addr_reg: 5 },
+    ];
+    let config = EmitConfig::standalone();
+    let output = emit_qasm_program(&program, &config);
+    // Should declare integer regs for addr_reg operands
+    assert!(output.contains("int[64] R1;"));
+    assert!(output.contains("int[64] R3;"));
+    assert!(output.contains("int[64] R5;"));
+    // Should declare data regs
+    assert!(output.contains("int[64] R0;"));
+    assert!(output.contains("float[64] F2;"));
+    assert!(output.contains("float[64] Z4_re;"));
+    assert!(output.contains("float[64] Z4_im;"));
+    // Should declare CMEM
+    assert!(output.contains("CMEM"));
+    // Body should contain indirect comments
+    assert!(output.contains("// indirect"));
 }
 
 #[test]

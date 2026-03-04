@@ -761,9 +761,9 @@ fn error_decode_invalid_opcode_in_gap_0x2d() {
 }
 
 #[test]
-fn error_decode_invalid_opcode_in_gap_0x35() {
-    // 0x35 is in the reserved quantum gap
-    let word: u32 = 0x35_000000;
+fn error_decode_invalid_opcode_in_gap_0x3f() {
+    // 0x3F is in the reserved gap (0x35-0x3E now assigned to indirect memory)
+    let word: u32 = 0x3F_000000;
     let result = decode(word);
     assert!(result.is_err());
 }
@@ -1026,6 +1026,12 @@ fn mnemonic_all_assigned_opcodes() {
         (op::QOBSERVE, "QOBSERVE"),
         (op::QLOAD, "QLOAD"),
         (op::QSTORE, "QSTORE"),
+        (op::ILDX, "ILDX"),
+        (op::ISTRX, "ISTRX"),
+        (op::FLDX, "FLDX"),
+        (op::FSTRX, "FSTRX"),
+        (op::ZLDX, "ZLDX"),
+        (op::ZSTRX, "ZSTRX"),
         (op::HFORK, "HFORK"),
         (op::HMERGE, "HMERGE"),
         (op::HCEXEC, "HCEXEC"),
@@ -1045,7 +1051,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2D_u8, 0x2E, 0x2F, 0x35, 0x36, 0x37, 0x3C, 0x40, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2D_u8, 0x2E, 0x2F, 0x3F, 0x40, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,
@@ -1053,6 +1059,58 @@ fn mnemonic_unassigned_returns_none() {
             code
         );
     }
+}
+
+// =============================================================================
+// Round-trip tests: RR-format (register-indirect memory)
+// =============================================================================
+
+#[test]
+fn roundtrip_ildx() {
+    let instr = Instruction::ILdx { dst: 3, addr_reg: 5 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_istrx() {
+    let instr = Instruction::IStrx { src: 7, addr_reg: 2 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_fldx() {
+    let instr = Instruction::FLdx { dst: 0, addr_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_fstrx() {
+    let instr = Instruction::FStrx { src: 14, addr_reg: 1 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_zldx() {
+    let instr = Instruction::ZLdx { dst: 10, addr_reg: 4 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_zstrx() {
+    let instr = Instruction::ZStrx { src: 6, addr_reg: 8 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_ildx_max_regs() {
+    let instr = Instruction::ILdx { dst: 15, addr_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_zstrx_zero_regs() {
+    let instr = Instruction::ZStrx { src: 0, addr_reg: 0 };
+    assert_eq!(roundtrip(&instr), instr);
 }
 
 // =============================================================================
@@ -1187,4 +1245,19 @@ fn roundtrip_all_variants_comprehensive() {
     let hr = Instruction::HReduce { src: 2, dst: 5, func: 10 };
     let w = encode(&hr, &labels).unwrap();
     assert_eq!(decode(w).unwrap(), hr);
+
+    // Register-indirect memory variants
+    let indirect_variants: Vec<Instruction> = vec![
+        Instruction::ILdx { dst: 0, addr_reg: 1 },
+        Instruction::IStrx { src: 2, addr_reg: 3 },
+        Instruction::FLdx { dst: 4, addr_reg: 5 },
+        Instruction::FStrx { src: 6, addr_reg: 7 },
+        Instruction::ZLdx { dst: 8, addr_reg: 9 },
+        Instruction::ZStrx { src: 10, addr_reg: 11 },
+    ];
+
+    for instr in &indirect_variants {
+        let w = encode(instr, &labels).unwrap();
+        assert_eq!(decode(w).unwrap(), *instr, "Indirect round-trip failed for {:?}", instr);
+    }
 }

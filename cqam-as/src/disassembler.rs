@@ -142,6 +142,14 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::ZLdm { dst, addr } => format!("ZLDM Z{}, {}", dst, addr),
         Instruction::ZStr { src, addr } => format!("ZSTR Z{}, {}", src, addr),
 
+        // Register-indirect memory
+        Instruction::ILdx { dst, addr_reg } => format!("ILDX R{}, R{}", dst, addr_reg),
+        Instruction::IStrx { src, addr_reg } => format!("ISTRX R{}, R{}", src, addr_reg),
+        Instruction::FLdx { dst, addr_reg } => format!("FLDX F{}, R{}", dst, addr_reg),
+        Instruction::FStrx { src, addr_reg } => format!("FSTRX F{}, R{}", src, addr_reg),
+        Instruction::ZLdx { dst, addr_reg } => format!("ZLDX Z{}, R{}", dst, addr_reg),
+        Instruction::ZStrx { src, addr_reg } => format!("ZSTRX Z{}, R{}", src, addr_reg),
+
         // Type conversion
         Instruction::CvtIF { dst_f, src_i } => format!("CVTIF F{}, R{}", dst_f, src_i),
         Instruction::CvtFI { dst_i, src_f } => format!("CVTFI R{}, F{}", dst_i, src_f),
