@@ -1,9 +1,10 @@
 // cqam-core/tests/memory_tests.rs
 //
 // Phase 2: Test numeric-addressed CMem and QMem.
+// Phase 2 (density matrix): QMem tests updated for DensityMatrix.
 
 use cqam_core::memory::{CMem, QMem};
-use cqam_sim::qdist::QDist;
+use cqam_sim::density_matrix::DensityMatrix;
 
 // =============================================================================
 // CMem
@@ -101,23 +102,22 @@ fn test_qmem_new_all_empty() {
 #[test]
 fn test_qmem_store_and_load() {
     let mut qmem = QMem::new();
-    let domain = vec![0u16, 1, 2];
-    let probs = vec![0.3, 0.4, 0.3];
-    let qdist = QDist::new("test", domain.clone(), probs.clone()).unwrap();
+    let dm = DensityMatrix::new_zero_state(2);
 
-    qmem.store(10, qdist);
+    qmem.store(10, dm);
 
     let loaded = qmem.load(10).unwrap();
-    assert_eq!(loaded.label, "test");
-    assert_eq!(loaded.domain, domain);
-    assert_eq!(loaded.probabilities, probs);
+    assert_eq!(loaded.num_qubits(), 2);
+    assert_eq!(loaded.dimension(), 4);
+    // Zero state: rho[0][0] = 1.0
+    assert!((loaded.get(0, 0).0 - 1.0).abs() < 1e-10);
 }
 
 #[test]
 fn test_qmem_take_removes_slot() {
     let mut qmem = QMem::new();
-    let qdist = QDist::new("take_test", vec![0u16, 1], vec![0.5, 0.5]).unwrap();
-    qmem.store(5, qdist);
+    let dm = DensityMatrix::new_uniform(2);
+    qmem.store(5, dm);
 
     assert!(qmem.is_occupied(5));
     let taken = qmem.take(5);
@@ -129,12 +129,13 @@ fn test_qmem_take_removes_slot() {
 #[test]
 fn test_qmem_take_returns_correct_value() {
     let mut qmem = QMem::new();
-    let qdist = QDist::new("val", vec![0u16, 1, 2], vec![0.2, 0.5, 0.3]).unwrap();
-    qmem.store(42, qdist);
+    let dm = DensityMatrix::new_bell();
+    qmem.store(42, dm);
 
     let taken = qmem.take(42).unwrap();
-    assert_eq!(taken.label, "val");
-    assert_eq!(taken.domain, vec![0u16, 1, 2]);
+    assert_eq!(taken.num_qubits(), 2);
+    // Bell state: rho[0][0] = 0.5
+    assert!((taken.get(0, 0).0 - 0.5).abs() < 1e-10);
 }
 
 #[test]
@@ -147,28 +148,27 @@ fn test_qmem_take_empty_slot_returns_none() {
 fn test_qmem_is_occupied() {
     let mut qmem = QMem::new();
     assert!(!qmem.is_occupied(0));
-    qmem.store(0, QDist::new("occ", vec![0u16], vec![1.0]).unwrap());
+    qmem.store(0, DensityMatrix::new_zero_state(1));
     assert!(qmem.is_occupied(0));
 }
 
 #[test]
 fn test_qmem_overwrite() {
     let mut qmem = QMem::new();
-    qmem.store(0, QDist::new("first", vec![0u16], vec![1.0]).unwrap());
-    qmem.store(0, QDist::new("second", vec![0u16, 1], vec![0.5, 0.5]).unwrap());
+    qmem.store(0, DensityMatrix::new_zero_state(1));
+    qmem.store(0, DensityMatrix::new_uniform(2));
 
     let loaded = qmem.load(0).unwrap();
-    assert_eq!(loaded.label, "second");
-    assert_eq!(loaded.domain.len(), 2);
+    assert_eq!(loaded.num_qubits(), 2);
 }
 
 #[test]
 fn test_qmem_max_address() {
     let mut qmem = QMem::new();
-    qmem.store(255, QDist::new("max", vec![0u16], vec![1.0]).unwrap());
+    qmem.store(255, DensityMatrix::new_zero_state(1));
     assert!(qmem.is_occupied(255));
     let loaded = qmem.load(255).unwrap();
-    assert_eq!(loaded.label, "max");
+    assert_eq!(loaded.num_qubits(), 1);
 }
 
 #[test]

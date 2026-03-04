@@ -1,9 +1,9 @@
 // cqam-core/src/memory.rs
 //
 // Phase 2: Numeric-addressed memory with fixed sizes.
-// Replaces the old HashMap-based CMEM/QMEM and removes dead HybridReg.
+// Phase 2 (density matrix): QMem slots changed from QDist<u16> to DensityMatrix.
 
-use cqam_sim::qdist::QDist;
+use cqam_sim::density_matrix::DensityMatrix;
 
 /// Classical memory: 65536 cells of i64, addressed by u16.
 ///
@@ -66,19 +66,14 @@ impl CMem {
     }
 }
 
-/// Quantum memory: 256 slots of QDist<u16>, addressed by u8.
+/// Quantum memory: 256 slots of DensityMatrix, addressed by u8.
 ///
 /// Each slot is initially unoccupied (None). Slots are populated by QStore
 /// and read by QLoad. This is separate from the quantum register file
 /// (Q0-Q7 in ExecutionContext).
-///
-/// QMEM slots hold 8-qubit distributions (domain 0..255), while the quantum
-/// register file holds 16-qubit distributions (domain 0..65535). The
-/// distinction allows QMEM to serve as a quantum "swap space" for saving
-/// and restoring partial quantum states.
 #[derive(Debug, Clone)]
 pub struct QMem {
-    slots: Vec<Option<QDist<u16>>>,
+    slots: Vec<Option<DensityMatrix>>,
 }
 
 impl Default for QMem {
@@ -95,24 +90,24 @@ impl QMem {
         Self::default()
     }
 
-    /// Load the quantum distribution at QMEM[addr].
+    /// Load the density matrix at QMEM[addr].
     ///
     /// Returns None if the slot is unoccupied.
-    pub fn load(&self, addr: u8) -> Option<&QDist<u16>> {
+    pub fn load(&self, addr: u8) -> Option<&DensityMatrix> {
         self.slots[addr as usize].as_ref()
     }
 
-    /// Store a quantum distribution at QMEM[addr].
+    /// Store a density matrix at QMEM[addr].
     ///
-    /// Overwrites any existing distribution in that slot.
-    pub fn store(&mut self, addr: u8, dist: QDist<u16>) {
-        self.slots[addr as usize] = Some(dist);
+    /// Overwrites any existing density matrix in that slot.
+    pub fn store(&mut self, addr: u8, dm: DensityMatrix) {
+        self.slots[addr as usize] = Some(dm);
     }
 
-    /// Take (remove and return) the quantum distribution at QMEM[addr].
+    /// Take (remove and return) the density matrix at QMEM[addr].
     ///
     /// Leaves the slot empty (None). Useful for destructive operations.
-    pub fn take(&mut self, addr: u8) -> Option<QDist<u16>> {
+    pub fn take(&mut self, addr: u8) -> Option<DensityMatrix> {
         self.slots[addr as usize].take()
     }
 

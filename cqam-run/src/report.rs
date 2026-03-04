@@ -1,7 +1,6 @@
 // cqam-run/src/report.rs
 //
-// Phase 2: Updated to iterate over fixed-size register file arrays
-// instead of HashMap entries.
+// Phase 2 (density matrix): Updated quantum register display for DensityMatrix.
 
 use cqam_core::register::HybridValue;
 use cqam_vm::context::ExecutionContext;
@@ -59,8 +58,16 @@ pub fn print_report(
         // -- Quantum registers (Q0-Q7) --
         println!("\n=== Quantum Registers (active) ===");
         for i in 0..8usize {
-            if let Some(ref qdist) = ctx.qregs[i] {
-                println!("  Q{} = {} ({} states)", i, qdist.label, qdist.domain.len());
+            if let Some(ref dm) = ctx.qregs[i] {
+                let probs = dm.diagonal_probabilities();
+                println!("  Q{} = DensityMatrix({} qubits, purity={:.4})",
+                    i, dm.num_qubits(), dm.purity());
+                // Print non-zero diagonal probabilities
+                for (k, &p) in probs.iter().enumerate() {
+                    if p > 1e-10 {
+                        println!("    |{}> : {:.6}", k, p);
+                    }
+                }
             }
         }
 
@@ -73,8 +80,9 @@ pub fn print_report(
         // -- Quantum memory (occupied slots) --
         println!("\n=== Quantum Memory (occupied slots) ===");
         for addr in 0..=255u8 {
-            if let Some(qdist) = ctx.qmem.load(addr) {
-                println!("  QMEM[{:3}] = {} ({} states)", addr, qdist.label, qdist.domain.len());
+            if let Some(dm) = ctx.qmem.load(addr) {
+                println!("  QMEM[{:3}] = DensityMatrix({} qubits, purity={:.4})",
+                    addr, dm.num_qubits(), dm.purity());
             }
         }
     }

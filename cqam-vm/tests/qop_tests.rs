@@ -1,7 +1,6 @@
 // cqam-vm/tests/qop_tests.rs
 //
-// Phase 4/6: Test quantum operations with Result-based error handling
-// and Phase 6 kernels (Fourier, Diffuse, GroverIter).
+// Phase 2 (density matrix): Test quantum operations with DensityMatrix.
 
 use cqam_core::instruction::*;
 use cqam_core::register::HybridValue;
@@ -19,11 +18,12 @@ fn test_qprep_uniform() {
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
 
     assert!(ctx.qregs[0].is_some());
-    let qdist = ctx.qregs[0].as_ref().unwrap();
-    assert_eq!(qdist.label, "uniform");
-    assert_eq!(qdist.domain.len(), 4);
-    // All probabilities should be 0.25
-    for &p in &qdist.probabilities {
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    assert_eq!(dm.dimension(), 4);
+    // All diagonal probabilities should be 0.25
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
         assert!((p - 0.25).abs() < 1e-6);
     }
 }
@@ -34,10 +34,11 @@ fn test_qprep_zero() {
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 1, dist: dist_id::ZERO }).unwrap();
 
-    let qdist = ctx.qregs[1].as_ref().unwrap();
-    assert_eq!(qdist.label, "zero");
-    assert_eq!(qdist.domain, vec![0u16]);
-    assert_eq!(qdist.probabilities, vec![1.0]);
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    // rho[0][0] = 1.0, all others 0
+    assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10);
+    assert!((dm.get(1, 1).0).abs() < 1e-10);
 }
 
 #[test]
@@ -46,11 +47,12 @@ fn test_qprep_bell() {
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 2, dist: dist_id::BELL }).unwrap();
 
-    let qdist = ctx.qregs[2].as_ref().unwrap();
-    assert_eq!(qdist.label, "bell");
-    assert_eq!(qdist.domain, vec![0u16, 3]);
-    assert!((qdist.probabilities[0] - 0.5).abs() < 1e-6);
-    assert!((qdist.probabilities[1] - 0.5).abs() < 1e-6);
+    let dm = ctx.qregs[2].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    assert!((dm.get(0, 0).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(0, 3).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(3, 0).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(3, 3).0 - 0.5).abs() < 1e-10);
 }
 
 #[test]
@@ -59,11 +61,13 @@ fn test_qprep_ghz() {
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 3, dist: dist_id::GHZ }).unwrap();
 
-    let qdist = ctx.qregs[3].as_ref().unwrap();
-    assert_eq!(qdist.label, "ghz");
-    assert_eq!(qdist.domain, vec![0u16, 15]);
-    assert!((qdist.probabilities[0] - 0.5).abs() < 1e-6);
-    assert!((qdist.probabilities[1] - 0.5).abs() < 1e-6);
+    let dm = ctx.qregs[3].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2); // default_qubits=2 but GHZ forces n>=2
+    let dim = dm.dimension();
+    assert!((dm.get(0, 0).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(0, dim - 1).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(dim - 1, 0).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(dim - 1, dim - 1).0 - 0.5).abs() < 1e-10);
 }
 
 // =============================================================================
@@ -88,6 +92,9 @@ fn test_qkernel_entangle() {
     }).unwrap();
 
     assert!(ctx.qregs[1].is_some());
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    assert!(dm.is_valid(1e-8));
 }
 
 #[test]
@@ -106,14 +113,16 @@ fn test_qkernel_fourier() {
         ctx1: 1,
     }).unwrap();
 
-    let result = ctx.qregs[1].as_ref().unwrap();
-    let total: f64 = result.probabilities.iter().sum();
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    let total: f64 = probs.iter().sum();
     assert!((total - 1.0).abs() < 1e-6, "Fourier output should be normalized");
 
     // QFT on uniform concentrates on state 0
     assert!(
-        result.probabilities[0] > 0.9,
-        "QFT of uniform should concentrate on state 0"
+        probs[0] > 0.99,
+        "QFT of uniform should concentrate on state 0, got p[0]={}",
+        probs[0]
     );
 }
 
@@ -133,12 +142,13 @@ fn test_qkernel_diffuse() {
         ctx1: 1,
     }).unwrap();
 
-    let result = ctx.qregs[1].as_ref().unwrap();
-    let total: f64 = result.probabilities.iter().sum();
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    let total: f64 = probs.iter().sum();
     assert!((total - 1.0).abs() < 1e-6, "Diffuse output should be normalized");
 
     // Diffusion on uniform stays uniform
-    for &p in &result.probabilities {
+    for &p in &probs {
         assert!((p - 0.25).abs() < 1e-6, "Diffuse on uniform should stay uniform");
     }
 }
@@ -150,28 +160,25 @@ fn test_qkernel_grover_iter() {
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
 
     // Set target state in integer register R0
-    ctx.iregs.set(0, 2).unwrap(); // target state = 2
+    ctx.iregs.set(0, 3).unwrap(); // target state = 3
     ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1,
         src: 0,
         kernel: kernel_id::GROVER_ITER,
-        ctx0: 0,  // reads R0 = 2 as target
+        ctx0: 0,  // reads R0 = 3 as target
         ctx1: 1,
     }).unwrap();
 
-    let result = ctx.qregs[1].as_ref().unwrap();
-    let total: f64 = result.probabilities.iter().sum();
-    assert!((total - 1.0).abs() < 1e-6, "Grover output should be normalized");
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
 
-    // Target state (index 2, state value 2) should have higher probability
-    let target_prob = result.probabilities[2];
-    let other_prob = result.probabilities[0];
+    // For N=4, 1 Grover iteration gives p(target) = 1.0
     assert!(
-        target_prob > other_prob,
-        "Grover should amplify target. target_p={}, other_p={}",
-        target_prob, other_prob
+        (probs[3] - 1.0).abs() < 1e-10,
+        "Grover should find target with certainty. p[3]={}",
+        probs[3]
     );
 }
 
@@ -191,10 +198,12 @@ fn test_qkernel_updates_psw_with_real_metrics() {
         ctx1: 1,
     }).unwrap();
 
-    // After applying init kernel (uniform output), superposition should be active
+    // After applying init kernel (uniform output), quantum flags should be set
     assert!(ctx.psw.qf, "Quantum active flag should be set");
+    // Uniform state has von Neumann entropy > 0 (all probs equal)
     assert!(ctx.psw.sf, "Superposition flag should be set for uniform distribution");
-    assert!(ctx.psw.ef, "Entanglement flag should be set for uniform distribution");
+    // Purity of pure state = 1.0 > 0, so ef should be set
+    assert!(ctx.psw.ef, "Entanglement flag should be set (purity > 0)");
 }
 
 // =============================================================================
@@ -266,7 +275,7 @@ fn test_qstore_and_qload() {
 }
 
 // ===========================================================================
-// Error cases (Phase 4: now return Err instead of panicking)
+// Error cases
 // ===========================================================================
 
 #[test]

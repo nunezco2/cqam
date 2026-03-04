@@ -1,20 +1,18 @@
 // cqam-sim/src/kernels/init.rs
+//
+// Phase 2: Initialization kernel operating on DensityMatrix.
 
-use crate::qdist::QDist;
+use crate::density_matrix::DensityMatrix;
 use crate::kernel::Kernel;
 
-pub struct InitDist<T>
-where
-    T: Clone,
-{
-    pub domain: Vec<T>,
-}
+/// Initialization kernel: produces the uniform superposition state H^n|0>.
+///
+/// Ignores the input density matrix's state; always returns the equal
+/// superposition pure state for the same number of qubits.
+pub struct Init;
 
-impl<T: Clone> Kernel<T> for InitDist<T> {
-    fn apply(&self, _input: &QDist<T>) -> QDist<T> {
-        let n = self.domain.len();
-        let prob = 1.0 / n as f64;
-        QDist::new("init", self.domain.clone(), vec![prob; n])
-            .expect("internal: domain/probability length mismatch")
+impl Kernel for Init {
+    fn apply(&self, input: &DensityMatrix) -> DensityMatrix {
+        DensityMatrix::new_uniform(input.num_qubits())
     }
 }

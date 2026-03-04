@@ -1,64 +1,45 @@
 // cqam-sim/src/kernels/grover.rs
 //
-// Phase 6.6: One Grover iteration = oracle + diffusion.
-//
-// In the ensemble model:
-// 1. Oracle: flip the sign of the pseudo-amplitude for the target (marked) state.
-//    Since we're working with sqrt(p) as pseudo-amplitudes, flipping the sign
-//    of the target state's amplitude is equivalent to negating it.
-// 2. Diffusion: inversion about the mean of all amplitudes.
-//
-// After both steps, square back to get probabilities.
+// Phase 2: One Grover iteration (oracle + diffusion) on DensityMatrix.
 
-use crate::qdist::QDist;
+use crate::complex;
+use crate::density_matrix::DensityMatrix;
 use crate::kernel::Kernel;
 
 /// One Grover iteration kernel (kernel_id = 4).
 ///
-/// Combines the oracle (marking the target state by flipping its amplitude sign)
-/// with the diffusion operator (inversion about the mean).
+/// G = D * O where:
+/// - Oracle O: diagonal with -1 at target state, +1 elsewhere
+/// - Diffusion D: 2|s><s| - I
 ///
-/// The `target` field specifies which basis state is the marked state.
-/// This is typically read from the integer register file via the ctx0 parameter
-/// of the QKernel instruction.
+/// Combined: G[j][k] = (2/N - delta_{j,k}) * (if k == target { -1 } else { 1 })
 pub struct GroverIter {
-    /// The marked (target) state whose amplitude sign is flipped by the oracle.
+    /// The marked (target) basis state whose phase is flipped by the oracle.
     pub target: u16,
 }
 
-impl Kernel<u16> for GroverIter {
-    fn apply(&self, input: &QDist<u16>) -> QDist<u16> {
-        let n = input.probabilities.len();
-        if n == 0 {
-            return input.clone();
-        }
+impl Kernel for GroverIter {
+    fn apply(&self, input: &DensityMatrix) -> DensityMatrix {
+        let dim = input.dimension();
+        let t = self.target as usize;
+        assert!(t < dim, "Grover target {} exceeds dimension {}", t, dim);
+        let n_f64 = dim as f64;
 
-        // Step 1: Compute pseudo-amplitudes
-        let mut amplitudes: Vec<f64> = input.probabilities.iter()
-            .map(|&p| p.sqrt())
-            .collect();
-
-        // Step 2: Oracle - flip the sign of the target state's amplitude
-        for (i, &state) in input.domain.iter().enumerate() {
-            if state == self.target {
-                amplitudes[i] = -amplitudes[i];
+        // Compose G = D * O
+        // D[j][m] = 2/N - delta_{j,m}
+        // O[m][k] = delta_{m,k} * (if k == t { -1 } else { 1 })
+        // G[j][k] = D[j][k] * O[k][k]  (since O is diagonal)
+        let mut g = vec![complex::ZERO; dim * dim];
+        for j in 0..dim {
+            for k in 0..dim {
+                let d_jk = 2.0 / n_f64 - if j == k { 1.0 } else { 0.0 };
+                let o_kk = if k == t { -1.0 } else { 1.0 };
+                g[j * dim + k] = (d_jk * o_kk, 0.0);
             }
         }
 
-        // Step 3: Diffusion - inversion about the mean
-        let mean: f64 = amplitudes.iter().sum::<f64>() / n as f64;
-        let new_amplitudes: Vec<f64> = amplitudes.iter()
-            .map(|&a| 2.0 * mean - a)
-            .collect();
-
-        // Step 4: Square to get probabilities
-        let new_probs: Vec<f64> = new_amplitudes.iter()
-            .map(|&a| a * a)
-            .collect();
-
-        let mut result = QDist::new(&input.label, input.domain.clone(), new_probs)
-            .expect("internal: domain/probability length mismatch");
-        result.normalize();
+        let mut result = input.clone();
+        result.apply_unitary(&g);
         result
     }
 }

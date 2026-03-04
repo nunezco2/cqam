@@ -1,5 +1,7 @@
 // cqam-sim/src/lib.rs
 
+pub mod complex;
+pub mod density_matrix;
 pub mod qdist;
 pub mod kernel;
 pub mod joint_qdist;

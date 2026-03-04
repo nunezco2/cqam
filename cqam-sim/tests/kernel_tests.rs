@@ -1,17 +1,31 @@
-use cqam_sim::qdist::QDist;
-use cqam_sim::kernels::init::InitDist;
+// cqam-sim/tests/kernel_tests.rs
+//
+// Phase 2 (density matrix): Test kernels operating on DensityMatrix.
+
+use cqam_sim::density_matrix::DensityMatrix;
+use cqam_sim::kernels::init::Init;
+use cqam_sim::kernels::entangle::Entangle;
 use cqam_sim::kernels::fourier::Fourier;
 use cqam_sim::kernels::diffuse::Diffuse;
 use cqam_sim::kernels::grover::GroverIter;
 use cqam_sim::kernel::Kernel;
 
+// =============================================================================
+// Init kernel tests
+// =============================================================================
+
 #[test]
-fn test_init_dist_kernel() {
-    let init = InitDist { domain: vec![0u16, 1, 2] };
-    let dummy = QDist::new("dummy", vec![0u16], vec![1.0]).unwrap();
-    let output = init.apply(&dummy);
-    assert_eq!(output.domain.len(), 3);
-    assert!((output.probabilities.iter().sum::<f64>() - 1.0).abs() < 1e-6);
+fn test_init_returns_uniform() {
+    let init = Init;
+    let input = DensityMatrix::new_zero_state(2);
+    let output = init.apply(&input);
+
+    // All diagonal entries should be 0.25
+    let probs = output.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-10, "Init should produce uniform, got p={}", p);
+    }
+    assert!((output.purity() - 1.0).abs() < 1e-10, "Init should produce pure state");
 }
 
 // =============================================================================
@@ -19,59 +33,62 @@ fn test_init_dist_kernel() {
 // =============================================================================
 
 #[test]
-fn test_fourier_preserves_normalization() {
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
+fn test_fourier_zero_to_uniform() {
+    // QFT on |0><0| should produce uniform superposition
+    let input = DensityMatrix::new_zero_state(2);
     let fourier = Fourier;
     let output = fourier.apply(&input);
 
-    let total: f64 = output.probabilities.iter().sum();
-    assert!(
-        (total - 1.0).abs() < 1e-6,
-        "Fourier output should be normalized, sum = {}",
-        total
-    );
-    assert_eq!(output.domain.len(), 4);
-}
-
-#[test]
-fn test_fourier_on_uniform_concentrates() {
-    // QFT of uniform distribution should concentrate probability on state 0
-    // because uniform amplitudes (all equal) DFT to a spike at k=0.
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-    let fourier = Fourier;
-    let output = fourier.apply(&input);
-
-    // The first state should have the highest probability
-    assert!(
-        output.probabilities[0] > 0.9,
-        "QFT of uniform should concentrate on state 0, got p[0]={}",
-        output.probabilities[0]
-    );
-}
-
-#[test]
-fn test_fourier_on_delta() {
-    // QFT of delta at |0> should produce uniform distribution
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![1.0, 0.0, 0.0, 0.0]).unwrap();
-    let fourier = Fourier;
-    let output = fourier.apply(&input);
-
-    // All states should have approximately equal probability
-    for p in &output.probabilities {
+    let probs = output.diagonal_probabilities();
+    for &p in &probs {
         assert!(
-            (*p - 0.25).abs() < 1e-6,
-            "QFT of delta should be uniform, got p={}",
+            (p - 0.25).abs() < 1e-10,
+            "QFT of |0> should be uniform, got p={}",
             p
         );
     }
 }
 
 #[test]
-fn test_fourier_empty() {
-    let input = QDist::new("q", vec![], vec![]).unwrap();
+fn test_fourier_uniform_to_zero() {
+    // QFT on uniform pure state should produce |0><0|
+    let input = DensityMatrix::new_uniform(2);
     let fourier = Fourier;
     let output = fourier.apply(&input);
-    assert!(output.domain.is_empty());
+
+    let probs = output.diagonal_probabilities();
+    assert!(
+        probs[0] > 0.99,
+        "QFT of uniform should concentrate on state 0, got p[0]={}",
+        probs[0]
+    );
+}
+
+#[test]
+fn test_fourier_preserves_purity() {
+    let input = DensityMatrix::new_zero_state(2);
+    let fourier = Fourier;
+    let output = fourier.apply(&input);
+
+    assert!(
+        (output.purity() - 1.0).abs() < 1e-10,
+        "QFT should preserve purity, got {}",
+        output.purity()
+    );
+}
+
+#[test]
+fn test_fourier_preserves_trace() {
+    let input = DensityMatrix::new_zero_state(2);
+    let fourier = Fourier;
+    let output = fourier.apply(&input);
+
+    let tr = output.trace();
+    assert!(
+        (tr.0 - 1.0).abs() < 1e-10,
+        "QFT should preserve trace, got ({}, {})",
+        tr.0, tr.1
+    );
 }
 
 // =============================================================================
@@ -79,30 +96,16 @@ fn test_fourier_empty() {
 // =============================================================================
 
 #[test]
-fn test_diffuse_preserves_normalization() {
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.1, 0.2, 0.3, 0.4]).unwrap();
+fn test_diffuse_on_uniform_is_identity() {
+    // Diffusion on uniform superposition should keep it unchanged
+    let input = DensityMatrix::new_uniform(2);
     let diffuse = Diffuse;
     let output = diffuse.apply(&input);
 
-    let total: f64 = output.probabilities.iter().sum();
-    assert!(
-        (total - 1.0).abs() < 1e-6,
-        "Diffuse output should be normalized, sum = {}",
-        total
-    );
-}
-
-#[test]
-fn test_diffuse_on_uniform_stays_uniform() {
-    // Diffusion on a uniform distribution should keep it uniform
-    // because all amplitudes equal the mean.
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-    let diffuse = Diffuse;
-    let output = diffuse.apply(&input);
-
-    for p in &output.probabilities {
+    let probs = output.diagonal_probabilities();
+    for &p in &probs {
         assert!(
-            (*p - 0.25).abs() < 1e-6,
+            (p - 0.25).abs() < 1e-10,
             "Diffuse on uniform should stay uniform, got p={}",
             p
         );
@@ -110,11 +113,16 @@ fn test_diffuse_on_uniform_stays_uniform() {
 }
 
 #[test]
-fn test_diffuse_empty() {
-    let input = QDist::new("q", vec![], vec![]).unwrap();
+fn test_diffuse_preserves_purity() {
+    let input = DensityMatrix::new_zero_state(2);
     let diffuse = Diffuse;
     let output = diffuse.apply(&input);
-    assert!(output.domain.is_empty());
+
+    assert!(
+        (output.purity() - 1.0).abs() < 1e-10,
+        "Diffuse should preserve purity, got {}",
+        output.purity()
+    );
 }
 
 // =============================================================================
@@ -122,79 +130,107 @@ fn test_diffuse_empty() {
 // =============================================================================
 
 #[test]
-fn test_grover_iter_amplifies_target() {
-    // Start with uniform distribution over 4 states
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
+fn test_grover_2q_target3_exact() {
+    // Key verification: 1 iteration on N=4, target=3 -> probability 1.0
+    let input = DensityMatrix::new_uniform(2);
+    let grover = GroverIter { target: 3 };
+    let output = grover.apply(&input);
 
-    // One Grover iteration targeting state 2
+    let probs = output.diagonal_probabilities();
+    assert!(
+        (probs[3] - 1.0).abs() < 1e-10,
+        "Grover 2q target=3: expected p[3]=1.0, got {}",
+        probs[3]
+    );
+}
+
+#[test]
+fn test_grover_amplifies_target() {
+    let input = DensityMatrix::new_uniform(2);
     let grover = GroverIter { target: 2 };
     let output = grover.apply(&input);
 
-    // After one iteration, the target state should have higher probability
-    let target_prob = output.probabilities[2]; // state 2 is at index 2
-    let other_prob = output.probabilities[0];   // state 0 is at index 0
-
+    let probs = output.diagonal_probabilities();
     assert!(
-        target_prob > other_prob,
-        "Grover iteration should amplify target state. target_p={}, other_p={}",
-        target_prob, other_prob
+        probs[2] > probs[0],
+        "Grover should amplify target. target_p={}, other_p={}",
+        probs[2], probs[0]
     );
 }
 
 #[test]
-fn test_grover_iter_preserves_normalization() {
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
+fn test_grover_preserves_normalization() {
+    let input = DensityMatrix::new_uniform(2);
     let grover = GroverIter { target: 1 };
     let output = grover.apply(&input);
 
-    let total: f64 = output.probabilities.iter().sum();
+    let tr = output.trace();
     assert!(
-        (total - 1.0).abs() < 1e-6,
-        "Grover output should be normalized, sum = {}",
-        total
+        (tr.0 - 1.0).abs() < 1e-10,
+        "Grover output should have trace 1, got ({}, {})",
+        tr.0, tr.1
     );
 }
 
 #[test]
-fn test_grover_multiple_iterations_converge() {
-    // Multiple Grover iterations should increase the probability of the target
-    let mut dist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-    let grover = GroverIter { target: 3 };
+fn test_grover_4q_3_iterations() {
+    // 3 iterations on 16 states should give high probability for the target
+    let mut dm = DensityMatrix::new_uniform(4);
+    let grover = GroverIter { target: 7 };
 
-    // For N=4 states, optimal number of iterations is ~pi/4 * sqrt(4) ~ 1.57
-    // So one iteration should already significantly boost the target.
-    dist = grover.apply(&dist);
-
-    let target_prob = dist.probabilities[3]; // state 3 is the target
-    assert!(
-        target_prob > 0.5,
-        "After Grover iteration on 4 states, target should have p > 0.5, got {}",
-        target_prob
-    );
-}
-
-#[test]
-fn test_grover_iter_empty() {
-    let input = QDist::new("q", vec![], vec![]).unwrap();
-    let grover = GroverIter { target: 0 };
-    let output = grover.apply(&input);
-    assert!(output.domain.is_empty());
-}
-
-#[test]
-fn test_grover_iter_target_not_in_domain() {
-    // If the target state isn't in the domain, the oracle has no effect.
-    // The diffusion still applies but no amplitude is flipped.
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-    let grover = GroverIter { target: 99 }; // not in domain
-    let output = grover.apply(&input);
-
-    // Without a target flip, diffusion on uniform stays uniform
-    for p in &output.probabilities {
-        assert!(
-            (*p - 0.25).abs() < 1e-6,
-            "No-target Grover on uniform should stay uniform, got p={}",
-            p
-        );
+    for _ in 0..3 {
+        dm = grover.apply(&dm);
     }
+
+    let probs = dm.diagonal_probabilities();
+    assert!(
+        probs[7] > 0.9,
+        "After 3 Grover iterations on 4-qubit, p[7]={} should be > 0.9",
+        probs[7]
+    );
+}
+
+// =============================================================================
+// Entangle kernel tests
+// =============================================================================
+
+#[test]
+fn test_entangle_creates_bell() {
+    // Start with |+>|0> = H|0> tensor |0>
+    // Apply CNOT -> Bell state
+    // First create |+> tensor |0> as a statevector
+    let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
+    // |+>|0> = (1/sqrt(2))(|00> + |10>)
+    let psi = vec![
+        (inv_sqrt2, 0.0), // |00>
+        (0.0, 0.0),       // |01>
+        (inv_sqrt2, 0.0), // |10>
+        (0.0, 0.0),       // |11>
+    ];
+    let input = DensityMatrix::from_statevector(&psi).unwrap();
+
+    let entangle = Entangle;
+    let output = entangle.apply(&input);
+
+    // Should produce Bell state: rho[0][0] = rho[0][3] = rho[3][0] = rho[3][3] = 0.5
+    assert!(
+        (output.get(0, 0).0 - 0.5).abs() < 1e-10,
+        "rho[0][0] should be 0.5, got {}",
+        output.get(0, 0).0
+    );
+    assert!(
+        (output.get(0, 3).0 - 0.5).abs() < 1e-10,
+        "rho[0][3] should be 0.5, got {}",
+        output.get(0, 3).0
+    );
+    assert!(
+        (output.get(3, 0).0 - 0.5).abs() < 1e-10,
+        "rho[3][0] should be 0.5, got {}",
+        output.get(3, 0).0
+    );
+    assert!(
+        (output.get(3, 3).0 - 0.5).abs() < 1e-10,
+        "rho[3][3] should be 0.5, got {}",
+        output.get(3, 3).0
+    );
 }

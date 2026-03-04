@@ -2,6 +2,7 @@
 //
 // Phase 2: Separate register files, quantum register array, call stack,
 // and label resolution cache.
+// Phase 2 (density matrix): qregs changed from QDist<u16> to DensityMatrix.
 
 use std::collections::HashMap;
 
@@ -9,7 +10,7 @@ use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMem, QMem};
 use cqam_core::register::{IntRegFile, FloatRegFile, ComplexRegFile, HybridRegFile};
-use cqam_sim::qdist::QDist;
+use cqam_sim::density_matrix::DensityMatrix;
 use crate::resource::ResourceTracker;
 use crate::psw::ProgramStateWord;
 use crate::simconfig::QuantumFidelityThreshold;
@@ -34,15 +35,15 @@ pub struct ExecutionContext {
     /// Hybrid register file: H0-H7 (8 x HybridValue).
     pub hregs: HybridRegFile,
 
-    /// Quantum register file: Q0-Q7 (8 x Option<QDist<u16>>).
+    /// Quantum register file: Q0-Q7 (8 x Option<DensityMatrix>).
     /// Separate from QMEM. These are the "live" quantum registers
     /// that QPREP, QKERNEL, and QOBSERVE operate on.
-    pub qregs: [Option<QDist<u16>>; 8],
+    pub qregs: [Option<DensityMatrix>; 8],
 
     /// Classical memory: 65536 cells of i64.
     pub cmem: CMem,
 
-    /// Quantum memory: 256 slots of QDist<u16>.
+    /// Quantum memory: 256 slots of DensityMatrix.
     pub qmem: QMem,
 
     /// Call stack for CALL/RET instructions.
