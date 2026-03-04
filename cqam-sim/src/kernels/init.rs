@@ -15,5 +15,6 @@ impl<T: Clone> Kernel<T> for InitDist<T> {
         let n = self.domain.len();
         let prob = 1.0 / n as f64;
         QDist::new("init", self.domain.clone(), vec![prob; n])
+            .expect("internal: domain/probability length mismatch")
     }
 }

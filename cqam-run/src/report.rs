@@ -22,7 +22,7 @@ pub fn print_report(
         // -- Integer registers (R0-R15) --
         println!("\n=== Integer Registers (non-zero) ===");
         for i in 0..16u8 {
-            let val = ctx.iregs.get(i);
+            let val = ctx.iregs.get(i).unwrap_or(0);
             if val != 0 {
                 println!("  R{:2} = {}", i, val);
             }
@@ -31,7 +31,7 @@ pub fn print_report(
         // -- Float registers (F0-F15) --
         println!("\n=== Float Registers (non-zero) ===");
         for i in 0..16u8 {
-            let val = ctx.fregs.get(i);
+            let val = ctx.fregs.get(i).unwrap_or(0.0);
             if val != 0.0 {
                 println!("  F{:2} = {:.6}", i, val);
             }
@@ -40,7 +40,7 @@ pub fn print_report(
         // -- Complex registers (Z0-Z15) --
         println!("\n=== Complex Registers (non-zero) ===");
         for i in 0..16u8 {
-            let (re, im) = ctx.zregs.get(i);
+            let (re, im) = ctx.zregs.get(i).unwrap_or((0.0, 0.0));
             if re != 0.0 || im != 0.0 {
                 println!("  Z{:2} = ({:.6}, {:.6}i)", i, re, im);
             }
@@ -49,9 +49,10 @@ pub fn print_report(
         // -- Hybrid registers (H0-H7) --
         println!("\n=== Hybrid Registers (non-empty) ===");
         for i in 0..8u8 {
-            let val = ctx.hregs.get(i);
-            if !matches!(val, HybridValue::Empty) {
-                println!("  H{} = {:?}", i, val);
+            if let Ok(val) = ctx.hregs.get(i) {
+                if !matches!(val, HybridValue::Empty) {
+                    println!("  H{} = {:?}", i, val);
+                }
             }
         }
 

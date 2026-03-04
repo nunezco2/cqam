@@ -4,7 +4,7 @@ use cqam_sim::qdist::{QDist, Measurable};
 fn test_measure_deterministic_returns_max_probability_value() {
     let domain = vec![0u16, 1, 2];
     let probabilities = vec![0.1, 0.7, 0.2];
-    let qdist = QDist::new("qX", domain.clone(), probabilities);
+    let qdist = QDist::new("qX", domain.clone(), probabilities).unwrap();
 
     let measured = qdist.measure_deterministic();
     assert_eq!(measured, Some(1u16));
@@ -14,7 +14,7 @@ fn test_measure_deterministic_returns_max_probability_value() {
 fn test_expected_value_computes_correctly() {
     let domain = vec![0u16, 1, 2];
     let probabilities = vec![0.1, 0.7, 0.2];
-    let qdist = QDist::new("qX", domain, probabilities);
+    let qdist = QDist::new("qX", domain, probabilities).unwrap();
 
     let expected = qdist.expected_value().unwrap();
     assert!((expected - 1.1).abs() < 1e-6);
@@ -23,7 +23,7 @@ fn test_expected_value_computes_correctly() {
 #[test]
 fn test_stochastic_measure_distribution() {
     // Create a distribution: state 0 has p=0.2, state 1 has p=0.8
-    let qdist = QDist::new("qX", vec![0u16, 1], vec![0.2, 0.8]);
+    let qdist = QDist::new("qX", vec![0u16, 1], vec![0.2, 0.8]).unwrap();
 
     let num_samples = 10_000;
     let mut count_0 = 0usize;
@@ -56,7 +56,7 @@ fn test_stochastic_measure_distribution() {
 #[test]
 fn test_stochastic_measure_delta_distribution() {
     // Delta distribution: all probability on state 5
-    let qdist = QDist::new("qX", vec![5u16], vec![1.0]);
+    let qdist = QDist::new("qX", vec![5u16], vec![1.0]).unwrap();
 
     for _ in 0..100 {
         assert_eq!(qdist.measure(), Some(5u16));
@@ -65,7 +65,7 @@ fn test_stochastic_measure_delta_distribution() {
 
 #[test]
 fn test_measure_empty_distribution() {
-    let qdist: QDist<u16> = QDist::new("empty", vec![], vec![]);
+    let qdist: QDist<u16> = QDist::new("empty", vec![], vec![]).unwrap();
     assert_eq!(qdist.measure(), None);
     assert_eq!(qdist.measure_deterministic(), None);
 }
@@ -77,7 +77,7 @@ fn test_measure_empty_distribution() {
 #[test]
 fn test_superposition_metric_uniform() {
     // Uniform distribution should have maximum superposition (1.0)
-    let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let metric = qdist.superposition_metric();
     assert!(
         (metric - 1.0).abs() < 1e-6,
@@ -89,7 +89,7 @@ fn test_superposition_metric_uniform() {
 #[test]
 fn test_superposition_metric_delta() {
     // Delta distribution should have zero superposition
-    let qdist = QDist::new("q", vec![0u16], vec![1.0]);
+    let qdist = QDist::new("q", vec![0u16], vec![1.0]).unwrap();
     let metric = qdist.superposition_metric();
     assert!(
         metric.abs() < 1e-6,
@@ -101,7 +101,7 @@ fn test_superposition_metric_delta() {
 #[test]
 fn test_superposition_metric_partial() {
     // Two-state distribution with unequal probabilities
-    let qdist = QDist::new("q", vec![0u16, 1], vec![0.9, 0.1]);
+    let qdist = QDist::new("q", vec![0u16, 1], vec![0.9, 0.1]).unwrap();
     let metric = qdist.superposition_metric();
     // Should be between 0 and 1
     assert!(metric > 0.0 && metric < 1.0, "Partial superposition, got {}", metric);
@@ -110,7 +110,7 @@ fn test_superposition_metric_partial() {
 #[test]
 fn test_entanglement_metric_uniform() {
     // Uniform: effective_states = n, so metric = n/n = 1.0
-    let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let metric = qdist.entanglement_metric();
     assert!(
         (metric - 1.0).abs() < 1e-6,
@@ -122,7 +122,7 @@ fn test_entanglement_metric_uniform() {
 #[test]
 fn test_entanglement_metric_delta() {
     // Delta: effective_states = 1, metric = 1/1 = 1.0
-    let qdist = QDist::new("q", vec![0u16], vec![1.0]);
+    let qdist = QDist::new("q", vec![0u16], vec![1.0]).unwrap();
     let metric = qdist.entanglement_metric();
     assert!(
         (metric - 1.0).abs() < 1e-6,
@@ -134,7 +134,7 @@ fn test_entanglement_metric_delta() {
 #[test]
 fn test_entanglement_metric_concentrated() {
     // Concentrated: one state with most probability
-    let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.97, 0.01, 0.01, 0.01]);
+    let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.97, 0.01, 0.01, 0.01]).unwrap();
     let metric = qdist.entanglement_metric();
     // effective_states ~ 1.06, metric ~ 1.06/4 ~ 0.27
     assert!(

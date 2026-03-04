@@ -26,44 +26,44 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::IAdd { dst, lhs, rhs } => {
-            let result = ctx.iregs.get(*lhs).wrapping_add(ctx.iregs.get(*rhs));
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)?.wrapping_add(ctx.iregs.get(*rhs)?);
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::ISub { dst, lhs, rhs } => {
-            let result = ctx.iregs.get(*lhs).wrapping_sub(ctx.iregs.get(*rhs));
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)?.wrapping_sub(ctx.iregs.get(*rhs)?);
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IMul { dst, lhs, rhs } => {
-            let result = ctx.iregs.get(*lhs).wrapping_mul(ctx.iregs.get(*rhs));
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)?.wrapping_mul(ctx.iregs.get(*rhs)?);
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IDiv { dst, lhs, rhs } => {
-            let divisor = ctx.iregs.get(*rhs);
+            let divisor = ctx.iregs.get(*rhs)?;
             if divisor == 0 {
                 return Err(CqamError::DivisionByZero {
                     instruction: "IDIV".to_string(),
                 });
             }
-            let result = ctx.iregs.get(*lhs) / divisor;
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)? / divisor;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IMod { dst, lhs, rhs } => {
-            let divisor = ctx.iregs.get(*rhs);
+            let divisor = ctx.iregs.get(*rhs)?;
             if divisor == 0 {
                 return Err(CqamError::DivisionByZero {
                     instruction: "IMOD".to_string(),
                 });
             }
-            let result = ctx.iregs.get(*lhs) % divisor;
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)? % divisor;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
@@ -72,38 +72,40 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::IAnd { dst, lhs, rhs } => {
-            let result = ctx.iregs.get(*lhs) & ctx.iregs.get(*rhs);
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)? & ctx.iregs.get(*rhs)?;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IOr { dst, lhs, rhs } => {
-            let result = ctx.iregs.get(*lhs) | ctx.iregs.get(*rhs);
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)? | ctx.iregs.get(*rhs)?;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IXor { dst, lhs, rhs } => {
-            let result = ctx.iregs.get(*lhs) ^ ctx.iregs.get(*rhs);
-            ctx.iregs.set(*dst, result);
+            let result = ctx.iregs.get(*lhs)? ^ ctx.iregs.get(*rhs)?;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::INot { dst, src } => {
-            let result = !ctx.iregs.get(*src);
-            ctx.iregs.set(*dst, result);
+            let result = !ctx.iregs.get(*src)?;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IShl { dst, src, amt } => {
-            let result = ctx.iregs.get(*src) << (*amt as u32);
-            ctx.iregs.set(*dst, result);
+            let safe_amt = std::cmp::min(*amt, 63) as u32;
+            let result = ctx.iregs.get(*src)? << safe_amt;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IShr { dst, src, amt } => {
-            let result = ctx.iregs.get(*src) >> (*amt as u32);
-            ctx.iregs.set(*dst, result);
+            let safe_amt = std::cmp::min(*amt, 63) as u32;
+            let result = ctx.iregs.get(*src)? >> safe_amt;
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_arithmetic(result);
         }
 
@@ -113,16 +115,16 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
 
         Instruction::ILdi { dst, imm } => {
             let result = *imm as i64;
-            ctx.iregs.set(*dst, result);
+            ctx.iregs.set(*dst, result)?;
         }
 
         Instruction::ILdm { dst, addr } => {
             let result = ctx.cmem.load(*addr);
-            ctx.iregs.set(*dst, result);
+            ctx.iregs.set(*dst, result)?;
         }
 
         Instruction::IStr { src, addr } => {
-            let val = ctx.iregs.get(*src);
+            let val = ctx.iregs.get(*src)?;
             ctx.cmem.store(*addr, val);
         }
 
@@ -131,20 +133,20 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::IEq { dst, lhs, rhs } => {
-            let result = if ctx.iregs.get(*lhs) == ctx.iregs.get(*rhs) { 1i64 } else { 0 };
-            ctx.iregs.set(*dst, result);
+            let result = if ctx.iregs.get(*lhs)? == ctx.iregs.get(*rhs)? { 1i64 } else { 0 };
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_predicate(result != 0);
         }
 
         Instruction::ILt { dst, lhs, rhs } => {
-            let result = if ctx.iregs.get(*lhs) < ctx.iregs.get(*rhs) { 1i64 } else { 0 };
-            ctx.iregs.set(*dst, result);
+            let result = if ctx.iregs.get(*lhs)? < ctx.iregs.get(*rhs)? { 1i64 } else { 0 };
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_predicate(result != 0);
         }
 
         Instruction::IGt { dst, lhs, rhs } => {
-            let result = if ctx.iregs.get(*lhs) > ctx.iregs.get(*rhs) { 1i64 } else { 0 };
-            ctx.iregs.set(*dst, result);
+            let result = if ctx.iregs.get(*lhs)? > ctx.iregs.get(*rhs)? { 1i64 } else { 0 };
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_predicate(result != 0);
         }
 
@@ -153,60 +155,60 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::FAdd { dst, lhs, rhs } => {
-            let result = ctx.fregs.get(*lhs) + ctx.fregs.get(*rhs);
-            ctx.fregs.set(*dst, result);
+            let result = ctx.fregs.get(*lhs)? + ctx.fregs.get(*rhs)?;
+            ctx.fregs.set(*dst, result)?;
         }
 
         Instruction::FSub { dst, lhs, rhs } => {
-            let result = ctx.fregs.get(*lhs) - ctx.fregs.get(*rhs);
-            ctx.fregs.set(*dst, result);
+            let result = ctx.fregs.get(*lhs)? - ctx.fregs.get(*rhs)?;
+            ctx.fregs.set(*dst, result)?;
         }
 
         Instruction::FMul { dst, lhs, rhs } => {
-            let result = ctx.fregs.get(*lhs) * ctx.fregs.get(*rhs);
-            ctx.fregs.set(*dst, result);
+            let result = ctx.fregs.get(*lhs)? * ctx.fregs.get(*rhs)?;
+            ctx.fregs.set(*dst, result)?;
         }
 
         Instruction::FDiv { dst, lhs, rhs } => {
-            let divisor = ctx.fregs.get(*rhs);
+            let divisor = ctx.fregs.get(*rhs)?;
             if divisor == 0.0 {
                 return Err(CqamError::DivisionByZero {
                     instruction: "FDIV".to_string(),
                 });
             }
-            let result = ctx.fregs.get(*lhs) / divisor;
-            ctx.fregs.set(*dst, result);
+            let result = ctx.fregs.get(*lhs)? / divisor;
+            ctx.fregs.set(*dst, result)?;
         }
 
         Instruction::FLdi { dst, imm } => {
-            ctx.fregs.set(*dst, *imm as f64);
+            ctx.fregs.set(*dst, *imm as f64)?;
         }
 
         Instruction::FLdm { dst, addr } => {
             let bits = ctx.cmem.load(*addr) as u64;
-            ctx.fregs.set(*dst, f64::from_bits(bits));
+            ctx.fregs.set(*dst, f64::from_bits(bits))?;
         }
 
         Instruction::FStr { src, addr } => {
-            let bits = ctx.fregs.get(*src).to_bits() as i64;
+            let bits = ctx.fregs.get(*src)?.to_bits() as i64;
             ctx.cmem.store(*addr, bits);
         }
 
         Instruction::FEq { dst, lhs, rhs } => {
-            let result = if ctx.fregs.get(*lhs) == ctx.fregs.get(*rhs) { 1i64 } else { 0 };
-            ctx.iregs.set(*dst, result);
+            let result = if ctx.fregs.get(*lhs)? == ctx.fregs.get(*rhs)? { 1i64 } else { 0 };
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_predicate(result != 0);
         }
 
         Instruction::FLt { dst, lhs, rhs } => {
-            let result = if ctx.fregs.get(*lhs) < ctx.fregs.get(*rhs) { 1i64 } else { 0 };
-            ctx.iregs.set(*dst, result);
+            let result = if ctx.fregs.get(*lhs)? < ctx.fregs.get(*rhs)? { 1i64 } else { 0 };
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_predicate(result != 0);
         }
 
         Instruction::FGt { dst, lhs, rhs } => {
-            let result = if ctx.fregs.get(*lhs) > ctx.fregs.get(*rhs) { 1i64 } else { 0 };
-            ctx.iregs.set(*dst, result);
+            let result = if ctx.fregs.get(*lhs)? > ctx.fregs.get(*rhs)? { 1i64 } else { 0 };
+            ctx.iregs.set(*dst, result)?;
             ctx.psw.update_from_predicate(result != 0);
         }
 
@@ -215,26 +217,26 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::ZAdd { dst, lhs, rhs } => {
-            let (ar, ai) = ctx.zregs.get(*lhs);
-            let (br, bi) = ctx.zregs.get(*rhs);
-            ctx.zregs.set(*dst, (ar + br, ai + bi));
+            let (ar, ai) = ctx.zregs.get(*lhs)?;
+            let (br, bi) = ctx.zregs.get(*rhs)?;
+            ctx.zregs.set(*dst, (ar + br, ai + bi))?;
         }
 
         Instruction::ZSub { dst, lhs, rhs } => {
-            let (ar, ai) = ctx.zregs.get(*lhs);
-            let (br, bi) = ctx.zregs.get(*rhs);
-            ctx.zregs.set(*dst, (ar - br, ai - bi));
+            let (ar, ai) = ctx.zregs.get(*lhs)?;
+            let (br, bi) = ctx.zregs.get(*rhs)?;
+            ctx.zregs.set(*dst, (ar - br, ai - bi))?;
         }
 
         Instruction::ZMul { dst, lhs, rhs } => {
-            let (ar, ai) = ctx.zregs.get(*lhs);
-            let (br, bi) = ctx.zregs.get(*rhs);
-            ctx.zregs.set(*dst, (ar * br - ai * bi, ar * bi + ai * br));
+            let (ar, ai) = ctx.zregs.get(*lhs)?;
+            let (br, bi) = ctx.zregs.get(*rhs)?;
+            ctx.zregs.set(*dst, (ar * br - ai * bi, ar * bi + ai * br))?;
         }
 
         Instruction::ZDiv { dst, lhs, rhs } => {
-            let (ar, ai) = ctx.zregs.get(*lhs);
-            let (br, bi) = ctx.zregs.get(*rhs);
+            let (ar, ai) = ctx.zregs.get(*lhs)?;
+            let (br, bi) = ctx.zregs.get(*rhs)?;
             let denom = br * br + bi * bi;
             if denom == 0.0 {
                 return Err(CqamError::DivisionByZero {
@@ -243,21 +245,21 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
             }
             let re = (ar * br + ai * bi) / denom;
             let im = (ai * br - ar * bi) / denom;
-            ctx.zregs.set(*dst, (re, im));
+            ctx.zregs.set(*dst, (re, im))?;
         }
 
         Instruction::ZLdi { dst, imm_re, imm_im } => {
-            ctx.zregs.set(*dst, (*imm_re as f64, *imm_im as f64));
+            ctx.zregs.set(*dst, (*imm_re as f64, *imm_im as f64))?;
         }
 
         Instruction::ZLdm { dst, addr } => {
             let re_bits = ctx.cmem.load(*addr) as u64;
             let im_bits = ctx.cmem.load(addr.wrapping_add(1)) as u64;
-            ctx.zregs.set(*dst, (f64::from_bits(re_bits), f64::from_bits(im_bits)));
+            ctx.zregs.set(*dst, (f64::from_bits(re_bits), f64::from_bits(im_bits)))?;
         }
 
         Instruction::ZStr { src, addr } => {
-            let (re, im) = ctx.zregs.get(*src);
+            let (re, im) = ctx.zregs.get(*src)?;
             ctx.cmem.store(*addr, re.to_bits() as i64);
             ctx.cmem.store(addr.wrapping_add(1), im.to_bits() as i64);
         }
@@ -267,20 +269,20 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::CvtIF { dst_f, src_i } => {
-            ctx.fregs.set(*dst_f, ctx.iregs.get(*src_i) as f64);
+            ctx.fregs.set(*dst_f, ctx.iregs.get(*src_i)? as f64)?;
         }
 
         Instruction::CvtFI { dst_i, src_f } => {
-            ctx.iregs.set(*dst_i, ctx.fregs.get(*src_f) as i64);
+            ctx.iregs.set(*dst_i, ctx.fregs.get(*src_f)? as i64)?;
         }
 
         Instruction::CvtFZ { dst_z, src_f } => {
-            ctx.zregs.set(*dst_z, (ctx.fregs.get(*src_f), 0.0));
+            ctx.zregs.set(*dst_z, (ctx.fregs.get(*src_f)?, 0.0))?;
         }
 
         Instruction::CvtZF { dst_f, src_z } => {
-            let (re, _im) = ctx.zregs.get(*src_z);
-            ctx.fregs.set(*dst_f, re);
+            let (re, _im) = ctx.zregs.get(*src_z)?;
+            ctx.fregs.set(*dst_f, re)?;
         }
 
         // =====================================================================
@@ -288,13 +290,13 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         // =====================================================================
 
         Instruction::Jmp { target } => {
-            ctx.jump_to_label(target);
+            ctx.jump_to_label(target)?;
             return Ok(()); // Do NOT advance PC
         }
 
         Instruction::Jif { pred, target } => {
-            if ctx.iregs.get(*pred) != 0 {
-                ctx.jump_to_label(target);
+            if ctx.iregs.get(*pred)? != 0 {
+                ctx.jump_to_label(target)?;
                 return Ok(()); // Jump taken: do NOT advance PC
             }
             // Fall through: advance PC normally
@@ -302,7 +304,7 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
 
         Instruction::Call { target } => {
             ctx.push_call();
-            ctx.jump_to_label(target);
+            ctx.jump_to_label(target)?;
             return Ok(()); // Do NOT advance PC
         }
 

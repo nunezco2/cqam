@@ -18,9 +18,9 @@ fn test_no_double_pc_advance() {
     let ctx = run_program(program).unwrap();
 
     assert_eq!(ctx.pc, 3, "PC should be 3 after executing 3 instructions");
-    assert_eq!(ctx.iregs.get(1), 42);
-    assert_eq!(ctx.iregs.get(2), 7);
-    assert_eq!(ctx.iregs.get(3), 49);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 42);
+    assert_eq!(ctx.iregs.get(2).unwrap(), 7);
+    assert_eq!(ctx.iregs.get(3).unwrap(), 49);
 }
 
 #[test]
@@ -34,8 +34,8 @@ fn test_pc_advance_with_jump() {
 
     let ctx = run_program(program).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 0, "R1 should be 0 (instruction was skipped)");
-    assert_eq!(ctx.iregs.get(2), 42);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0, "R1 should be 0 (instruction was skipped)");
+    assert_eq!(ctx.iregs.get(2).unwrap(), 42);
     assert_eq!(ctx.pc, 4);
 }
 
@@ -52,8 +52,8 @@ fn test_call_ret_flow() {
 
     let ctx = run_program(program).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 42, "R1 should be set in FUNC");
-    assert_eq!(ctx.iregs.get(0), 100, "R0 should be set after return");
+    assert_eq!(ctx.iregs.get(1).unwrap(), 42, "R1 should be set in FUNC");
+    assert_eq!(ctx.iregs.get(0).unwrap(), 100, "R0 should be set after return");
     assert!(ctx.psw.trap_halt, "Should halt");
 }
 
@@ -69,8 +69,8 @@ fn test_jif_conditional_execution() {
 
     let ctx = run_program(program).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 0, "R1 should not be set (skipped)");
-    assert_eq!(ctx.iregs.get(2), 42, "R2 should be set after skip");
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0, "R1 should not be set (skipped)");
+    assert_eq!(ctx.iregs.get(2).unwrap(), 42, "R2 should be set after skip");
 }
 
 #[test]
@@ -83,8 +83,8 @@ fn test_halt_terminates_execution() {
 
     let ctx = run_program(program).unwrap();
 
-    assert_eq!(ctx.iregs.get(0), 1);
-    assert_eq!(ctx.iregs.get(1), 0, "R1 should not be set (after HALT)");
+    assert_eq!(ctx.iregs.get(0).unwrap(), 1);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0, "R1 should not be set (after HALT)");
     assert!(ctx.psw.trap_halt);
 }
 
@@ -100,8 +100,8 @@ fn test_arithmetic_with_memory() {
 
     let ctx = run_program(program).unwrap();
 
-    assert_eq!(ctx.iregs.get(2), 30);
-    assert_eq!(ctx.iregs.get(3), 30);
+    assert_eq!(ctx.iregs.get(2).unwrap(), 30);
+    assert_eq!(ctx.iregs.get(3).unwrap(), 30);
     assert_eq!(ctx.cmem.load(100), 30);
 }
 
@@ -168,7 +168,7 @@ fn test_max_cycles_allows_short_programs() {
 
     let ctx = run_program_with_config(program, &config).unwrap();
 
-    assert_eq!(ctx.iregs.get(2), 49);
+    assert_eq!(ctx.iregs.get(2).unwrap(), 49);
     assert_eq!(ctx.pc, 3);
 }
 
@@ -181,6 +181,6 @@ fn test_run_program_with_default_config() {
     ];
 
     let ctx = run_program(program).unwrap();
-    assert_eq!(ctx.iregs.get(0), 100);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 100);
     assert!(ctx.psw.trap_halt);
 }

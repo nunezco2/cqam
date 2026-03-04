@@ -3,6 +3,8 @@
 // Phase 2: Separate register files with fixed-size arrays.
 // Replaces the old CValue/RegisterBank string-keyed design.
 
+use crate::error::CqamError;
+
 // =============================================================================
 // Integer register file: R0-R15
 // =============================================================================
@@ -24,18 +26,31 @@ impl IntRegFile {
 
     /// Read integer register R[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 16`. Phase 4 converts this to `Result`.
-    pub fn get(&self, idx: u8) -> i64 {
-        self.regs[idx as usize]
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 16`.
+    pub fn get(&self, idx: u8) -> Result<i64, CqamError> {
+        if (idx as usize) < self.regs.len() {
+            Ok(self.regs[idx as usize])
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "R".to_string(),
+                index: idx,
+            })
+        }
     }
 
     /// Write integer register R[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 16`. Phase 4 converts this to `Result`.
-    pub fn set(&mut self, idx: u8, val: i64) {
-        self.regs[idx as usize] = val;
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 16`.
+    pub fn set(&mut self, idx: u8, val: i64) -> Result<(), CqamError> {
+        if (idx as usize) < self.regs.len() {
+            self.regs[idx as usize] = val;
+            Ok(())
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "R".to_string(),
+                index: idx,
+            })
+        }
     }
 }
 
@@ -65,18 +80,31 @@ impl FloatRegFile {
 
     /// Read float register F[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 16`.
-    pub fn get(&self, idx: u8) -> f64 {
-        self.regs[idx as usize]
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 16`.
+    pub fn get(&self, idx: u8) -> Result<f64, CqamError> {
+        if (idx as usize) < self.regs.len() {
+            Ok(self.regs[idx as usize])
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "F".to_string(),
+                index: idx,
+            })
+        }
     }
 
     /// Write float register F[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 16`.
-    pub fn set(&mut self, idx: u8, val: f64) {
-        self.regs[idx as usize] = val;
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 16`.
+    pub fn set(&mut self, idx: u8, val: f64) -> Result<(), CqamError> {
+        if (idx as usize) < self.regs.len() {
+            self.regs[idx as usize] = val;
+            Ok(())
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "F".to_string(),
+                index: idx,
+            })
+        }
     }
 }
 
@@ -106,18 +134,31 @@ impl ComplexRegFile {
 
     /// Read complex register Z[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 16`.
-    pub fn get(&self, idx: u8) -> (f64, f64) {
-        self.regs[idx as usize]
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 16`.
+    pub fn get(&self, idx: u8) -> Result<(f64, f64), CqamError> {
+        if (idx as usize) < self.regs.len() {
+            Ok(self.regs[idx as usize])
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "Z".to_string(),
+                index: idx,
+            })
+        }
     }
 
     /// Write complex register Z[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 16`.
-    pub fn set(&mut self, idx: u8, val: (f64, f64)) {
-        self.regs[idx as usize] = val;
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 16`.
+    pub fn set(&mut self, idx: u8, val: (f64, f64)) -> Result<(), CqamError> {
+        if (idx as usize) < self.regs.len() {
+            self.regs[idx as usize] = val;
+            Ok(())
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "Z".to_string(),
+                index: idx,
+            })
+        }
     }
 }
 
@@ -181,17 +222,30 @@ impl HybridRegFile {
 
     /// Read hybrid register H[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 8`.
-    pub fn get(&self, idx: u8) -> &HybridValue {
-        &self.regs[idx as usize]
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 8`.
+    pub fn get(&self, idx: u8) -> Result<&HybridValue, CqamError> {
+        if (idx as usize) < self.regs.len() {
+            Ok(&self.regs[idx as usize])
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "H".to_string(),
+                index: idx,
+            })
+        }
     }
 
     /// Write hybrid register H[idx].
     ///
-    /// # Panics
-    /// Panics if `idx >= 8`.
-    pub fn set(&mut self, idx: u8, val: HybridValue) {
-        self.regs[idx as usize] = val;
+    /// Returns `Err(CqamError::RegisterOutOfBounds)` if `idx >= 8`.
+    pub fn set(&mut self, idx: u8, val: HybridValue) -> Result<(), CqamError> {
+        if (idx as usize) < self.regs.len() {
+            self.regs[idx as usize] = val;
+            Ok(())
+        } else {
+            Err(CqamError::RegisterOutOfBounds {
+                file: "H".to_string(),
+                index: idx,
+            })
+        }
     }
 }

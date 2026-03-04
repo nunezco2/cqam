@@ -32,15 +32,19 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     let n = domain.len();
                     let prob = 1.0 / n as f64;
                     QDist::new("uniform", domain, vec![prob; n])
+                        .map_err(CqamError::ConfigError)?
                 }
                 dist_id::ZERO => {
                     QDist::new("zero", vec![0u16], vec![1.0])
+                        .map_err(CqamError::ConfigError)?
                 }
                 dist_id::BELL => {
                     QDist::new("bell", vec![0u16, 3], vec![0.5, 0.5])
+                        .map_err(CqamError::ConfigError)?
                 }
                 dist_id::GHZ => {
                     QDist::new("ghz", vec![0u16, 15], vec![0.5, 0.5])
+                        .map_err(CqamError::ConfigError)?
                 }
                 _ => {
                     return Err(CqamError::UnknownKernel(
@@ -54,8 +58,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
         Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
             let qsrc = ctx.qregs[*src as usize].clone();
-            let param0 = ctx.iregs.get(*ctx0);
-            let _param1 = ctx.iregs.get(*ctx1);
+            let param0 = ctx.iregs.get(*ctx0)?;
+            let _param1 = ctx.iregs.get(*ctx1)?;
 
             if let Some(qdist) = qsrc {
                 let k: Box<dyn Kernel<u16>> = match *kernel {
@@ -107,16 +111,17 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
         Instruction::QObserve { dst_h, src_q } => {
             if let Some(qdist) = ctx.qregs[*src_q as usize].take() {
-                let _measured_value = qdist.measure();
+                let measured_value = qdist.measure();
 
-                let dist_pairs: Vec<(u16, f64)> = qdist
-                    .domain
-                    .iter()
-                    .zip(qdist.probabilities.iter())
-                    .map(|(&d, &p)| (d, p))
-                    .collect();
+                // Collapse: store a delta distribution at the measured value
+                let dist_pairs: Vec<(u16, f64)> = if let Some(value) = measured_value {
+                    vec![(value, 1.0)]
+                } else {
+                    // Empty domain: store empty distribution
+                    vec![]
+                };
 
-                ctx.hregs.set(*dst_h, HybridValue::Dist(dist_pairs));
+                ctx.hregs.set(*dst_h, HybridValue::Dist(dist_pairs))?;
                 ctx.psw.mark_measured();
                 Ok(())
             } else {

@@ -8,13 +8,18 @@ pub struct QDist<T> {
 }
 
 impl<T: Clone> QDist<T> {
-    pub fn new(label: &str, domain: Vec<T>, probabilities: Vec<f64>) -> Self {
-        assert_eq!(domain.len(), probabilities.len(), "Domain and probability size mismatch");
-        Self {
+    pub fn new(label: &str, domain: Vec<T>, probabilities: Vec<f64>) -> Result<Self, String> {
+        if domain.len() != probabilities.len() {
+            return Err(format!(
+                "QDist '{}': domain length ({}) != probabilities length ({})",
+                label, domain.len(), probabilities.len()
+            ));
+        }
+        Ok(Self {
             label: label.to_string(),
             domain,
             probabilities,
-        }
+        })
     }
 
     pub fn normalize(&mut self) {
@@ -124,7 +129,7 @@ impl Measurable<u16> for QDist<u16> {
             .probabilities
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())?
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))?
             .0;
         Some(self.domain[max_idx])
     }

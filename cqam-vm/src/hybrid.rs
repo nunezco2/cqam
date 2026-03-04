@@ -31,7 +31,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
             ctx.psw.update_from_predicate(cond);
 
             if cond {
-                ctx.jump_to_label(target);
+                ctx.jump_to_label(target)?;
                 Ok(true)
             } else {
                 Ok(false)
@@ -39,14 +39,14 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
         }
 
         Instruction::HReduce { src, dst, func } => {
-            let hybrid_val = ctx.hregs.get(*src).clone();
+            let hybrid_val = ctx.hregs.get(*src)?.clone();
 
             match *func {
                 // -- Float -> Int reductions ----------------------------------
 
                 reduce_fn::ROUND => {
                     if let HybridValue::Float(x) = hybrid_val {
-                        ctx.iregs.set(*dst, x.round() as i64);
+                        ctx.iregs.set(*dst, x.round() as i64)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/ROUND".to_string(),
@@ -57,7 +57,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::FLOOR => {
                     if let HybridValue::Float(x) = hybrid_val {
-                        ctx.iregs.set(*dst, x.floor() as i64);
+                        ctx.iregs.set(*dst, x.floor() as i64)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/FLOOR".to_string(),
@@ -68,7 +68,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::CEIL => {
                     if let HybridValue::Float(x) = hybrid_val {
-                        ctx.iregs.set(*dst, x.ceil() as i64);
+                        ctx.iregs.set(*dst, x.ceil() as i64)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/CEIL".to_string(),
@@ -79,7 +79,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::TRUNC => {
                     if let HybridValue::Float(x) = hybrid_val {
-                        ctx.iregs.set(*dst, x.trunc() as i64);
+                        ctx.iregs.set(*dst, x.trunc() as i64)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/TRUNC".to_string(),
@@ -90,7 +90,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::ABS => {
                     if let HybridValue::Float(x) = hybrid_val {
-                        ctx.iregs.set(*dst, x.abs() as i64);
+                        ctx.iregs.set(*dst, x.abs() as i64)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/ABS".to_string(),
@@ -101,7 +101,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::NEGATE => {
                     if let HybridValue::Float(x) = hybrid_val {
-                        ctx.iregs.set(*dst, (-x) as i64);
+                        ctx.iregs.set(*dst, (-x) as i64)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/NEGATE".to_string(),
@@ -115,7 +115,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
                 reduce_fn::MAGNITUDE => {
                     if let HybridValue::Complex(re, im) = hybrid_val {
                         let mag = (re * re + im * im).sqrt();
-                        ctx.fregs.set(*dst, mag);
+                        ctx.fregs.set(*dst, mag)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/MAGNITUDE".to_string(),
@@ -126,7 +126,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::PHASE => {
                     if let HybridValue::Complex(re, im) = hybrid_val {
-                        ctx.fregs.set(*dst, im.atan2(re));
+                        ctx.fregs.set(*dst, im.atan2(re))?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/PHASE".to_string(),
@@ -137,7 +137,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::REAL => {
                     if let HybridValue::Complex(re, _im) = hybrid_val {
-                        ctx.fregs.set(*dst, re);
+                        ctx.fregs.set(*dst, re)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/REAL".to_string(),
@@ -148,7 +148,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
 
                 reduce_fn::IMAG => {
                     if let HybridValue::Complex(_re, im) = hybrid_val {
-                        ctx.fregs.set(*dst, im);
+                        ctx.fregs.set(*dst, im)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/IMAG".to_string(),
@@ -164,7 +164,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
                         let mean: f64 = entries.iter()
                             .map(|(val, prob)| *val as f64 * prob)
                             .sum();
-                        ctx.fregs.set(*dst, mean);
+                        ctx.fregs.set(*dst, mean)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/MEAN".to_string(),
@@ -176,9 +176,9 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
                 reduce_fn::MODE => {
                     if let HybridValue::Dist(ref entries) = hybrid_val {
                         if let Some((val, _)) = entries.iter()
-                            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap())
+                            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
                         {
-                            ctx.iregs.set(*dst, *val as i64);
+                            ctx.iregs.set(*dst, *val as i64)?;
                         }
                     } else {
                         return Err(CqamError::TypeMismatch {
@@ -191,9 +191,9 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
                 reduce_fn::ARGMAX => {
                     if let HybridValue::Dist(ref entries) = hybrid_val {
                         if let Some((idx, _)) = entries.iter().enumerate()
-                            .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap())
+                            .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
                         {
-                            ctx.iregs.set(*dst, idx as i64);
+                            ctx.iregs.set(*dst, idx as i64)?;
                         }
                     } else {
                         return Err(CqamError::TypeMismatch {
@@ -214,7 +214,7 @@ pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result
                                 diff * diff * prob
                             })
                             .sum();
-                        ctx.fregs.set(*dst, var);
+                        ctx.fregs.set(*dst, var)?;
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/VARIANCE".to_string(),

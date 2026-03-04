@@ -103,7 +103,7 @@ fn test_qmem_store_and_load() {
     let mut qmem = QMem::new();
     let domain = vec![0u16, 1, 2];
     let probs = vec![0.3, 0.4, 0.3];
-    let qdist = QDist::new("test", domain.clone(), probs.clone());
+    let qdist = QDist::new("test", domain.clone(), probs.clone()).unwrap();
 
     qmem.store(10, qdist);
 
@@ -116,7 +116,7 @@ fn test_qmem_store_and_load() {
 #[test]
 fn test_qmem_take_removes_slot() {
     let mut qmem = QMem::new();
-    let qdist = QDist::new("take_test", vec![0u16, 1], vec![0.5, 0.5]);
+    let qdist = QDist::new("take_test", vec![0u16, 1], vec![0.5, 0.5]).unwrap();
     qmem.store(5, qdist);
 
     assert!(qmem.is_occupied(5));
@@ -129,7 +129,7 @@ fn test_qmem_take_removes_slot() {
 #[test]
 fn test_qmem_take_returns_correct_value() {
     let mut qmem = QMem::new();
-    let qdist = QDist::new("val", vec![0u16, 1, 2], vec![0.2, 0.5, 0.3]);
+    let qdist = QDist::new("val", vec![0u16, 1, 2], vec![0.2, 0.5, 0.3]).unwrap();
     qmem.store(42, qdist);
 
     let taken = qmem.take(42).unwrap();
@@ -147,15 +147,15 @@ fn test_qmem_take_empty_slot_returns_none() {
 fn test_qmem_is_occupied() {
     let mut qmem = QMem::new();
     assert!(!qmem.is_occupied(0));
-    qmem.store(0, QDist::new("occ", vec![0u16], vec![1.0]));
+    qmem.store(0, QDist::new("occ", vec![0u16], vec![1.0]).unwrap());
     assert!(qmem.is_occupied(0));
 }
 
 #[test]
 fn test_qmem_overwrite() {
     let mut qmem = QMem::new();
-    qmem.store(0, QDist::new("first", vec![0u16], vec![1.0]));
-    qmem.store(0, QDist::new("second", vec![0u16, 1], vec![0.5, 0.5]));
+    qmem.store(0, QDist::new("first", vec![0u16], vec![1.0]).unwrap());
+    qmem.store(0, QDist::new("second", vec![0u16, 1], vec![0.5, 0.5]).unwrap());
 
     let loaded = qmem.load(0).unwrap();
     assert_eq!(loaded.label, "second");
@@ -165,7 +165,7 @@ fn test_qmem_overwrite() {
 #[test]
 fn test_qmem_max_address() {
     let mut qmem = QMem::new();
-    qmem.store(255, QDist::new("max", vec![0u16], vec![1.0]));
+    qmem.store(255, QDist::new("max", vec![0u16], vec![1.0]).unwrap());
     assert!(qmem.is_occupied(255));
     let loaded = qmem.load(255).unwrap();
     assert_eq!(loaded.label, "max");

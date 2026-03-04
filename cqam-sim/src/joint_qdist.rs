@@ -31,26 +31,27 @@ impl JointQDist {
         labels: (String, String),
         domain: Vec<(u16, u16)>,
         probabilities: Vec<f64>,
-    ) -> Self {
-        assert_eq!(
-            domain.len(),
-            probabilities.len(),
-            "Domain and probability size mismatch in JointQDist"
-        );
+    ) -> Result<Self, String> {
+        if domain.len() != probabilities.len() {
+            return Err(format!(
+                "JointQDist: domain length ({}) != probabilities length ({})",
+                domain.len(), probabilities.len()
+            ));
+        }
         let mut jd = Self {
             labels,
             domain,
             probabilities,
         };
         jd.normalize();
-        jd
+        Ok(jd)
     }
 
     /// Create a joint distribution from two independent QDist<u16> distributions.
     ///
     /// The joint probability is the product of marginal probabilities:
     /// P(a, b) = P(a) * P(b).
-    pub fn from_independent(a: &QDist<u16>, b: &QDist<u16>) -> Self {
+    pub fn from_independent(a: &QDist<u16>, b: &QDist<u16>) -> Result<Self, String> {
         let mut domain = Vec::with_capacity(a.domain.len() * b.domain.len());
         let mut probs = Vec::with_capacity(a.domain.len() * b.domain.len());
 
@@ -99,6 +100,7 @@ impl JointQDist {
         let probs: Vec<f64> = state_map.iter().map(|&(_, p)| p).collect();
 
         QDist::new(&self.labels.0, domain, probs)
+            .expect("internal: marginal domain/probability mismatch")
     }
 
     /// Compute the marginal distribution for register B (second register).
@@ -122,6 +124,7 @@ impl JointQDist {
         let probs: Vec<f64> = state_map.iter().map(|&(_, p)| p).collect();
 
         QDist::new(&self.labels.1, domain, probs)
+            .expect("internal: marginal domain/probability mismatch")
     }
 
     /// Stochastically measure the joint distribution.
@@ -154,7 +157,7 @@ impl JointQDist {
             .probabilities
             .iter()
             .enumerate()
-            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap())?
+            .max_by(|a, b| a.1.partial_cmp(b.1).unwrap_or(std::cmp::Ordering::Equal))?
             .0;
         Some(self.domain[max_idx])
     }
@@ -206,7 +209,8 @@ impl JointQDist {
         let domain: Vec<u16> = state_map.iter().map(|&(s, _)| s).collect();
         let probs: Vec<f64> = state_map.iter().map(|&(_, p)| p).collect();
 
-        let mut result = QDist::new(&self.labels.1, domain, probs);
+        let mut result = QDist::new(&self.labels.1, domain, probs)
+            .expect("internal: conditional domain/probability mismatch");
         result.normalize();
         result
     }
@@ -231,7 +235,8 @@ impl JointQDist {
         let domain: Vec<u16> = state_map.iter().map(|&(s, _)| s).collect();
         let probs: Vec<f64> = state_map.iter().map(|&(_, p)| p).collect();
 
-        let mut result = QDist::new(&self.labels.0, domain, probs);
+        let mut result = QDist::new(&self.labels.0, domain, probs)
+            .expect("internal: conditional domain/probability mismatch");
         result.normalize();
         result
     }

@@ -41,7 +41,8 @@ impl Kernel<u16> for Diffuse {
             .map(|&a| a * a)
             .collect();
 
-        let mut result = QDist::new(&input.label, input.domain.clone(), new_probs);
+        let mut result = QDist::new(&input.label, input.domain.clone(), new_probs)
+            .expect("internal: domain/probability length mismatch");
         result.normalize();
         result
     }

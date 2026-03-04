@@ -76,8 +76,8 @@ fn test_qkernel_entangle() {
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
 
-    ctx.iregs.set(0, 0);
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1,
@@ -95,8 +95,8 @@ fn test_qkernel_fourier() {
     let mut ctx = ExecutionContext::new(vec![]);
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
-    ctx.iregs.set(0, 0);
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1,
@@ -122,8 +122,8 @@ fn test_qkernel_diffuse() {
     let mut ctx = ExecutionContext::new(vec![]);
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
-    ctx.iregs.set(0, 0);
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1,
@@ -150,8 +150,8 @@ fn test_qkernel_grover_iter() {
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
 
     // Set target state in integer register R0
-    ctx.iregs.set(0, 2); // target state = 2
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 2).unwrap(); // target state = 2
+    ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1,
@@ -180,8 +180,8 @@ fn test_qkernel_updates_psw_with_real_metrics() {
     let mut ctx = ExecutionContext::new(vec![]);
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
-    ctx.iregs.set(0, 0);
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1,
@@ -211,7 +211,13 @@ fn test_qobserve_destructive() {
     execute_qop(&mut ctx, &Instruction::QObserve { dst_h: 0, src_q: 0 }).unwrap();
 
     assert!(ctx.qregs[0].is_none());
-    assert!(matches!(ctx.hregs.get(0), HybridValue::Dist(_)));
+    // After collapse, should be a delta distribution with exactly 1 entry
+    if let HybridValue::Dist(d) = ctx.hregs.get(0).unwrap() {
+        assert_eq!(d.len(), 1, "Collapsed distribution should have exactly 1 entry");
+        assert!((d[0].1 - 1.0).abs() < 1e-10, "Collapsed probability should be 1.0");
+    } else {
+        panic!("Expected HybridValue::Dist after QObserve");
+    }
 }
 
 #[test]
@@ -222,6 +228,22 @@ fn test_qobserve_sets_psw_flags() {
 
     assert!(ctx.psw.df);
     assert!(ctx.psw.cf);
+}
+
+#[test]
+fn test_qobserve_collapses_to_delta() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QObserve { dst_h: 0, src_q: 0 }).unwrap();
+
+    // Zero state has only |0> with p=1.0, so measurement must yield 0
+    if let HybridValue::Dist(d) = ctx.hregs.get(0).unwrap() {
+        assert_eq!(d.len(), 1, "Collapsed distribution should have exactly 1 entry");
+        assert_eq!(d[0].0, 0u16, "Measured value should be 0 for zero-state");
+        assert!((d[0].1 - 1.0).abs() < 1e-10, "Collapsed probability should be 1.0");
+    } else {
+        panic!("Expected HybridValue::Dist after QObserve");
+    }
 }
 
 // =============================================================================
@@ -250,8 +272,8 @@ fn test_qstore_and_qload() {
 #[test]
 fn test_qkernel_on_empty_register_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.iregs.set(0, 0);
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
 
     let result = execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1, src: 0, kernel: kernel_id::ENTANGLE, ctx0: 0, ctx1: 1,
@@ -286,8 +308,8 @@ fn test_qstore_from_empty_register_returns_error() {
 fn test_unknown_kernel_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
-    ctx.iregs.set(0, 0);
-    ctx.iregs.set(1, 0);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
 
     let result = execute_qop(&mut ctx, &Instruction::QKernel {
         dst: 1, src: 0, kernel: 99, ctx0: 0, ctx1: 1,

@@ -60,16 +60,16 @@ fn test_jump_to_label() {
 
     let mut ctx = ExecutionContext::new(program);
     ctx.pc = 1;
-    assert!(ctx.jump_to_label("TARGET"));
+    ctx.jump_to_label("TARGET").unwrap();
     assert_eq!(ctx.pc, 0);
 }
 
 #[test]
-fn test_jump_to_nonexistent_label_returns_false() {
+fn test_jump_to_nonexistent_label_returns_error() {
     let program = vec![Instruction::Halt];
     let mut ctx = ExecutionContext::new(program);
     ctx.pc = 0;
-    assert!(!ctx.jump_to_label("NONEXISTENT"));
+    assert!(ctx.jump_to_label("NONEXISTENT").is_err());
     assert_eq!(ctx.pc, 0); // PC unchanged
 }
 
@@ -94,11 +94,21 @@ fn test_register_files_initialized() {
 
     // All integer registers should be zero
     for i in 0..16u8 {
-        assert_eq!(ctx.iregs.get(i), 0);
+        assert_eq!(ctx.iregs.get(i).unwrap(), 0);
     }
 
     // All quantum registers should be None
     for qreg in &ctx.qregs {
         assert!(qreg.is_none());
     }
+}
+
+#[test]
+fn test_jump_to_nonexistent_label_returns_unresolved_label_error() {
+    let program = vec![Instruction::Halt];
+    let mut ctx = ExecutionContext::new(program);
+    let err = ctx.jump_to_label("MISSING").unwrap_err();
+    let msg = format!("{}", err);
+    assert!(msg.contains("Unresolved label"));
+    assert!(msg.contains("MISSING"));
 }

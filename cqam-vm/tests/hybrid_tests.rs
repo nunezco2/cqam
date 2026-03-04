@@ -66,7 +66,7 @@ fn test_hcexec_no_jump_on_false_flag() {
 #[test]
 fn test_hreduce_round() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(2.7));
+    ctx.hregs.set(0, HybridValue::Float(2.7)).unwrap();
 
     let jumped = execute_hybrid(
         &mut ctx,
@@ -74,131 +74,131 @@ fn test_hreduce_round() {
     ).unwrap();
 
     assert!(!jumped);
-    assert_eq!(ctx.iregs.get(1), 3);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 3);
 }
 
 #[test]
 fn test_hreduce_floor() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(2.7));
+    ctx.hregs.set(0, HybridValue::Float(2.7)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::FLOOR },
     ).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 2);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 2);
 }
 
 #[test]
 fn test_hreduce_ceil() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(2.1));
+    ctx.hregs.set(0, HybridValue::Float(2.1)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::CEIL },
     ).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 3);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 3);
 }
 
 #[test]
 fn test_hreduce_trunc() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(2.9));
+    ctx.hregs.set(0, HybridValue::Float(2.9)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::TRUNC },
     ).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 2);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 2);
 }
 
 #[test]
 fn test_hreduce_abs() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(-5.3));
+    ctx.hregs.set(0, HybridValue::Float(-5.3)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ABS },
     ).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), 5);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 5);
 }
 
 #[test]
 fn test_hreduce_negate() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(3.0));
+    ctx.hregs.set(0, HybridValue::Float(3.0)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::NEGATE },
     ).unwrap();
 
-    assert_eq!(ctx.iregs.get(1), -3);
+    assert_eq!(ctx.iregs.get(1).unwrap(), -3);
 }
 
 #[test]
 fn test_hreduce_magnitude() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0));
+    ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MAGNITUDE },
     ).unwrap();
 
-    assert!((ctx.fregs.get(0) - 5.0).abs() < 1e-10);
+    assert!((ctx.fregs.get(0).unwrap() - 5.0).abs() < 1e-10);
 }
 
 #[test]
 fn test_hreduce_real_imag() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Complex(3.125, 2.625));
+    ctx.hregs.set(0, HybridValue::Complex(3.125, 2.625)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::REAL },
     ).unwrap();
-    assert!((ctx.fregs.get(0) - 3.125).abs() < 1e-10);
+    assert!((ctx.fregs.get(0).unwrap() - 3.125).abs() < 1e-10);
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::IMAG },
     ).unwrap();
-    assert!((ctx.fregs.get(1) - 2.625).abs() < 1e-10);
+    assert!((ctx.fregs.get(1).unwrap() - 2.625).abs() < 1e-10);
 }
 
 #[test]
 fn test_hreduce_mean_of_distribution() {
     let mut ctx = ExecutionContext::new(vec![]);
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
-    ctx.hregs.set(0, HybridValue::Dist(dist));
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MEAN },
     ).unwrap();
 
-    assert!((ctx.fregs.get(0) - 1.5).abs() < 1e-10);
+    assert!((ctx.fregs.get(0).unwrap() - 1.5).abs() < 1e-10);
 }
 
 #[test]
 fn test_hreduce_mode_of_distribution() {
     let mut ctx = ExecutionContext::new(vec![]);
     let dist = vec![(0u16, 0.1), (1, 0.7), (2, 0.2)];
-    ctx.hregs.set(0, HybridValue::Dist(dist));
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MODE },
     ).unwrap();
 
-    assert_eq!(ctx.iregs.get(0), 1);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 1);
 }
 
 #[test]
@@ -226,7 +226,7 @@ fn test_hfork_merge_flow_simulation() {
 
     assert!(ctx.psw.forked);
     assert!(ctx.psw.merged);
-    assert_eq!(ctx.iregs.get(0), 5);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 5);
 }
 
 // ===========================================================================
@@ -237,7 +237,7 @@ fn test_hfork_merge_flow_simulation() {
 fn test_hreduce_type_mismatch_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     // ROUND expects Float, but we have Int
-    ctx.hregs.set(0, HybridValue::Int(42));
+    ctx.hregs.set(0, HybridValue::Int(42)).unwrap();
 
     let result = execute_hybrid(
         &mut ctx,
@@ -251,11 +251,28 @@ fn test_hreduce_type_mismatch_returns_error() {
 #[test]
 fn test_hreduce_unknown_function_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(1.0));
+    ctx.hregs.set(0, HybridValue::Float(1.0)).unwrap();
 
     let result = execute_hybrid(
         &mut ctx,
         &Instruction::HReduce { src: 0, dst: 1, func: 99 },
     );
     assert!(result.is_err());
+}
+
+// ===========================================================================
+// NaN safety test (Fix 2.5)
+// ===========================================================================
+
+#[test]
+fn test_hreduce_mode_with_nan_does_not_panic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let dist = vec![(0u16, f64::NAN), (1, 0.5), (2, 0.5)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MODE },
+    ).unwrap();
+    // Should not panic; result is one of the non-NaN entries
 }

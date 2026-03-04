@@ -8,7 +8,7 @@ use cqam_sim::kernel::Kernel;
 #[test]
 fn test_init_dist_kernel() {
     let init = InitDist { domain: vec![0u16, 1, 2] };
-    let dummy = QDist::new("dummy", vec![0u16], vec![1.0]);
+    let dummy = QDist::new("dummy", vec![0u16], vec![1.0]).unwrap();
     let output = init.apply(&dummy);
     assert_eq!(output.domain.len(), 3);
     assert!((output.probabilities.iter().sum::<f64>() - 1.0).abs() < 1e-6);
@@ -20,7 +20,7 @@ fn test_init_dist_kernel() {
 
 #[test]
 fn test_fourier_preserves_normalization() {
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let fourier = Fourier;
     let output = fourier.apply(&input);
 
@@ -37,7 +37,7 @@ fn test_fourier_preserves_normalization() {
 fn test_fourier_on_uniform_concentrates() {
     // QFT of uniform distribution should concentrate probability on state 0
     // because uniform amplitudes (all equal) DFT to a spike at k=0.
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let fourier = Fourier;
     let output = fourier.apply(&input);
 
@@ -52,7 +52,7 @@ fn test_fourier_on_uniform_concentrates() {
 #[test]
 fn test_fourier_on_delta() {
     // QFT of delta at |0> should produce uniform distribution
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![1.0, 0.0, 0.0, 0.0]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![1.0, 0.0, 0.0, 0.0]).unwrap();
     let fourier = Fourier;
     let output = fourier.apply(&input);
 
@@ -68,7 +68,7 @@ fn test_fourier_on_delta() {
 
 #[test]
 fn test_fourier_empty() {
-    let input = QDist::new("q", vec![], vec![]);
+    let input = QDist::new("q", vec![], vec![]).unwrap();
     let fourier = Fourier;
     let output = fourier.apply(&input);
     assert!(output.domain.is_empty());
@@ -80,7 +80,7 @@ fn test_fourier_empty() {
 
 #[test]
 fn test_diffuse_preserves_normalization() {
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.1, 0.2, 0.3, 0.4]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.1, 0.2, 0.3, 0.4]).unwrap();
     let diffuse = Diffuse;
     let output = diffuse.apply(&input);
 
@@ -96,7 +96,7 @@ fn test_diffuse_preserves_normalization() {
 fn test_diffuse_on_uniform_stays_uniform() {
     // Diffusion on a uniform distribution should keep it uniform
     // because all amplitudes equal the mean.
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let diffuse = Diffuse;
     let output = diffuse.apply(&input);
 
@@ -111,7 +111,7 @@ fn test_diffuse_on_uniform_stays_uniform() {
 
 #[test]
 fn test_diffuse_empty() {
-    let input = QDist::new("q", vec![], vec![]);
+    let input = QDist::new("q", vec![], vec![]).unwrap();
     let diffuse = Diffuse;
     let output = diffuse.apply(&input);
     assert!(output.domain.is_empty());
@@ -124,7 +124,7 @@ fn test_diffuse_empty() {
 #[test]
 fn test_grover_iter_amplifies_target() {
     // Start with uniform distribution over 4 states
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
 
     // One Grover iteration targeting state 2
     let grover = GroverIter { target: 2 };
@@ -143,7 +143,7 @@ fn test_grover_iter_amplifies_target() {
 
 #[test]
 fn test_grover_iter_preserves_normalization() {
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let grover = GroverIter { target: 1 };
     let output = grover.apply(&input);
 
@@ -158,7 +158,7 @@ fn test_grover_iter_preserves_normalization() {
 #[test]
 fn test_grover_multiple_iterations_converge() {
     // Multiple Grover iterations should increase the probability of the target
-    let mut dist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let mut dist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let grover = GroverIter { target: 3 };
 
     // For N=4 states, optimal number of iterations is ~pi/4 * sqrt(4) ~ 1.57
@@ -175,7 +175,7 @@ fn test_grover_multiple_iterations_converge() {
 
 #[test]
 fn test_grover_iter_empty() {
-    let input = QDist::new("q", vec![], vec![]);
+    let input = QDist::new("q", vec![], vec![]).unwrap();
     let grover = GroverIter { target: 0 };
     let output = grover.apply(&input);
     assert!(output.domain.is_empty());
@@ -185,7 +185,7 @@ fn test_grover_iter_empty() {
 fn test_grover_iter_target_not_in_domain() {
     // If the target state isn't in the domain, the oracle has no effect.
     // The diffusion still applies but no amplitude is flipped.
-    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]);
+    let input = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
     let grover = GroverIter { target: 99 }; // not in domain
     let output = grover.apply(&input);
 

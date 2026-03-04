@@ -5,6 +5,7 @@
 
 use std::collections::HashMap;
 
+use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMem, QMem};
 use cqam_core::register::{IntRegFile, FloatRegFile, ComplexRegFile, HybridRegFile};
@@ -109,14 +110,14 @@ impl ExecutionContext {
 
     /// Jump to the instruction at the given label.
     ///
-    /// Sets PC to the label's resolved address. Returns `true` if the label
-    /// was found, `false` otherwise. On failure, PC is unchanged.
-    pub fn jump_to_label(&mut self, label: &str) -> bool {
+    /// Sets PC to the label's resolved address.
+    /// Returns `Err(CqamError::UnresolvedLabel)` if the label is not found.
+    pub fn jump_to_label(&mut self, label: &str) -> Result<(), CqamError> {
         if let Some(&addr) = self.labels.get(label) {
             self.pc = addr;
-            true
+            Ok(())
         } else {
-            false
+            Err(CqamError::UnresolvedLabel(label.to_string()))
         }
     }
 

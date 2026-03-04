@@ -3,10 +3,10 @@ use cqam_sim::joint_qdist::JointQDist;
 
 #[test]
 fn test_joint_qdist_from_independent() {
-    let a = QDist::new("A", vec![0u16, 1], vec![0.5, 0.5]);
-    let b = QDist::new("B", vec![0u16, 1], vec![0.5, 0.5]);
+    let a = QDist::new("A", vec![0u16, 1], vec![0.5, 0.5]).unwrap();
+    let b = QDist::new("B", vec![0u16, 1], vec![0.5, 0.5]).unwrap();
 
-    let joint = JointQDist::from_independent(&a, &b);
+    let joint = JointQDist::from_independent(&a, &b).unwrap();
 
     assert_eq!(joint.domain.len(), 4);
     // All four combinations should have equal probability 0.25
@@ -25,7 +25,7 @@ fn test_joint_qdist_normalization() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (0, 1), (1, 0), (1, 1)],
         vec![2.0, 2.0, 2.0, 2.0],
-    );
+    ).unwrap();
 
     let total: f64 = joint.probabilities.iter().sum();
     assert!(
@@ -42,7 +42,7 @@ fn test_marginal_a() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (1, 1)],
         vec![0.5, 0.5],
-    );
+    ).unwrap();
 
     let marginal = joint.marginal_a();
     assert_eq!(marginal.domain, vec![0, 1]);
@@ -57,7 +57,7 @@ fn test_marginal_b() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (1, 1)],
         vec![0.5, 0.5],
-    );
+    ).unwrap();
 
     let marginal = joint.marginal_b();
     assert_eq!(marginal.domain, vec![0, 1]);
@@ -73,7 +73,7 @@ fn test_conditional_b_given_a_bell_state() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (1, 1)],
         vec![0.5, 0.5],
-    );
+    ).unwrap();
 
     let cond_b_given_a0 = joint.conditional_b_given_a(0);
     assert_eq!(cond_b_given_a0.domain, vec![0]);
@@ -90,7 +90,7 @@ fn test_conditional_a_given_b_bell_state() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (1, 1)],
         vec![0.5, 0.5],
-    );
+    ).unwrap();
 
     let cond_a_given_b0 = joint.conditional_a_given_b(0);
     assert_eq!(cond_a_given_b0.domain, vec![0]);
@@ -103,7 +103,7 @@ fn test_joint_measure_deterministic() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (0, 1), (1, 0), (1, 1)],
         vec![0.1, 0.2, 0.3, 0.4],
-    );
+    ).unwrap();
 
     let result = joint.measure_deterministic();
     assert_eq!(result, Some((1, 1))); // highest probability is 0.4
@@ -116,7 +116,7 @@ fn test_joint_measure_stochastic_distribution() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (1, 1)],
         vec![0.3, 0.7],
-    );
+    ).unwrap();
 
     let num_samples = 5_000;
     let mut count_00 = 0usize;
@@ -152,7 +152,7 @@ fn test_marginal_asymmetric() {
         ("A".to_string(), "B".to_string()),
         vec![(0, 0), (0, 1), (1, 0), (1, 1)],
         vec![0.1, 0.4, 0.2, 0.3],
-    );
+    ).unwrap();
 
     let marginal_a = joint.marginal_a();
     // P(A=0) = 0.1 + 0.4 = 0.5, P(A=1) = 0.2 + 0.3 = 0.5
@@ -171,8 +171,18 @@ fn test_measure_empty_joint() {
         ("A".to_string(), "B".to_string()),
         vec![],
         vec![],
-    );
+    ).unwrap();
 
     assert_eq!(joint.measure(), None);
     assert_eq!(joint.measure_deterministic(), None);
+}
+
+#[test]
+fn test_joint_qdist_new_mismatched_sizes_returns_error() {
+    let result = JointQDist::new(
+        ("A".to_string(), "B".to_string()),
+        vec![(0, 0), (1, 1)],
+        vec![0.5],  // mismatched length
+    );
+    assert!(result.is_err());
 }
