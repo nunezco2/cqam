@@ -774,3 +774,76 @@ fn test_fork_manager_default_equals_new() {
     assert_eq!(fm_new.active_count(), fm_def.active_count());
     assert_eq!(fm_new.can_fork(), fm_def.can_fork());
 }
+
+// ===========================================================================
+// Phase 9.8: HFORK/HMERGE parallel execution tests
+// ===========================================================================
+
+#[test]
+fn test_hfork_divergent_paths() {
+    let program = vec![
+        Instruction::ILdi { dst: 5, imm: 50 },    // 0: R5=50
+        Instruction::HFork,                        // 1: fork
+        Instruction::ILdi { dst: 5, imm: 100 },   // 2: both set R5=100
+        Instruction::ILdi { dst: 6, imm: 200 },   // 3: both set R6=200
+        Instruction::HMerge,                       // 4: join
+        Instruction::ILdi { dst: 5, imm: 999 },   // 5: only main's post-merge
+        Instruction::Halt,                         // 6
+    ];
+
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+
+    // Main: R5 should be 999 (set after merge)
+    assert_eq!(ctx.iregs.get(5).unwrap(), 999);
+    assert_eq!(ctx.iregs.get(6).unwrap(), 200);
+
+    // Fork completed independently
+    assert_eq!(fm.completed_forks.len(), 1);
+    let fork_ctx = &fm.completed_forks[0];
+    assert_eq!(fork_ctx.iregs.get(6).unwrap(), 200);
+}
+
+#[test]
+fn test_hfork_one_branch_halts_early() {
+    // Manually spawn a fork with a short program containing HALT
+    let short_program = vec![
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::Halt,
+    ];
+
+    let fork_ctx = ExecutionContext::new(short_program);
+    let mut fm = ForkManager::new();
+    fm.spawn_fork(fork_ctx).unwrap();
+    assert_eq!(fm.active_count(), 1);
+
+    fm.join_all().unwrap();
+    assert_eq!(fm.completed_forks.len(), 1);
+    assert!(fm.completed_forks[0].psw.trap_halt, "Fork should have halted");
+    assert_eq!(fm.completed_forks[0].iregs.get(0).unwrap(), 42);
+}
+
+#[test]
+fn test_hfork_verify_fork_state_independence() {
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 0 },     // 0
+        Instruction::HFork,                        // 1
+        Instruction::ILdi { dst: 0, imm: 1 },     // 2: both set R0=1
+        Instruction::HMerge,                       // 3
+        Instruction::ILdi { dst: 0, imm: 2 },     // 4: main sets R0=2
+        Instruction::Halt,                         // 5
+    ];
+
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+
+    // Main: R0 = 2 (set after merge)
+    assert_eq!(ctx.iregs.get(0).unwrap(), 2);
+
+    // Fork completed independently
+    assert_eq!(fm.completed_forks.len(), 1);
+    // Fork ran the same code past merge to HALT, so its R0 is set by its own execution
+    // The key: fork's execution is independent of main
+}

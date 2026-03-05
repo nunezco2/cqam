@@ -833,3 +833,119 @@ fn test_parse_error_invalid_register() {
     let msg = format!("{}", err);
     assert!(msg.contains("invalid register"), "Error should mention invalid register: {}", msg);
 }
+
+// ===========================================================================
+// Phase 9.6: Parser edge case tests
+// ===========================================================================
+
+#[test]
+fn test_parse_ildi_hex_immediate() {
+    assert_eq!(
+        parse_instruction("ILDI R0, 0xFF").unwrap(),
+        Instruction::ILdi { dst: 0, imm: 255 }
+    );
+}
+
+#[test]
+fn test_parse_ildi_min_negative() {
+    assert_eq!(
+        parse_instruction("ILDI R0, -32768").unwrap(),
+        Instruction::ILdi { dst: 0, imm: -32768 }
+    );
+}
+
+#[test]
+fn test_parse_ildi_max_positive() {
+    assert_eq!(
+        parse_instruction("ILDI R0, 32767").unwrap(),
+        Instruction::ILdi { dst: 0, imm: 32767 }
+    );
+}
+
+#[test]
+fn test_parse_lowercase_opcode_rejected() {
+    assert!(parse_instruction("iadd R0, R1, R2").is_err());
+}
+
+#[test]
+fn test_parse_mixed_case_opcode_rejected() {
+    assert!(parse_instruction("Iadd R0, R1, R2").is_err());
+}
+
+#[test]
+fn test_parse_trailing_whitespace_line() {
+    assert_eq!(parse_instruction("   \t  ").unwrap(), Instruction::Nop);
+}
+
+#[test]
+fn test_parse_program_multiple_empty_lines() {
+    let source = "\
+ILDI R0, 1
+
+
+
+ILDI R1, 2
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 3);
+    assert_eq!(program[0], Instruction::ILdi { dst: 0, imm: 1 });
+    assert_eq!(program[1], Instruction::ILdi { dst: 1, imm: 2 });
+    assert_eq!(program[2], Instruction::Halt);
+}
+
+// ===========================================================================
+// Phase 9 debugger: additional parser edge cases
+// ===========================================================================
+
+#[test]
+fn test_parse_ildi_out_of_range_positive() {
+    // 32768 exceeds i16::MAX (32767), should fail
+    assert!(parse_instruction("ILDI R0, 32768").is_err());
+}
+
+#[test]
+fn test_parse_ildi_out_of_range_negative() {
+    // -32769 is below i16::MIN (-32768), should fail
+    assert!(parse_instruction("ILDI R0, -32769").is_err());
+}
+
+#[test]
+fn test_parse_ildi_hex_out_of_range() {
+    // 0x8000 = 32768, exceeds i16::MAX
+    assert!(parse_instruction("ILDI R0, 0x8000").is_err());
+}
+
+#[test]
+fn test_parse_ildi_hex_max_valid() {
+    // 0x7FFF = 32767, should succeed
+    assert_eq!(
+        parse_instruction("ILDI R0, 0x7FFF").unwrap(),
+        Instruction::ILdi { dst: 0, imm: 32767 }
+    );
+}
+
+#[test]
+fn test_parse_fldi_negative() {
+    // FLDI uses i16 immediate just like ILDI
+    assert_eq!(
+        parse_instruction("FLDI F0, -100").unwrap(),
+        Instruction::FLdi { dst: 0, imm: -100 }
+    );
+}
+
+#[test]
+fn test_parse_label_with_underscore() {
+    assert_eq!(
+        parse_instruction("LABEL: MY_LABEL_123").unwrap(),
+        Instruction::Label("MY_LABEL_123".into())
+    );
+}
+
+#[test]
+fn test_parse_jmp_to_label_with_digits() {
+    assert_eq!(
+        parse_instruction("JMP LOOP_42").unwrap(),
+        Instruction::Jmp { target: "LOOP_42".into() }
+    );
+}

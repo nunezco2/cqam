@@ -793,3 +793,73 @@ fn test_ishr_amt_64_does_not_panic() {
     execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 64 }, &mut fm).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), -1);
 }
+
+// ===========================================================================
+// Phase 9.5: Shift boundary and overflow tests
+// ===========================================================================
+
+#[test]
+fn test_ishl_amt_zero() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, 0xFF).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 0 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0xFF);
+}
+
+#[test]
+fn test_ishr_amt_zero() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, 0xFF).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 0 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0xFF);
+}
+
+#[test]
+fn test_ishl_amt_63() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 63 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), i64::MIN);
+}
+
+#[test]
+fn test_ishr_amt_63() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, i64::MIN).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 63 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), -1);
+}
+
+#[test]
+fn test_iadd_wrapping_overflow() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, i64::MAX).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(2).unwrap(), i64::MIN, "i64::MAX + 1 should wrap to i64::MIN");
+}
+
+#[test]
+fn test_imul_wrapping_overflow() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, i64::MAX).unwrap();
+    ctx.iregs.set(1, 2).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(2).unwrap(), i64::MAX.wrapping_mul(2));
+}
+
+#[test]
+fn test_isub_wrapping_underflow() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.iregs.set(0, i64::MIN).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(2).unwrap(), i64::MAX, "i64::MIN - 1 should wrap to i64::MAX");
+}
