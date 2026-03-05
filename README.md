@@ -1,174 +1,222 @@
-# CQAM -- Classical-Quantum Abstract Machine
+# CQAM: A Classical-Quantum Abstract Machine
 
-CQAM is a register-based virtual machine that combines classical integer,
-floating-point, and complex arithmetic with an ensemble/probability quantum
-model and a hybrid classical-quantum execution layer. All instructions encode
-into 32-bit fixed-width words with an 8-bit opcode prefix.
+## Introduction
 
-## Architecture
+CQAM is a formal instruction set architecture and virtual machine designed to
+model the integration of classical and quantum computing within a unified
+execution environment. Unlike gate-level quantum assembly languages (e.g.,
+OpenQASM, Quil), CQAM operates at the *systems* level: it defines a complete
+machine model with classical register files, memory banks, a hardware call
+stack, an interrupt controller, and a program status word alongside first-class
+quantum registers and kernel-based quantum operations. The architecture is
+motivated by the observation that practical quantum computation is inherently
+hybrid — quantum processors do not operate in isolation but are orchestrated by
+classical control logic that prepares inputs, dispatches quantum kernels,
+interprets measurement results, and makes branching decisions conditioned on
+those results.
+
+CQAM provides a concrete abstraction for studying this classical-quantum
+interface. Its instruction set captures the full lifecycle of a hybrid
+computation:
+
+1. **Classical setup.** Integer, floating-point, and complex arithmetic
+   instructions prepare parameters, loop counters, and addresses using
+   conventional register-to-register operations.
+
+2. **Quantum state preparation.** The `QPREP` instruction initialises a
+   quantum register to a named initial state (uniform superposition, zero
+   state, Bell pair, GHZ state), producing a density matrix in the quantum
+   register file.
+
+3. **Quantum evolution.** The `QKERNEL` instruction applies a unitary
+   transformation — selected by kernel ID and parameterised by classical
+   register values — to a quantum register via the conjugation
+   ρ′ = U ρ U†. Kernels (Fourier, Grover iteration, diffusion, entanglement)
+   encapsulate multi-gate circuits as atomic ISA-level operations, reflecting
+   the coprocessor model used by real quantum control systems.
+
+4. **Measurement.** `QOBSERVE` performs a projective measurement under the
+   Born rule, collapsing the density matrix to a basis state and storing the
+   outcome distribution in the hybrid register file.
+
+5. **Classical post-processing.** The `HREDUCE` instruction applies one of 14
+   reduction functions (mean, mode, variance, magnitude, phase, etc.) to
+   extract a classical scalar from the measurement distribution, depositing it
+   in an integer or floating-point register for subsequent classical use.
+
+6. **Hybrid control flow.** `HFORK` and `HMERGE` delimit parallel execution
+   regions. `HCEXEC` provides conditional branching on PSW flags set by
+   quantum operations, enabling measurement-dependent classical control flow.
+
+7. **Interrupt-driven error handling.** A two-level interrupt model (NMI and
+   maskable traps) supports handler registration via `SETIV` and return via
+   `RETI`, allowing the classical control layer to respond to arithmetic
+   faults, quantum fidelity violations, and synchronisation failures.
+
+All instructions encode into a fixed-width 32-bit word with an 8-bit opcode
+prefix. The ISA comprises over 60 instructions across six functional groups:
+integer arithmetic and logic, floating-point arithmetic, complex arithmetic,
+quantum operations, hybrid bridging operations, and control flow.
+
+## Quantum Simulation Model
+
+CQAM represents quantum state using the **density matrix** formalism. Each
+quantum register Q[k] holds a 2ⁿ × 2ⁿ complex Hermitian matrix ρ satisfying:
+
+- **Normalisation:** Tr(ρ) = 1
+- **Positivity:** ρ is positive semi-definite
+- **Purity:** Tr(ρ²) = 1 for pure states; Tr(ρ²) = 1/dim for maximally mixed states
+
+This representation is strictly more general than the statevector formalism: it
+correctly models mixed states, decoherence, and partial-trace operations needed
+for entanglement quantification. Quantum gates are applied as unitary
+conjugations ρ′ = U ρ U†, preserving all density matrix invariants.
+Measurement extracts the diagonal probabilities pₖ = Re(ρₖₖ) and collapses ρ
+to the projector |k⟩⟨k| corresponding to the sampled outcome.
+
+The simulator provides five quantum kernels as ISA-level operations:
+
+| Kernel | Description |
+|--------|-------------|
+| Init | Re-initialise to uniform superposition |
+| Entangle | Apply CNOT-based entanglement circuit |
+| Fourier | Quantum Fourier transform (QFT) |
+| Diffuse | Grover diffusion (inversion about the mean) |
+| GroverIter | Complete Grover iteration (oracle + diffusion) |
+
+Fidelity metrics — von Neumann entropy, purity, entanglement entropy via
+partial trace — are computed after each kernel application and exposed through
+the PSW, enabling the classical control layer to monitor quantum state quality
+and trigger interrupts when thresholds are violated.
+
+## Machine Architecture
 
 ```
-  .cqam source          binary (.cqb)          OpenQASM 3.0
-       |                     |                      |
-       v                     v                      v
-  +---------+          +---------+            +-----------+
-  | parser  |--------->|  cqam-as |----------->| cqam2qasm |
-  | (cqam-  |  IR      | (assemb- | .cqb      | (codegen)  |
-  |  core)  |          |  ler)    |            +-----------+
-  +---------+          +---------+
-       |                     |
-       v                     v
-  +---------+          +---------+
-  | cqam-vm |<---------|cqam-run |
-  | (exec   |  load    | (CLI    |
-  |  engine) |          |  runner)|
-  +---------+          +---------+
-       |
-       v
-  +---------+
-  | cqam-sim|
-  | (quantum|
-  |  sim)   |
-  +---------+
+                      ┌─────────────────────────────────┐
+                      │       Classical Subsystem        │
+                      │                                  │
+                      │  R0-R15  (16 × i64)   integers  │
+                      │  F0-F15  (16 × f64)   floats    │
+                      │  Z0-Z15  (16 × C64)   complex   │
+                      │                                  │
+                      │  CMEM    (64K × i64)   memory    │
+                      │  PSW     condition/trap flags    │
+                      │  CS      call stack              │
+                      │  ISR     interrupt vector table  │
+                      ├──────────────────────────────────┤
+                      │     Classical-Quantum Bridge     │
+                      │                                  │
+                      │  H0-H7  (8 × HybridValue)       │
+                      │    QOBSERVE ↓   ↑ HREDUCE       │
+                      ├──────────────────────────────────┤
+                      │       Quantum Subsystem          │
+                      │                                  │
+                      │  Q0-Q7  (8 × DensityMatrix)     │
+                      │  QMEM   (256 × DensityMatrix)   │
+                      │                                  │
+                      │  Kernels: Init, Entangle,        │
+                      │   Fourier, Diffuse, GroverIter   │
+                      └─────────────────────────────────┘
 ```
 
-**Pipeline:** Text source is parsed into an IR (`Vec<Instruction>`) by
-`cqam-core`. The assembler (`cqam-as`) encodes the IR into 32-bit binary.
-The runner (`cqam-run`) loads source or binary and executes it on the VM.
-The codegen tool (`cqam2qasm`) translates IR to OpenQASM 3.0.
+**Data flow.** Classical registers hold parameters that configure quantum
+operations (kernel selection, iteration targets, loop counters). Quantum
+operations produce density matrices in the Q-register file. Measurement
+(`QOBSERVE`) bridges the quantum-to-classical boundary by projecting a density
+matrix into a probability distribution stored in the hybrid register file.
+Reduction (`HREDUCE`) completes the bridge by extracting a classical scalar
+from the distribution. This layered architecture enforces the no-cloning
+constraint: quantum state cannot be copied into the classical subsystem without
+measurement.
 
-## Workspace Crates
+## Toolchain
 
-| Crate | Type | Description |
+The CQAM toolchain is implemented as a Rust workspace comprising seven crates:
+
+| Crate | Role | Description |
 |-------|------|-------------|
-| `cqam-core` | library | ISA definition, parser, opcode encoding/decoding, error types |
-| `cqam-sim` | library | Quantum simulator: density matrices, kernels, QDist |
-| `cqam-vm` | library | Execution engine, PSW, ISR table, resource tracker |
-| `cqam-run` | binary | CLI runner: loads programs, runs the VM, prints reports |
-| `cqam-as` | binary | Assembler and disassembler for the 32-bit binary format |
-| `cqam-codegen` | library | QASM emission pipeline (scan, declare, emit) |
-| `cqam2qasm` | binary | CLI tool to convert `.cqam` source to OpenQASM 3.0 |
+| `cqam-core` | ISA definition | Instruction enum, text parser, 32-bit opcode encoding/decoding, error types, register and memory abstractions |
+| `cqam-sim` | Quantum backend | Density matrix representation, complex arithmetic, the `Kernel` trait, five concrete kernel implementations, probability distributions |
+| `cqam-vm` | Execution engine | Instruction dispatch, program status word, fork/merge parallelism, ISR table, resource accounting |
+| `cqam-run` | CLI runner | Program loader, execution driver, state and resource reporting |
+| `cqam-as` | Assembler | Two-pass assembler (label resolution + encoding), binary `.cqb` format reader/writer, disassembler |
+| `cqam-codegen` | Code generation | Three-stage OpenQASM 3.0 emission pipeline (scan, declare, emit) with kernel template expansion |
+| `cqam2qasm` | CLI translator | Command-line interface for CQAM-to-OpenQASM translation |
 
-## Building
+### Build and test
 
-Requires Rust 2024 edition (1.85+).
-
-```bash
-cargo build --workspace
-```
-
-Run the test suite:
+Requires Rust 2024 edition (rustc 1.85+).
 
 ```bash
-cargo test --workspace
+cargo build --workspace            # compile all crates
+cargo test --workspace             # run the full test suite (~840 tests)
+cargo clippy --workspace           # static analysis
+cargo doc --workspace --no-deps --open   # generate and view API documentation
 ```
 
-Run the linter:
+### Running a program
 
 ```bash
-cargo clippy --workspace --all-targets
+cargo run --bin cqam-run -- --input examples/grover.cqam --print-final-state
 ```
 
-## Usage
+| Flag | Effect |
+|------|--------|
+| `--input <path>` | Path to a `.cqam` source file (required) |
+| `--print-final-state` | Dump all register files and non-zero memory after execution |
+| `--psw-report` | Print the final program status word |
+| `--resource-usage` | Print cumulative resource accounting (time, space, superposition, entanglement, interference) |
+| `--config <path>` | Load a TOML simulator configuration (fidelity thresholds, qubit count, cycle limit) |
 
-### Running a CQAM program
+Set `RUST_LOG=info` for VM-level diagnostics.
 
-```bash
-cargo run --bin cqam-run -- --input examples/arithmetic.cqam --print-final-state
-```
-
-Options:
-- `--input <path>` -- path to a `.cqam` source file (required)
-- `--print-final-state` -- dump register and memory state after execution
-- `--psw-report` -- print PSW flag summary
-- `--resource-usage` -- print cumulative resource tracker
-- `--config <path>` -- path to TOML simulator configuration
-
-To see log output from the VM (warnings, errors), set the `RUST_LOG`
-environment variable:
-
-```bash
-RUST_LOG=info cargo run --bin cqam-run -- --input examples/grover.cqam --print-final-state
-```
-
-### Assembling to binary
+### Assembling and disassembling
 
 ```bash
 cargo run --bin cqam-as -- --assemble --input examples/arithmetic.cqam --output out.cqb
-```
-
-Disassemble a binary:
-
-```bash
 cargo run --bin cqam-as -- --disassemble --input out.cqb
 ```
 
-### Generating OpenQASM
+The `.cqb` binary format uses a fixed header (magic number, version, entry
+point, code length) followed by 32-bit instruction words and an optional debug
+symbol section for label restoration during disassembly.
+
+### Generating OpenQASM 3.0
 
 ```bash
 cargo run --bin cqam2qasm -- examples/quantum_observe.cqam
 ```
 
-## Example Programs
+The codegen pipeline translates CQAM quantum operations into valid OpenQASM 3.0
+source. Classical-only instructions are emitted as structured comments.
+Quantum kernel bodies are expanded from gate-level templates when template
+expansion is enabled.
 
-The `examples/` directory contains five sample programs:
+## Example Programs
 
 | File | Description |
 |------|-------------|
-| `arithmetic.cqam` | Integer/float arithmetic, memory operations, type conversion |
-| `quantum_observe.cqam` | QPREP, QKERNEL, QOBSERVE, HREDUCE pipeline |
-| `hybrid_fork.cqam` | HFORK/HCEXEC/HMERGE conditional execution |
-| `grover.cqam` | Full Grover search with iteration loop |
-| `bell_state.cqam` | Bell state preparation and measurement |
+| `arithmetic.cqam` | Classical integer and floating-point arithmetic, memory load/store, type conversion |
+| `quantum_observe.cqam` | Full quantum pipeline: state preparation, kernel application, measurement, hybrid reduction |
+| `hybrid_fork.cqam` | Parallel execution with `HFORK`/`HMERGE` and conditional branching via `HCEXEC` |
+| `grover.cqam` | Multi-iteration Grover search with classical loop control and measurement extraction |
+| `bell_state.cqam` | Bell state (|Φ⁺⟩) preparation, measurement, and mode/mean extraction |
 
-## Documentation
+## Reference Documentation
 
-Generate and open the full API reference (all crates):
+| Document | Contents |
+|----------|----------|
+| [ISA Reference Card](reference/isa.md) | Complete instruction table, encoding formats, named constants |
+| [Machine Specification](reference/spec.md) | Register files, memory banks, PSW, interrupt model, formal operational semantics |
+| [Binary Encoding Reference](reference/opcodes.md) | 32-bit word layout, opcode table, bit-field assignments for all 15 encoding formats |
+| [QASM Generation Semantics](reference/qasm.md) | Codegen pipeline, emit modes, kernel template expansion |
+| [Instruction Syntax and Examples](reference/examples.md) | Text-format syntax for every instruction with annotated usage examples |
+
+API documentation is generated from inline Rust doc comments:
 
 ```bash
 cargo doc --workspace --no-deps --open
 ```
-
-The HTML documentation is written to `target/doc/`. Key entry points:
-
-- `cqam_core` -- ISA, parser, opcode encoding, error types
-- `cqam_sim` -- density matrix quantum simulation, kernels, QDist
-- `cqam_vm` -- execution engine, PSW, ISR, resource tracker
-- `cqam_run` -- program runner and report printer
-- `cqam_as` -- assembler, disassembler, binary I/O
-- `cqam_codegen` -- OpenQASM 3.0 code generation
-
-## Quantum Model
-
-CQAM uses the **density matrix** formalism for all quantum register operations.
-A quantum register `Q[k]` holds a 2^n x 2^n complex Hermitian matrix rho, where
-n is the number of qubits. Key properties:
-
-- Tr(rho) = 1 (normalised)
-- rho is positive semi-definite (valid probability interpretation)
-- Purity Tr(rho^2) is 1 for pure states and 1/dim for maximally mixed states
-
-Quantum gates are applied as unitary conjugations: rho' = U rho U†. Measurement
-extracts the diagonal probabilities p_k = Re(rho_kk) (the Born rule) and collapses
-rho to the projector |outcome><outcome|. The measurement result is stored as a
-`HybridValue::Dist` in the hybrid register file, where it can be reduced to a
-classical value by `HREDUCE`.
-
-## Reference Documentation
-
-Detailed documentation is in the `reference/` directory:
-
-- [ISA Reference Card](reference/isa.md) -- complete instruction set, encoding, named constants
-- [Machine Specification](reference/spec.md) -- register files, memory, interrupts
-- [Binary Opcode Reference](reference/opcodes.md) -- encoding formats and opcode table
-- [QASM Generation Semantics](reference/qasm.md) -- codegen pipeline and templates
-- [Instruction Examples](reference/examples.md) -- syntax and usage for all instructions
-
-## QASM Kernel Templates
-
-The `kernels/qasm_templates/` directory contains OpenQASM 3.0 gate body
-templates for each implemented quantum kernel. These are expanded inline
-by `cqam2qasm` when template expansion is enabled.
 
 ## License
 
