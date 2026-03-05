@@ -1,7 +1,5 @@
-// cqam-vm/tests/interrupt_tests.rs
-//
-// Phase 2/8: Test the two-level interrupt model with ISR vector table.
-// Phase 8: Updated handle_trap signature (handler_addr instead of &IsrTable).
+//! Tests for the two-level interrupt model: NMI and maskable traps,
+//! ISR vector table registration, and `handle_trap` dispatch.
 
 use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;

@@ -1,6 +1,4 @@
-// cqam-as/tests/binary_tests.rs
-//
-// Phase 5: Integration tests for .cqb binary file I/O.
+//! Integration tests for `.cqb` binary file I/O.
 
 use std::io::Cursor;
 

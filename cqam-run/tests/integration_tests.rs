@@ -1,10 +1,8 @@
-// cqam-run/tests/integration_tests.rs
-//
-// Phase 9.1: End-to-end integration tests.
-//
-// Each test loads a `.cqam` example file from disk, parses it, executes
-// it through the full runner pipeline, and verifies expected register
-// and memory values.
+//! End-to-end integration tests for the CQAM runner.
+//!
+//! Each test loads a `.cqam` example file from disk, parses it, executes
+//! it through the full runner pipeline, and verifies expected register
+//! and memory values.
 
 use cqam_run::loader::load_program;
 use cqam_run::runner::run_program;

@@ -1,6 +1,5 @@
-// cqam-sim/tests/grover_correctness_tests.rs
-//
-// Phase 9.2: Multi-iteration Grover correctness tests.
+//! Multi-iteration correctness tests for the `GroverIter` kernel: verifies
+//! amplitude amplification, oscillatory over-iteration, and symmetry.
 
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernel::Kernel;
@@ -75,9 +74,7 @@ fn test_grover_preserves_purity_after_iterations() {
     );
 }
 
-// ===========================================================================
-// Phase 9 debugger: additional Grover edge cases
-// ===========================================================================
+// --- Additional Grover edge cases ---
 
 #[test]
 fn test_grover_2q_target_zero() {

@@ -1,6 +1,7 @@
-// cqam-core/tests/parser_tests.rs
-//
-// Phase 4: Test the parser with Result-based error handling.
+//! Tests for the CQAM assembly text parser.
+//!
+//! Covers successful parsing of every instruction variant, comment stripping,
+//! register range validation, error propagation, and `parse_program`.
 
 use cqam_core::instruction::*;
 use cqam_core::parser::{parse_instruction, parse_program};
@@ -670,9 +671,7 @@ fn test_parse_max_hybrid_register() {
     );
 }
 
-// ===========================================================================
-// Error cases (Phase 4: now return Err instead of Nop)
-// ===========================================================================
+// --- Error cases -------------------------------------------------------------
 
 #[test]
 fn test_parse_unknown_returns_error() {
@@ -808,9 +807,7 @@ fn test_parse_program_only_comments() {
     assert!(program.is_empty());
 }
 
-// ===========================================================================
-// New error case tests (Phase 4)
-// ===========================================================================
+// --- Additional error case tests ---
 
 #[test]
 fn test_parse_error_contains_line_info() {
@@ -834,9 +831,7 @@ fn test_parse_error_invalid_register() {
     assert!(msg.contains("invalid register"), "Error should mention invalid register: {}", msg);
 }
 
-// ===========================================================================
-// Phase 9.6: Parser edge case tests
-// ===========================================================================
+// --- Edge cases --------------------------------------------------------------
 
 #[test]
 fn test_parse_ildi_hex_immediate() {
@@ -894,9 +889,7 @@ HALT
     assert_eq!(program[2], Instruction::Halt);
 }
 
-// ===========================================================================
-// Phase 9 debugger: additional parser edge cases
-// ===========================================================================
+// --- Additional edge cases ---------------------------------------------------
 
 #[test]
 fn test_parse_ildi_out_of_range_positive() {

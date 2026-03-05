@@ -1,6 +1,5 @@
-// cqam-vm/tests/psw_tests.rs
-//
-// Phase 2: Test PSW including new get_flag() method.
+//! Tests for `ProgramStateWord`: flag updates, `get_flag` numeric access,
+//! pending trap priority, and maskable trap clearing.
 
 use cqam_vm::psw::{ProgramStateWord, PendingTrap};
 
@@ -86,9 +85,7 @@ fn test_clear() {
     assert!(!psw.trap_halt);
 }
 
-// ===========================================================================
-// Phase 8: clear_maskable_traps and check_pending_traps tests
-// ===========================================================================
+// --- Trap clearing and pending trap checks ---
 
 #[test]
 fn test_clear_maskable_traps_clears_arith_quantum_sync() {

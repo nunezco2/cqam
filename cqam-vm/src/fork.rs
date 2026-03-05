@@ -1,9 +1,9 @@
-// cqam-vm/src/fork.rs
-//
-// Phase 6: ForkManager -- thread lifecycle coordinator for HFORK/HMERGE.
-//
-// Manages spawning fork threads and joining them at merge points.
-// NOT Clone: this is a coordinator that owns non-cloneable JoinHandle values.
+//! Thread lifecycle coordinator for HFORK/HMERGE parallelism.
+//!
+//! `ForkManager` spawns Rust threads at HFORK and joins them at HMERGE,
+//! enforcing a configurable nesting-depth limit to prevent exponential
+//! thread growth. It is intentionally not `Clone` because it owns
+//! `JoinHandle` values.
 
 use std::thread::{self, JoinHandle};
 use crate::context::ExecutionContext;

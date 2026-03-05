@@ -1,6 +1,5 @@
-// cqam-vm/tests/hybrid_tests.rs
-//
-// Phase 6: Test hybrid operations with real HFORK/HMERGE parallelism.
+//! Tests for hybrid operations: HFORK/HMERGE parallelism, HCEXEC conditional
+//! branching, and HREDUCE reductions across all supported function IDs.
 
 use cqam_core::instruction::*;
 use cqam_core::register::HybridValue;
@@ -258,9 +257,7 @@ fn test_hfork_merge_flow_simulation() {
     assert_eq!(ctx.iregs.get(0).unwrap(), 5);
 }
 
-// ===========================================================================
-// Error cases (Phase 4)
-// ===========================================================================
+// --- Error cases -------------------------------------------------------------
 
 #[test]
 fn test_hreduce_type_mismatch_returns_error() {
@@ -312,9 +309,7 @@ fn test_hreduce_mode_with_nan_does_not_panic() {
     // Should not panic; result is one of the non-NaN entries
 }
 
-// ===========================================================================
-// Phase 6: Real fork/merge tests
-// ===========================================================================
+// --- Fork/merge parallelism --------------------------------------------------
 
 #[test]
 fn test_hfork_spawns_real_thread() {
@@ -432,9 +427,7 @@ fn test_context_clone_preserves_state() {
     assert_eq!(cloned.pc, 0);
 }
 
-// ===========================================================================
-// Phase 6 Stress Tests: Fork/Merge parallelism edge cases
-// ===========================================================================
+// --- Fork/merge stress tests -------------------------------------------------
 
 /// Verify that the fork context's PC is exactly ctx.pc + 1 (the instruction
 /// after HFORK). This is fundamental to the fork contract: the fork must
@@ -775,9 +768,7 @@ fn test_fork_manager_default_equals_new() {
     assert_eq!(fm_new.can_fork(), fm_def.can_fork());
 }
 
-// ===========================================================================
-// Phase 9.8: HFORK/HMERGE parallel execution tests
-// ===========================================================================
+// --- HFORK/HMERGE parallel execution -----------------------------------------
 
 #[test]
 fn test_hfork_divergent_paths() {

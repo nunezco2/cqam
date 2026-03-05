@@ -1,7 +1,4 @@
-// cqam-as/src/disassembler.rs
-//
-// Phase 5: Disassembler -- converts binary instruction words back to
-// human-readable CQAM assembly text.
+//! Disassembler: converts binary instruction words back to human-readable CQAM assembly text.
 
 use std::collections::HashMap;
 

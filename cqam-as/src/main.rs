@@ -1,10 +1,8 @@
-// cqam-as/src/main.rs
-//
-// Phase 5/7: CLI entry point for the CQAM assembler/disassembler.
-//
-// Usage:
-//   cqam-as --assemble input.cqam [-o output.cqb] [--debug] [--strip]
-//   cqam-as --disassemble input.cqb [-o output.cqam]
+//! CLI entry point for the CQAM assembler/disassembler.
+//!
+//! Usage:
+//!   cqam-as --assemble input.cqam [-o output.cqb] [--debug] [--strip]
+//!   cqam-as --disassemble input.cqb [-o output.cqam]
 
 use std::path::{Path, PathBuf};
 use std::process;

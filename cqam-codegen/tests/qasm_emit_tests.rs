@@ -1,6 +1,4 @@
-// cqam-codegen/tests/qasm_emit_tests.rs
-//
-// Phase 7: Tests for the rewritten QASM codegen.
+//! Tests for the QASM code generator: instruction-level emit correctness.
 
 use cqam_core::instruction::*;
 use cqam_codegen::qasm::{

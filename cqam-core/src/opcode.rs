@@ -1,10 +1,9 @@
-// cqam-core/src/opcode.rs
-//
-// Phase 5: Binary opcode encoding and decoding for the CQAM ISA.
-//
-// Every Instruction variant maps to a unique 8-bit opcode. The remaining
-// 24 bits carry operands in one of several fixed formats (RRR, RR, RI, etc.).
-// See design/phase5_design.md for the full specification.
+//! Binary opcode encoding and decoding for the CQAM ISA.
+//!
+//! Every `Instruction` variant maps to a unique 8-bit opcode. The remaining
+//! 24 bits carry operands in one of several fixed formats (N, RR, RRR, RI,
+//! RA, J, JR, Q, QP, QO, QS, HR, ZI, L). See `reference/opcodes.md` for
+//! the complete bit-level layout of each format.
 
 use std::collections::HashMap;
 
@@ -18,7 +17,7 @@ use crate::instruction::Instruction;
 /// Opcode byte constants for every ISA instruction.
 ///
 /// Grouped by domain with reserved gaps for future expansion.
-/// See the opcode table in design/phase5_design.md section 3.
+/// See `reference/opcodes.md` for the complete opcode table.
 pub mod op {
     // -- NOP (0x00) -----------------------------------------------------------
     pub const NOP: u8 = 0x00;
@@ -153,8 +152,7 @@ const MAX_ADDR24: u32 = 0x00FF_FFFF;
 ///
 /// # Instruction word formats
 ///
-/// See `design/phase5_design.md` sections 2.1-2.15 for the bit-level layout
-/// of each format.
+/// See `reference/opcodes.md` for the bit-level layout of each format.
 pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u32, CqamError> {
     match instr {
         // -- N-format (no operands) -------------------------------------------
@@ -273,11 +271,8 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         // -- L-format (label pseudo-instruction) ------------------------------
         Instruction::Label(name) => {
-            // The label_map gives us the word address of this label.
-            // For the L-format, we store a label_id derived from the label_map.
-            // In the two-pass assembler, label_id would be assigned sequentially.
-            // Here we use the word address itself as the label_id if it fits in 16 bits,
-            // or 0 if not present (the assembler will assign proper IDs).
+            // Use the word address as the label_id when it fits in 16 bits;
+            // the assembler assigns proper sequential IDs during assembly.
             let addr = label_map.get(name).copied().unwrap_or(0);
             let label_id = if addr <= 0xFFFF { addr as u16 } else { 0 };
             Ok(encode_l(op::LABEL, label_id))

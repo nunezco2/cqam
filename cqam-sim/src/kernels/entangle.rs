@@ -1,6 +1,4 @@
-// cqam-sim/src/kernels/entangle.rs
-//
-// Phase 2: Entanglement kernel using CNOT gate on DensityMatrix.
+//! Entanglement kernel: applies a CNOT gate between qubit 0 and qubit 1.
 
 use crate::complex;
 use crate::density_matrix::DensityMatrix;

@@ -1,6 +1,5 @@
-// cqam-sim/tests/kernel_tests.rs
-//
-// Phase 2 (density matrix): Test kernels operating on DensityMatrix.
+//! Tests for all quantum kernel implementations (Init, Entangle, Fourier,
+//! Diffuse, GroverIter) operating on `DensityMatrix`.
 
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernels::init::Init;

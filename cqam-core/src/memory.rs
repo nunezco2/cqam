@@ -1,7 +1,9 @@
-// cqam-core/src/memory.rs
-//
-// Phase 2: Numeric-addressed memory with fixed sizes.
-// Phase 3: QMem made generic over QuantumState to decouple from cqam-sim.
+//! Classical and quantum memory abstractions for the CQAM virtual machine.
+//!
+//! Provides `CMem` (64K cells of i64, addressed by u16) and `QMem<Q>` (256
+//! slots of generic quantum state, addressed by u8). `QMem` is generic over
+//! `Q: QuantumState` so that `cqam-core` has no compile-time dependency on the
+//! concrete simulation backend in `cqam-sim`.
 
 use crate::quantum_state::QuantumState;
 
@@ -66,9 +68,7 @@ impl CMem {
     }
 }
 
-// =============================================================================
-// QMem<Q> (Phase 3: generic over QuantumState)
-// =============================================================================
+// --- Quantum memory ----------------------------------------------------------
 
 /// Quantum memory: 256 slots of quantum state, addressed by u8.
 ///

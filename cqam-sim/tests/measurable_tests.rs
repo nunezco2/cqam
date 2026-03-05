@@ -1,3 +1,5 @@
+//! Tests for the `Measurable` trait on `QDist`.
+
 use cqam_sim::qdist::{QDist, Measurable};
 
 #[test]
@@ -70,9 +72,7 @@ fn test_measure_empty_distribution() {
     assert_eq!(qdist.measure_deterministic(), None);
 }
 
-// =============================================================================
-// Fidelity metric tests (Phase 6.4)
-// =============================================================================
+// --- Fidelity metric tests ---
 
 #[test]
 fn test_superposition_metric_uniform() {

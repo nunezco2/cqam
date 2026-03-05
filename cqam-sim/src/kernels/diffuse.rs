@@ -1,6 +1,4 @@
-// cqam-sim/src/kernels/diffuse.rs
-//
-// Phase 2: Grover's diffusion operator on DensityMatrix.
+//! Grover's diffusion operator kernel (amplitude amplification step).
 
 use crate::complex;
 use crate::density_matrix::DensityMatrix;

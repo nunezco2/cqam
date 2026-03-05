@@ -1,6 +1,4 @@
-// cqam-sim/src/kernels/grover.rs
-//
-// Phase 2: One Grover iteration (oracle + diffusion) on DensityMatrix.
+//! Grover iteration kernel: one oracle phase-flip followed by diffusion.
 
 use crate::complex;
 use crate::density_matrix::DensityMatrix;

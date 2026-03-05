@@ -1,9 +1,5 @@
-// cqam-as/tests/binary_execution_tests.rs
-//
-// Phase 9.4: Binary round-trip tests.
-//
-// Tests: source text -> assemble -> write .cqb -> read .cqb -> disassemble
-// -> re-parse -> verify structural equivalence.
+//! Binary round-trip tests: source text -> assemble -> write `.cqb` ->
+//! read `.cqb` -> disassemble -> re-parse -> verify structural equivalence.
 
 use std::io::Cursor;
 

@@ -1,13 +1,11 @@
-// cqam-as/src/assembler.rs
-//
-// Phase 5/7: Two-pass assembler for the CQAM ISA.
-//
-// Pass 1: Scan for labels, assign each a word address and a numeric ID,
-//         and build the symbol table.
-// Pass 2: Encode each instruction into a u32 word using the symbol table
-//         to resolve label references.
-//
-// Phase 7 adds configurable label stripping via AssemblyOptions.
+//! Two-pass assembler for the CQAM ISA.
+//!
+//! Pass 1: Scan for labels, assign each a word address and a numeric ID,
+//!         and build the symbol table.
+//! Pass 2: Encode each instruction into a u32 word using the symbol table
+//!         to resolve label references.
+//!
+//! `AssemblyOptions` provides configurable label stripping for stripped binaries.
 
 use std::collections::HashMap;
 
@@ -63,8 +61,8 @@ pub struct AssemblyResult {
 
 /// Options controlling assembler behavior.
 ///
-/// Use `Default::default()` for standard assembly (labels retained in the
-/// code stream, identical to Phase 5 behavior).
+/// Use `Default::default()` for standard assembly with labels retained in the
+/// code stream.
 #[derive(Debug, Clone, Default)]
 pub struct AssemblyOptions {
     /// If true, label pseudo-instructions are removed from the output
@@ -205,8 +203,6 @@ pub fn assemble_source_with_options(
 /// Wrapper around `assemble_with_options` with default options (labels
 /// retained in the code stream).
 ///
-/// Signature unchanged from Phase 5. All existing call sites continue
-/// to work without modification.
 pub fn assemble(instructions: &[Instruction]) -> Result<AssemblyResult, CqamError> {
     assemble_with_options(instructions, &AssemblyOptions::default())
 }
@@ -215,7 +211,6 @@ pub fn assemble(instructions: &[Instruction]) -> Result<AssemblyResult, CqamErro
 ///
 /// Wrapper around `assemble_source_with_options` with default options.
 ///
-/// Signature unchanged from Phase 5.
 pub fn assemble_source(source: &str) -> Result<AssemblyResult, CqamError> {
     assemble_source_with_options(source, &AssemblyOptions::default())
 }
@@ -284,9 +279,7 @@ mod tests {
         assert_eq!(result.code.len(), 2);
     }
 
-    // =========================================================================
-    // Phase 7: AssemblyOptions and label stripping tests
-    // =========================================================================
+    // --- AssemblyOptions and label stripping tests ---
 
     #[test]
     fn test_no_strip_is_default() {

@@ -1,8 +1,5 @@
-// cqam-codegen/tests/qasm_validation_test.rs
-//
-// Phase 9.3: QASM output structural validation.
-//
-// Pure-Rust validation that generated QASM is structurally sound.
+//! QASM output structural validation: pure-Rust checks that generated
+//! OpenQASM 3.0 is well-formed (correct headers, declarations, and body).
 
 use cqam_core::parser::parse_program;
 use cqam_codegen::qasm::{EmitConfig, emit_qasm_program};
@@ -142,9 +139,7 @@ fn test_qasm_fragment_mode_no_header() {
     );
 }
 
-// ===========================================================================
-// Phase 9 debugger: additional QASM validation tests
-// ===========================================================================
+// --- Additional QASM validation tests ---
 
 const HYBRID_SOURCE: &str = "\
 ILDI R0, 42

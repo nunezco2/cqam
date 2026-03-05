@@ -1,6 +1,5 @@
-// cqam-vm/tests/qop_tests.rs
-//
-// Phase 2 (density matrix): Test quantum operations with DensityMatrix.
+//! Tests for quantum operation handlers: QPREP, QKERNEL, QOBSERVE,
+//! QLOAD, and QSTORE using the `DensityMatrix` simulation backend.
 
 use cqam_core::instruction::*;
 use cqam_core::register::HybridValue;
@@ -353,9 +352,7 @@ fn test_unknown_distribution_boundary_values() {
     assert!(result.is_err());
 }
 
-// =============================================================================
-// Bell state example end-to-end test (Phase 10)
-// =============================================================================
+// --- End-to-end Bell state example -------------------------------------------
 
 #[test]
 fn test_bell_state_example_runs_through_vm() {

@@ -1,9 +1,9 @@
-// cqam-sim/src/density_matrix.rs
-//
-// Phase 2: Density matrix representation for n-qubit quantum states.
-//
-// The density matrix rho is a 2^n x 2^n Hermitian, positive semi-definite
-// matrix with Tr(rho) = 1. Stored as a flat row-major Vec<C64>.
+//! Density matrix representation for n-qubit quantum states.
+//!
+//! The density matrix rho is a 2^n x 2^n Hermitian, positive semi-definite
+//! matrix with Tr(rho) = 1. It is stored as a flat row-major `Vec<C64>`,
+//! where dim = 2^n. Supports construction of standard states (zero, uniform,
+//! Bell, GHZ), unitary evolution, measurement, and fidelity metrics.
 
 use crate::complex::{self, C64, cx_add, cx_mul, cx_conj, cx_scale, cx_norm_sq};
 use cqam_core::quantum_state::QuantumState;
@@ -446,9 +446,7 @@ impl std::fmt::Display for DensityMatrix {
     }
 }
 
-// =============================================================================
-// QuantumState trait implementation (Phase 3)
-// =============================================================================
+// --- QuantumState trait implementation ---------------------------------------
 
 impl QuantumState for DensityMatrix {
     fn num_qubits(&self) -> u8 {

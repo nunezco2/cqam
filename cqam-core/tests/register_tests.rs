@@ -1,13 +1,9 @@
-// cqam-core/tests/register_tests.rs
-//
-// Phase 2: Test the separate register file structs.
+//! Tests for all five register file types and `HybridValue`.
 
 use cqam_core::register::*;
 use cqam_core::error::CqamError;
 
-// =============================================================================
-// IntRegFile
-// =============================================================================
+// --- IntRegFile --------------------------------------------------------------
 
 #[test]
 fn test_int_reg_file_new_is_zeroed() {
@@ -70,9 +66,7 @@ fn test_int_reg_file_out_of_bounds_set_returns_err() {
     assert!(regs.set(16, 0).is_err());
 }
 
-// =============================================================================
-// FloatRegFile
-// =============================================================================
+// --- FloatRegFile ------------------------------------------------------------
 
 #[test]
 fn test_float_reg_file_new_is_zeroed() {
@@ -118,9 +112,7 @@ fn test_float_reg_file_out_of_bounds_returns_err() {
     assert!(regs.get(16).is_err());
 }
 
-// =============================================================================
-// ComplexRegFile
-// =============================================================================
+// --- ComplexRegFile ----------------------------------------------------------
 
 #[test]
 fn test_complex_reg_file_new_is_zeroed() {
@@ -159,9 +151,7 @@ fn test_complex_reg_file_out_of_bounds_returns_err() {
     assert!(regs.get(16).is_err());
 }
 
-// =============================================================================
-// HybridValue and HybridRegFile
-// =============================================================================
+// --- HybridValue and HybridRegFile -------------------------------------------
 
 #[test]
 fn test_hybrid_value_default_is_empty() {
@@ -257,9 +247,7 @@ fn test_hybrid_reg_file_out_of_bounds_set_returns_err() {
     assert!(regs.set(8, HybridValue::Empty).is_err());
 }
 
-// =============================================================================
-// Clone and equality tests
-// =============================================================================
+// --- Clone and equality ------------------------------------------------------
 
 #[test]
 fn test_int_reg_file_clone() {

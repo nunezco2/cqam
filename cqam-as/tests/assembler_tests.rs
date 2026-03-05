@@ -1,6 +1,4 @@
-// cqam-as/tests/assembler_tests.rs
-//
-// Phase 5: Integration tests for the two-pass assembler.
+//! Integration tests for the two-pass assembler.
 
 use std::io::Cursor;
 
@@ -325,9 +323,7 @@ HALT
     assert_eq!(result.code.len(), 6);
 }
 
-// =============================================================================
-// Phase 7: Configurable label stripping stress tests
-// =============================================================================
+// --- Configurable label stripping stress tests ---
 
 /// Assemble with strip_labels=true and assert success.
 fn assemble_stripped(instrs: Vec<Instruction>) -> AssemblyResult {

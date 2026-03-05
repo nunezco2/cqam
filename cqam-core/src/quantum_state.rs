@@ -1,10 +1,8 @@
-// cqam-core/src/quantum_state.rs
-//
-// Phase 3: Trait abstracting quantum state for QMEM decoupling.
-//
-// This trait lives in cqam-core so that QMem<Q: QuantumState> can be
-// defined without importing the concrete DensityMatrix from cqam-sim.
-// The DensityMatrix implementation of this trait lives in cqam-sim.
+//! Abstract quantum state trait for QMEM decoupling.
+//!
+//! This trait lives in `cqam-core` so that `QMem<Q: QuantumState>` can be
+//! defined without importing the concrete `DensityMatrix` from `cqam-sim`.
+//! The `DensityMatrix` implementation of this trait lives in `cqam-sim`.
 
 /// Trait abstracting the quantum state stored in QMEM slots.
 ///

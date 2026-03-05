@@ -1,14 +1,13 @@
-// cqam-vm/src/isr.rs
-//
-// Phase 2: ISR vector table with two-level interrupt model.
-// Replaces the simple match-on-Trap approach.
+//! Interrupt service routine (ISR) table and trap handling.
+//!
+//! Implements a two-level interrupt model: non-maskable interrupts (NMI) that
+//! always fire, and maskable interrupts that are gated by an enable flag.
+//! Handlers are registered as instruction-index addresses in the running program.
 
 use std::collections::HashMap;
 use crate::context::ExecutionContext;
 
-// =============================================================================
-// Trap type hierarchy
-// =============================================================================
+// --- Trap type hierarchy -----------------------------------------------------
 
 /// Non-maskable traps that always fire regardless of the interrupt enable flag.
 /// These represent unrecoverable or critical conditions.
@@ -41,9 +40,7 @@ pub enum Trap {
     Maskable(MaskableTrap),
 }
 
-// =============================================================================
-// ISR vector table
-// =============================================================================
+// --- ISR vector table --------------------------------------------------------
 
 /// Interrupt Service Routine vector table.
 ///
@@ -108,9 +105,7 @@ impl Default for IsrTable {
     }
 }
 
-// =============================================================================
-// Trap handling
-// =============================================================================
+// --- Trap handling -----------------------------------------------------------
 
 /// Handle a trap according to the two-level interrupt model.
 ///

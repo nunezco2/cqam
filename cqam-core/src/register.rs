@@ -1,7 +1,9 @@
-// cqam-core/src/register.rs
-//
-// Phase 2: Separate register files with fixed-size arrays.
-// Replaces the old CValue/RegisterBank string-keyed design.
+//! Register files and hybrid value types for the CQAM virtual machine.
+//!
+//! Provides fixed-size typed register files for each of the five register
+//! namespaces: integer (R), float (F), complex (Z), quantum (Q, in cqam-vm),
+//! and hybrid (H). Also defines `HybridValue`, the tagged union stored in the
+//! H-file.
 
 use crate::error::CqamError;
 
@@ -168,9 +170,6 @@ impl ComplexRegFile {
 
 /// A hybrid value that can hold classical data or a probability distribution
 /// resulting from quantum measurement.
-///
-/// This replaces the old `HybridValue` which only supported `Prob(f64)` and
-/// `Dist(Vec<(CValue, f64)>)`.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub enum HybridValue {
     /// Uninitialized / empty slot.

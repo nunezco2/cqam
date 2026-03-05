@@ -1,3 +1,5 @@
+//! CLI integration tests for `cqam2qasm`: verifies end-to-end QASM output.
+
 use std::process::Command;
 use std::fs;
 use std::path::PathBuf;
@@ -25,7 +27,7 @@ fn test_cqam2qasm_cli_output() {
 
     let output = fs::read_to_string(&output_path).expect("Failed to read output.qasm");
     assert!(output.contains("OPENQASM 3.0;"));
-    // Phase 7: body lines no longer have type prefixes; check for bare assignment
+    // Body lines use bare assignments without type prefixes; check for bare assignment
     assert!(
         output.contains("R0 = 5;") || output.contains("reset q0;"),
         "Output missing expected content"

@@ -1,6 +1,5 @@
-// cqam-core/tests/instruction_tests.rs
-//
-// Phase 2: Test the new Instruction enum with numeric operands.
+//! Tests for the `Instruction` enum, its named constant sub-modules,
+//! and the helper name-lookup functions.
 
 use cqam_core::instruction::*;
 
@@ -134,7 +133,7 @@ fn test_all_hybrid_variants() {
 
 #[test]
 fn test_qobserve_replaces_qmeas() {
-    // QMeas no longer exists. QObserve is the sole measurement instruction.
+    // QObserve is the sole measurement instruction.
     let observe = Instruction::QObserve { dst_h: 0, src_q: 1 };
     assert!(matches!(observe, Instruction::QObserve { dst_h: 0, src_q: 1 }));
 }

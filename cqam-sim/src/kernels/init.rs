@@ -1,6 +1,4 @@
-// cqam-sim/src/kernels/init.rs
-//
-// Phase 2: Initialization kernel operating on DensityMatrix.
+//! Initialization kernel: produces the uniform superposition state H^n|0>.
 
 use crate::density_matrix::DensityMatrix;
 use crate::kernel::Kernel;

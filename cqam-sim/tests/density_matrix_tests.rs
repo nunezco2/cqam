@@ -1,6 +1,5 @@
-// cqam-sim/tests/density_matrix_tests.rs
-//
-// Phase 2: Comprehensive tests for the DensityMatrix type.
+//! Comprehensive tests for the `DensityMatrix` type: construction, trace,
+//! purity, unitary application, and measurement probabilities.
 
 use cqam_sim::complex::{self, C64};
 use cqam_sim::density_matrix::DensityMatrix;
@@ -356,9 +355,7 @@ fn test_grover_3q_multi_iteration() {
 // Display test
 // =============================================================================
 
-// =============================================================================
-// Partial trace tests (Phase 10)
-// =============================================================================
+// --- Partial trace tests ---
 
 #[test]
 fn test_partial_trace_b_bell_gives_maximally_mixed() {
@@ -438,9 +435,7 @@ fn test_partial_trace_b_panics_on_full_partition() {
     bell.partial_trace_b(2); // num_qubits_a == num_qubits, invalid
 }
 
-// =============================================================================
-// Entanglement entropy tests (Phase 10)
-// =============================================================================
+// --- Entanglement entropy tests ---
 
 #[test]
 fn test_entanglement_entropy_bell_is_one() {

@@ -1,6 +1,4 @@
-// cqam2qasm/src/main.rs
-//
-// Phase 7: Updated to use EmitConfig for QASM emission.
+//! CLI tool: converts a `.cqam` source file to OpenQASM 3.0.
 
 use std::env;
 use std::fs;
@@ -28,7 +26,7 @@ fn print_version() {
 
 /// Print the updated ISA reference for the flat-prefix syntax.
 fn print_doc_reference() {
-    println!("CQAM Instruction Reference (Phase 2 ISA):\n");
+    println!("CQAM Instruction Reference:\n");
     println!("  Integer arithmetic:   IADD  ISUB  IMUL  IDIV  IMOD");
     println!("  Integer bitwise:      IAND  IOR   IXOR  INOT  ISHL  ISHR");
     println!("  Integer memory:       ILDI  ILDM  ISTR");

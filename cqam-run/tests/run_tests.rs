@@ -1,7 +1,5 @@
-// cqam-run/tests/run_tests.rs
-//
-// Phase 4/6/8: Integration tests for the runner with Result-based error handling,
-// SimConfig enforcement, and ISR wiring.
+//! Integration tests for the CQAM runner: error propagation, simulation
+//! configuration enforcement, and ISR wiring with interrupt completion.
 
 use cqam_core::instruction::Instruction;
 use cqam_run::runner::{run_program, run_program_with_config};
@@ -105,9 +103,7 @@ fn test_arithmetic_with_memory() {
     assert_eq!(ctx.cmem.load(100), 30);
 }
 
-// ===========================================================================
-// Error propagation tests (Phase 4)
-// ===========================================================================
+// --- Error propagation tests ---
 
 #[test]
 fn test_division_by_zero_halts_via_isr() {
@@ -123,9 +119,7 @@ fn test_division_by_zero_halts_via_isr() {
     assert_eq!(ctx.iregs.get(2).unwrap(), 0); // safe default
 }
 
-// ===========================================================================
-// SimConfig enforcement tests (Phase 6.5)
-// ===========================================================================
+// --- SimConfig enforcement tests ---
 
 #[test]
 fn test_max_cycles_enforcement() {
@@ -185,9 +179,7 @@ fn test_run_program_with_default_config() {
     assert!(ctx.psw.trap_halt);
 }
 
-// ===========================================================================
-// Phase 8: ISR wiring and interrupt completion tests
-// ===========================================================================
+// --- ISR wiring and interrupt completion tests ---
 
 #[test]
 fn test_setiv_div_by_zero_handler_executes_and_reti_resumes() {

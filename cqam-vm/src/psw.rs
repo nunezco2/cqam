@@ -1,8 +1,8 @@
-// cqam-vm/src/psw.rs
-//
-// Phase 2: Add get_flag() method for numeric flag access.
-// The Trap enum is removed (replaced by the two-level model in isr.rs).
-// All other fields and methods are unchanged.
+//! Program Status Word (PSW) for the CQAM virtual machine.
+//!
+//! Holds all condition flags (arithmetic, quantum state, hybrid control),
+//! trap flags, and provides methods for updating flags from instruction results
+//! and for querying pending traps in priority order.
 
 /// Program Status Word: holds all condition and trap flags.
 #[derive(Debug, Default, Clone)]
@@ -138,9 +138,10 @@ impl ProgramStateWord {
     }
 }
 
-/// Simple pending trap enumeration for PSW's check method.
-/// This is a local convenience type; the authoritative trap hierarchy
-/// is defined in `isr.rs` as `NmiTrap`/`MaskableTrap`/`Trap`.
+/// Pending trap enumeration for `ProgramStateWord::check_pending_traps`.
+///
+/// This is a local convenience type. The authoritative trap hierarchy
+/// (with two-level NMI/maskable semantics) is defined in `isr.rs`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PendingTrap {
     Halt,

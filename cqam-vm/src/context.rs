@@ -1,8 +1,10 @@
-// cqam-vm/src/context.rs
-//
-// Phase 2: Separate register files, quantum register array, call stack,
-// and label resolution cache.
-// Phase 2 (density matrix): qregs changed from QDist<u16> to DensityMatrix.
+//! Execution context for the CQAM virtual machine.
+//!
+//! `ExecutionContext` holds the complete machine state: program counter, all
+//! register files (integer, float, complex, hybrid, quantum), classical and
+//! quantum memory, call stack, program status word, ISR table, and resource
+//! tracker. Label resolution is performed once at construction and cached in
+//! a `HashMap` for O(1) lookups during execution.
 
 use std::collections::HashMap;
 
@@ -64,8 +66,7 @@ pub struct ExecutionContext {
     /// Cumulative resource usage tracker.
     pub resource_tracker: ResourceTracker,
 
-    /// The program being executed.
-    /// Remains `Vec<Instruction>` until Phase 5 switches to `Vec<u32>`.
+    /// The program being executed (IR form: one `Instruction` per word).
     pub program: Vec<Instruction>,
 
     /// Label resolution cache: label name -> instruction index.

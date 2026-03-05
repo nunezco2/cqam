@@ -1,4 +1,8 @@
-// cqam-vm/src/simconfig.rs
+//! Quantum fidelity thresholds for interrupt generation.
+//!
+//! `QuantumFidelityThreshold` configures the minimum superposition and
+//! entanglement values below which a quantum-error interrupt is raised,
+//! and the default number of qubits per quantum register.
 
 #[derive(Debug, Clone)]
 pub struct QuantumFidelityThreshold {

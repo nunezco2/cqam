@@ -1,12 +1,9 @@
-// cqam-codegen/src/qasm.rs
-//
-// Phase 7: Rewritten QASM codegen with proper declarations, emit modes,
-// and valid OpenQASM 3.0 output.
-//
-// The emitter follows a three-phase pipeline:
-//   1. SCAN  -- walk all instructions, collect used register indices
-//   2. DECLARE -- emit one declaration per used register (standalone only)
-//   3. EMIT  -- translate each instruction to QASM body lines
+//! QASM code generator: emits valid OpenQASM 3.0 from a CQAM instruction sequence.
+//!
+//! The emitter follows a three-stage pipeline:
+//!   1. Scan    -- walk all instructions, collect used register indices
+//!   2. Declare -- emit one declaration per used register (standalone only)
+//!   3. Emit    -- translate each instruction to QASM body lines
 
 use std::collections::BTreeSet;
 use std::fs;

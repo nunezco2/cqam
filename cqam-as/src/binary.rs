@@ -1,13 +1,11 @@
-// cqam-as/src/binary.rs
-//
-// Phase 5: Binary file I/O for the .cqb (CQAM Binary) format.
-//
-// File layout:
-//   Header   (12 bytes, little-endian)
-//   Code     (code_length * 4 bytes, little-endian u32 words)
-//   Debug    (optional, starts with b"CQDB" magic)
-//
-// See design/phase5_design.md section 5 for the full specification.
+//! Binary file I/O for the `.cqb` (CQAM Binary) format.
+//!
+//! File layout:
+//!   Header   (12 bytes, little-endian)
+//!   Code     (code_length * 4 bytes, little-endian u32 words)
+//!   Debug    (optional, starts with b"CQDB" magic)
+//!
+//! See `reference/spec.md` for the full file specification.
 
 use std::collections::HashMap;
 use std::io::{Read, Write};

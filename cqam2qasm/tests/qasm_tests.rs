@@ -1,7 +1,6 @@
-// cqam2qasm/tests/qasm_tests.rs
-//
-// Phase 7: Integration tests for cqam2qasm.
-// These tests exercise the full pipeline: Instruction -> EmitConfig -> QASM output.
+//! Integration tests for the `cqam2qasm` converter.
+//!
+//! Exercises the full pipeline: `Instruction` -> `EmitConfig` -> QASM output.
 
 use cqam_core::instruction::*;
 use cqam_codegen::qasm::{

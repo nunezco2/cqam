@@ -1,6 +1,5 @@
-// cqam-vm/tests/context_tests.rs
-//
-// Phase 2: Test the updated ExecutionContext with separate register files.
+//! Tests for `ExecutionContext`: initialization, label resolution,
+//! PC manipulation, call stack, and register/memory access.
 
 use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;

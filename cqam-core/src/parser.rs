@@ -1,7 +1,8 @@
-// cqam-core/src/parser.rs
-//
-// Phase 4: Parser for the flat-prefix ISA syntax with numeric operands.
-// Returns Result<Instruction, CqamError> instead of silently returning Nop.
+//! Text-format parser for the CQAM ISA.
+//!
+//! Parses flat-prefix assembly syntax with numeric operands into `Instruction`
+//! values. All parse functions return `Result<Instruction, CqamError>` and
+//! report errors with 1-based line numbers.
 
 use crate::error::CqamError;
 use crate::instruction::Instruction;
@@ -14,8 +15,6 @@ pub type ParseResult = Result<Instruction, CqamError>;
 // =============================================================================
 
 /// Parse a single line of CQAM source into an Instruction.
-///
-/// Handles all instruction variants in the Phase 2 ISA.
 ///
 /// Comments (`#` and `//`) are stripped. Blank lines return `Ok(Nop)`.
 /// Unknown instructions return `Err(CqamError::ParseError { ... })`.

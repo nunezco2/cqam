@@ -1,3 +1,5 @@
+//! Probability distribution type (`QDist`) for quantum measurement outcomes.
+
 use rand::Rng;
 
 #[derive(Debug, Clone)]
@@ -32,9 +34,7 @@ impl<T: Clone> QDist<T> {
     }
 }
 
-// =============================================================================
-// Fidelity metrics (Phase 6.4)
-// =============================================================================
+// --- Fidelity metrics ---
 
 impl QDist<u16> {
     /// Shannon entropy of the probability distribution, normalized to [0,1].

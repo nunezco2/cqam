@@ -1,15 +1,10 @@
-// cqam-core/tests/memory_tests.rs
-//
-// Phase 2: Test numeric-addressed CMem and QMem.
-// Phase 2 (density matrix): QMem tests updated for DensityMatrix.
-// Phase 3: QMem is now generic; tests use explicit QMem<DensityMatrix>.
+//! Tests for `CMem` and `QMem<DensityMatrix>` covering store/load,
+//! boundary addresses, take, overwrite, and emptiness checks.
 
 use cqam_core::memory::{CMem, QMem};
 use cqam_sim::density_matrix::DensityMatrix;
 
-// =============================================================================
-// CMem
-// =============================================================================
+// --- CMem --------------------------------------------------------------------
 
 #[test]
 fn test_cmem_new_is_zeroed() {
@@ -88,9 +83,7 @@ fn test_cmem_default() {
     assert!(mem.is_empty());
 }
 
-// =============================================================================
-// QMem
-// =============================================================================
+// --- QMem --------------------------------------------------------------------
 
 #[test]
 fn test_qmem_new_all_empty() {

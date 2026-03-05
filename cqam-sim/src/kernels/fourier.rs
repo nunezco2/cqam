@@ -1,6 +1,4 @@
-// cqam-sim/src/kernels/fourier.rs
-//
-// Phase 2: Quantum Fourier Transform kernel on DensityMatrix.
+//! Quantum Fourier Transform (QFT) kernel.
 
 use std::f64::consts::PI;
 use crate::complex::{self, cx_scale, cx_exp_i};

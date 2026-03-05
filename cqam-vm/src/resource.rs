@@ -1,7 +1,9 @@
-// cqam-vm/src/resource.rs
-//
-// Phase 2: Updated resource cost function for all new instruction variants.
-// The ResourceDelta and ResourceTracker structs are unchanged.
+//! Resource cost accounting for CQAM instruction execution.
+//!
+//! Defines `ResourceDelta` (per-instruction cost) and `ResourceTracker`
+//! (cumulative totals). The `resource_cost` function maps each instruction
+//! variant to its associated time, space, superposition, entanglement, and
+//! interference costs.
 
 use cqam_core::instruction::Instruction;
 

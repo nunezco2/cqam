@@ -1,3 +1,5 @@
+//! Tests for the `QDist` probability distribution type.
+
 use cqam_sim::qdist::QDist;
 
 #[test]

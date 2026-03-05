@@ -1,6 +1,8 @@
-// cqam-sim/src/kernel.rs
-//
-// Phase 2: Updated Kernel trait operating on DensityMatrix.
+//! Quantum kernel trait for unitary density-matrix transformations.
+//!
+//! Each `Kernel` implementation constructs its unitary matrix U and applies
+//! the transformation rho' = U rho U†. Kernels operate on the full register;
+//! partial (qubit-selective) application is not currently supported.
 
 use crate::density_matrix::DensityMatrix;
 

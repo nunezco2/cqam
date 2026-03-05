@@ -1,6 +1,5 @@
-// cqam-vm/tests/resource_tests.rs
-//
-// Phase 9.7: Resource tracker accuracy tests.
+//! Tests for `ResourceTracker` and `resource_cost` accuracy
+//! across all instruction categories.
 
 use cqam_core::instruction::Instruction;
 use cqam_vm::resource::{ResourceTracker, resource_cost};
@@ -113,9 +112,7 @@ fn test_resource_mixed_program() {
     assert!((t.total_interference - 0.3).abs() < 1e-10);
 }
 
-// ===========================================================================
-// Phase 9 debugger: additional resource cost edge cases
-// ===========================================================================
+// --- Additional resource cost edge cases -------------------------------------
 
 #[test]
 fn test_resource_qload_qstore() {

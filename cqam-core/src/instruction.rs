@@ -1,9 +1,9 @@
-// cqam-core/src/instruction.rs
-//
-// Phase 2: Complete ISA definition with numeric operands.
-// This file replaces the old string-based Instruction enum entirely.
+//! ISA instruction set for the CQAM virtual machine.
+//!
+//! Defines the complete `Instruction` enum and the named-constant sub-modules
+//! for distribution IDs, kernel IDs, flag IDs, trap IDs, and reduction functions.
 
-/// Instruction represents a single operation in the CQAM ISA.
+/// A single operation in the CQAM ISA.
 ///
 /// All register operands are `u8` indices into their respective register files:
 /// - Integer registers: R0-R15 (index 0-15)
@@ -14,8 +14,8 @@
 ///
 /// Memory addresses are `u16` (CMEM: 64K cells) or `u8` (QMEM: 256 slots).
 /// Kernel, distribution, flag, and reduction function selectors are `u8` IDs.
-/// Jump targets are label names (`String`) in the IR; Phase 5 resolves them
-/// to numeric addresses during binary encoding.
+/// Jump targets are label names (`String`) resolved to numeric addresses during
+/// binary encoding by `cqam_core::opcode::encode`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Instruction {
     // -- No-op / pseudo -------------------------------------------------------
@@ -159,7 +159,7 @@ pub enum Instruction {
     /// CMEM[addr+1] = Z[src].1.to_bits() as i64
     ZStr { src: u8, addr: u16 },
 
-    // -- Register-indirect memory (Phase 4) -----------------------------------
+    // -- Register-indirect memory ---------------------------------------------
 
     /// Indirect integer load: R[dst] = CMEM[R[addr_reg] as u16]
     ILdx { dst: u8, addr_reg: u8 },
@@ -242,12 +242,10 @@ pub enum Instruction {
 
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
-    /// Fork hybrid execution. Sets PSW fork flags.
-    /// (Full thread spawning deferred to later phases.)
+    /// Fork hybrid execution into parallel threads. Sets PSW fork flags.
     HFork,
 
-    /// Merge hybrid execution branches. Sets PSW merge flags.
-    /// (Full thread joining deferred to later phases.)
+    /// Merge hybrid execution branches by joining all forked threads.
     HMerge,
 
     /// Conditional execution based on PSW flag.
@@ -263,7 +261,7 @@ pub enum Instruction {
     ///   func: reduction function ID (see reduce_fn module)
     HReduce { src: u8, dst: u8, func: u8 },
 
-    // -- Interrupt handling (Phase 8) -----------------------------------------
+    // -- Interrupt handling ---------------------------------------------------
 
     /// Return from interrupt handler.
     /// Pop saved PC from call stack, clear maskable trap flags, resume.

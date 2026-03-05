@@ -1,8 +1,9 @@
-// cqam-vm/src/executor.rs
-//
-// Phase 6: Full instruction dispatch returning Result<(), CqamError>.
-// Routes quantum ops to qop.rs, hybrid ops to hybrid.rs.
-// Passes ForkManager through to hybrid dispatch.
+//! Instruction dispatch for the CQAM virtual machine.
+//!
+//! `execute_instruction` is the central dispatch function: it handles all
+//! classical instructions inline and delegates quantum operations to `qop.rs`
+//! and hybrid fork/merge operations to `hybrid.rs`. PC advancement is the
+//! exclusive responsibility of this module.
 
 use crate::context::ExecutionContext;
 use crate::fork::ForkManager;
@@ -272,7 +273,7 @@ pub fn execute_instruction(
         }
 
         // =====================================================================
-        // Register-indirect memory (Phase 4)
+        // Register-indirect memory
         // =====================================================================
 
         Instruction::ILdx { dst, addr_reg } => {

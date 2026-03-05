@@ -1,9 +1,8 @@
-// cqam-core/tests/opcode_tests.rs
-//
-// Phase 5: Integration tests for opcode encoding and decoding.
-//
-// Tests round-trip encode->decode for every instruction variant, error cases,
-// label resolution, and edge cases (max immediate, max address, etc.).
+//! Integration tests for opcode encoding and decoding.
+//!
+//! Covers round-trip encode->decode for every instruction variant, error
+//! cases, label resolution, and boundary conditions (max immediate, max
+//! address, field overflow).
 
 use std::collections::HashMap;
 

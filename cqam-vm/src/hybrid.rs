@@ -1,6 +1,7 @@
-// cqam-vm/src/hybrid.rs
-//
-// Phase 6: Hybrid operation handlers with real HFORK/HMERGE parallelism.
+//! Hybrid operation handlers (HFORK, HMERGE, HCEXEC, HREDUCE).
+//!
+//! Provides fork/merge parallelism and reduction operations that bridge
+//! quantum measurement results into classical register values.
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::{Instruction, reduce_fn};

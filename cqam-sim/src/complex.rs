@@ -1,10 +1,9 @@
-// cqam-sim/src/complex.rs
-//
-// Phase 2: Complex arithmetic helpers for (f64, f64) tuples.
-//
-// Design decision: Free functions on tuples rather than a newtype wrapper.
-// This keeps compatibility with ComplexRegFile which already uses (f64, f64).
-// No external dependency (num-complex) required.
+//! Complex arithmetic helpers for `(f64, f64)` tuples.
+//!
+//! Provides the `C64` type alias and free arithmetic functions. Using
+//! `(f64, f64)` tuples directly avoids a newtype wrapper and keeps
+//! compatibility with `ComplexRegFile`, without requiring an external
+//! complex-number crate.
 
 /// Type alias for complex numbers represented as (real, imaginary).
 pub type C64 = (f64, f64);

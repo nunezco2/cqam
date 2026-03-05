@@ -1,7 +1,7 @@
-// cqam-core/src/error.rs
-//
-// Phase 4: Unified error type for the CQAM project.
-// Replaces panic!() and expect() throughout library code with Result<T, CqamError>.
+//! Unified error type for all CQAM operations.
+//!
+//! All library functions return `Result<T, CqamError>` rather than panicking,
+//! allowing callers to propagate or handle errors explicitly.
 
 use std::fmt;
 

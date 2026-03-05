@@ -1,6 +1,4 @@
-// cqam-vm/tests/executor_tests.rs
-//
-// Phase 6: Test the executor with ForkManager parameter.
+//! Tests for `execute_instruction` and `run_program` across all instruction groups.
 
 use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;
@@ -469,9 +467,7 @@ fn test_ishl_amt_64_does_not_panic() {
     assert_eq!(ctx.iregs.get(1).unwrap(), i64::MIN);
 }
 
-// ===========================================================================
-// Register-indirect memory (Phase 4)
-// ===========================================================================
+// --- Register-indirect memory ------------------------------------------------
 
 #[test]
 fn test_ildx_basic() {
@@ -794,9 +790,7 @@ fn test_ishr_amt_64_does_not_panic() {
     assert_eq!(ctx.iregs.get(1).unwrap(), -1);
 }
 
-// ===========================================================================
-// Phase 9.5: Shift boundary and overflow tests
-// ===========================================================================
+// --- Shift boundary and overflow ---------------------------------------------
 
 #[test]
 fn test_ishl_amt_zero() {

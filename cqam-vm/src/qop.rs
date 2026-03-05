@@ -1,6 +1,7 @@
-// cqam-vm/src/qop.rs
-//
-// Phase 2 (density matrix): Quantum operation handlers using DensityMatrix.
+//! Quantum operation handlers for the CQAM virtual machine.
+//!
+//! Implements QPREP, QKERNEL, QOBSERVE, QLOAD, and QSTORE using the
+//! `DensityMatrix` simulation backend from `cqam-sim`.
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::{Instruction, dist_id, kernel_id};

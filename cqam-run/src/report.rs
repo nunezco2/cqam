@@ -1,6 +1,7 @@
-// cqam-run/src/report.rs
-//
-// Phase 2 (density matrix): Updated quantum register display for DensityMatrix.
+//! Post-execution report formatting for the CQAM runner.
+//!
+//! Prints the final state of classical registers, quantum registers,
+//! and classical memory after a program completes.
 
 use cqam_core::register::HybridValue;
 use cqam_vm::context::ExecutionContext;
