@@ -1,3 +1,10 @@
+//! Program loader for the CQAM runner.
+//!
+//! Provides [`load_program`], which reads a `.cqam` text-format source file
+//! from disk and delegates parsing to [`cqam_core::parser::parse_program`].
+//! The resulting `Vec<Instruction>` can be passed directly to
+//! [`cqam_run::runner::run_program`] or [`cqam_run::runner::run_program_with_config`].
+
 use std::fs;
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;

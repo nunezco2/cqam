@@ -4,39 +4,68 @@
 //! trap flags, and provides methods for updating flags from instruction results
 //! and for querying pending traps in priority order.
 
-/// Program Status Word: holds all condition and trap flags.
+/// Program Status Word: holds all condition, quantum, hybrid, and trap flags.
+///
+/// Condition flags are updated by arithmetic, comparison, and quantum
+/// instructions. Trap flags are set by runtime faults and checked by the ISR
+/// dispatch loop after each instruction. The flag IDs used by `HCEXEC` and
+/// `get_flag` are defined in [`cqam_core::instruction::flag_id`].
 #[derive(Debug, Default, Clone)]
 pub struct ProgramStateWord {
-    // Classical condition flags
-    pub zf: bool, // Zero Flag
-    pub nf: bool, // Negative Flag
-    pub of: bool, // Overflow Flag
-    pub pf: bool, // Predicate Flag
+    // --- Classical condition flags ---
 
-    // Quantum state flags
-    pub qf: bool, // Quantum active
-    pub sf: bool, // Superposition present
-    pub ef: bool, // Entanglement present
-    pub df: bool, // Decohered (measured)
-    pub cf: bool, // Collapsed distribution
+    /// Zero flag: set when the last arithmetic result was zero.
+    pub zf: bool,
+    /// Negative flag: set when the last arithmetic result was negative.
+    pub nf: bool,
+    /// Overflow flag: set on signed integer overflow (not yet fully implemented).
+    pub of: bool,
+    /// Predicate flag: set by comparison instructions (IEq, ILt, FEq, etc.).
+    pub pf: bool,
 
-    // Hybrid execution context flags
-    pub hf: bool,       // Hybrid mode
-    pub forked: bool,   // Forked control path
-    pub merged: bool,   // Merge occurred
+    // --- Quantum state flags ---
 
-    // Trap and interrupt flags
+    /// Quantum active: at least one Q register is currently occupied.
+    pub qf: bool,
+    /// Superposition present: the last QKERNEL produced a non-trivial superposition.
+    pub sf: bool,
+    /// Entanglement present: the last QKERNEL produced measurable entanglement.
+    pub ef: bool,
+    /// Decohered: the last QOBSERVE collapsed a quantum register.
+    pub df: bool,
+    /// Collapsed: a measurement outcome has been stored in an H register.
+    pub cf: bool,
+
+    // --- Hybrid execution context flags ---
+
+    /// Hybrid mode: the VM is inside an HFORK/HMERGE block.
+    pub hf: bool,
+    /// Forked: at least one parallel thread has been spawned (HFORK executed).
+    pub forked: bool,
+    /// Merged: a HMERGE has completed since the last HFORK.
+    pub merged: bool,
+
+    // --- Trap and interrupt flags ---
+
+    /// Arithmetic trap: set by IDIV or IMOD with a zero divisor.
+    /// Dispatched as a maskable interrupt in the ISR loop.
     pub trap_arith: bool,
+    /// Halt trap: set by HALT or by the max-cycles limit.
+    /// Non-maskable; causes the runner loop to terminate.
     pub trap_halt: bool,
+    /// Quantum error interrupt: set when fidelity drops below threshold.
     pub int_quantum_err: bool,
+    /// Synchronization failure interrupt: set when HMERGE cannot join threads.
     pub int_sync_fail: bool,
 }
 
 impl ProgramStateWord {
+    /// Create a new zero-initialised PSW with all flags cleared.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Reset all flags to their default (false/cleared) state.
     pub fn clear(&mut self) {
         *self = Self::default();
     }
@@ -138,14 +167,19 @@ impl ProgramStateWord {
     }
 }
 
-/// Pending trap enumeration for `ProgramStateWord::check_pending_traps`.
+/// Pending trap enumeration for [`ProgramStateWord::check_pending_traps`].
 ///
-/// This is a local convenience type. The authoritative trap hierarchy
-/// (with two-level NMI/maskable semantics) is defined in `isr.rs`.
+/// This is a local convenience type used to communicate trap priority to the
+/// runner loop. The authoritative two-level NMI/maskable hierarchy is defined
+/// in [`crate::isr`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PendingTrap {
+    /// Halt trap (non-maskable): HALT instruction or max-cycle limit reached.
     Halt,
+    /// Arithmetic trap (maskable): division by zero or overflow.
     Arithmetic,
+    /// Quantum error trap (maskable): fidelity dropped below threshold.
     QuantumError,
+    /// Synchronization failure trap (maskable): HMERGE thread join failed.
     SyncFailure,
 }

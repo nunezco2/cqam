@@ -134,7 +134,7 @@ const MAX_ADDR24: u32 = 0x00FF_FFFF;
 // Encoding
 // =============================================================================
 
-/// Encode an `Instruction` into a 32-bit instruction word.
+/// Encode an [`Instruction`] into a 32-bit instruction word.
 ///
 /// # Arguments
 ///
@@ -144,15 +144,37 @@ const MAX_ADDR24: u32 = 0x00FF_FFFF;
 ///
 /// # Errors
 ///
-/// Returns `CqamError` if:
-/// - A jump/call target label is not found in `label_map`.
-/// - A conditional branch target address exceeds 16 bits.
-/// - A register index exceeds its file's range.
+/// Returns [`CqamError`](crate::error::CqamError) if:
+/// - A jump/call target label is not found in `label_map`
+///   ([`CqamError::UnresolvedLabel`](crate::error::CqamError::UnresolvedLabel)).
+/// - A conditional branch target address exceeds 16 bits
+///   ([`CqamError::AddressOverflow`](crate::error::CqamError::AddressOverflow)).
+/// - A register index exceeds its file's range
+///   ([`CqamError::OperandOverflow`](crate::error::CqamError::OperandOverflow)).
 /// - A shift amount, kernel ID, or function ID exceeds its field width.
 ///
 /// # Instruction word formats
 ///
 /// See `reference/opcodes.md` for the bit-level layout of each format.
+///
+/// # Examples
+///
+/// ```
+/// use std::collections::HashMap;
+/// use cqam_core::instruction::Instruction;
+/// use cqam_core::opcode::encode;
+///
+/// // N-format: HALT encodes as [0x2B][0x00][0x00][0x00]
+/// let word = encode(&Instruction::Halt, &HashMap::new()).unwrap();
+/// assert_eq!(word, 0x2B000000);
+///
+/// // RRR-format: IADD R2, R3, R4 -> [0x01][2][3][4][padding]
+/// let word = encode(
+///     &Instruction::IAdd { dst: 2, lhs: 3, rhs: 4 },
+///     &HashMap::new(),
+/// ).unwrap();
+/// assert_eq!(word, 0x01234000);
+/// ```
 pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u32, CqamError> {
     match instr {
         // -- N-format (no operands) -------------------------------------------

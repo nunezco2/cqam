@@ -1,3 +1,22 @@
+//! `cqam-run` -- command-line runner for CQAM programs.
+//!
+//! Loads a `.cqam` source file, optionally loads a TOML simulator
+//! configuration, executes the program on the [`cqam_vm`] execution engine,
+//! and optionally prints a final-state report.
+//!
+//! # Usage
+//!
+//! ```text
+//! cqam-run --input <file.cqam> [OPTIONS]
+//!
+//! Options:
+//!   --input <path>          Path to a .cqam source file (required)
+//!   --config <path>         Path to TOML simulator config (default: example_config.toml)
+//!   --print-final-state     Dump all non-zero registers and memory after execution
+//!   --psw-report            Print the full Program State Word
+//!   --resource-usage        Print cumulative resource usage counters
+//! ```
+
 use std::env;
 use std::process;
 use cqam_run::loader::load_program;

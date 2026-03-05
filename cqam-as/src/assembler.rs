@@ -209,8 +209,25 @@ pub fn assemble(instructions: &[Instruction]) -> Result<AssemblyResult, CqamErro
 
 /// Parse source text and assemble with default options.
 ///
-/// Wrapper around `assemble_source_with_options` with default options.
+/// Convenience wrapper: parses `source` with [`cqam_core::parser::parse_program`]
+/// and then calls [`assemble`] with default [`AssemblyOptions`] (labels retained
+/// in the code stream).
 ///
+/// # Errors
+///
+/// - [`CqamError::ParseError`] if `source` contains a malformed instruction.
+/// - [`CqamError::DuplicateLabel`] if a label name is defined more than once.
+/// - [`CqamError::UnresolvedLabel`] if a jump/call references an undefined label.
+///
+/// # Examples
+///
+/// ```
+/// use cqam_as::assemble_source;
+///
+/// let result = assemble_source("ILDI R0, 42\nHALT\n").unwrap();
+/// assert_eq!(result.code.len(), 2);
+/// assert_eq!(result.entry_point, 0);
+/// ```
 pub fn assemble_source(source: &str) -> Result<AssemblyResult, CqamError> {
     assemble_source_with_options(source, &AssemblyOptions::default())
 }

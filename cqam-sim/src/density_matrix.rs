@@ -45,10 +45,33 @@ impl DensityMatrix {
 
     /// Create the equal-superposition pure state H^n|0><0|(H^n)^dagger.
     ///
-    /// Every entry is (1/dim, 0). This is a pure state (rank 1).
+    /// Every entry of the density matrix is (1/dim, 0) where dim = 2^num_qubits.
+    /// This corresponds to the n-qubit state produced by applying the Hadamard
+    /// gate to every qubit of the |0...0> state. It is a pure state (rank 1)
+    /// with purity Tr(rho^2) = 1.
     ///
     /// # Panics
+    ///
     /// Panics if `num_qubits == 0` or `num_qubits > MAX_QUBITS`.
+    ///
+    /// # Examples
+    ///
+    /// ```
+    /// use cqam_sim::density_matrix::DensityMatrix;
+    ///
+    /// let dm = DensityMatrix::new_uniform(2); // 2-qubit uniform state
+    /// assert_eq!(dm.num_qubits(), 2);
+    /// assert_eq!(dm.dimension(), 4);
+    ///
+    /// // All diagonal elements equal 1/dim = 0.25
+    /// let probs = dm.diagonal_probabilities();
+    /// for p in &probs {
+    ///     assert!((p - 0.25).abs() < 1e-12);
+    /// }
+    ///
+    /// // Pure state: purity = 1
+    /// assert!((dm.purity() - 1.0).abs() < 1e-10);
+    /// ```
     pub fn new_uniform(num_qubits: u8) -> Self {
         assert!((1..=MAX_QUBITS).contains(&num_qubits),
             "num_qubits must be 1..={}, got {}", MAX_QUBITS, num_qubits);

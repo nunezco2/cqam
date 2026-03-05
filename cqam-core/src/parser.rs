@@ -363,6 +363,26 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
 /// - Calls `parse_instruction_at()` on each line with 1-based line number
 /// - Filters out `Nop` results (blank lines, comments)
 /// - Propagates parse errors
+///
+/// # Errors
+///
+/// Returns `Err(CqamError::ParseError { line, message })` on the first
+/// malformed instruction. All subsequent lines are not parsed after the first
+/// error.
+///
+/// # Examples
+///
+/// ```
+/// use cqam_core::parser::parse_program;
+/// use cqam_core::instruction::Instruction;
+///
+/// // Comments (# or //) and blank lines are ignored.
+/// let source = "ILDI R0, 3\nILDI R1, 4\nIADD R2, R0, R1\nHALT\n";
+///
+/// let program = parse_program(source).unwrap();
+/// assert_eq!(program.len(), 4);
+/// assert!(matches!(program[2], Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }));
+/// ```
 pub fn parse_program(source: &str) -> Result<Vec<Instruction>, CqamError> {
     let mut instructions = Vec::new();
     for (idx, line) in source.lines().enumerate() {

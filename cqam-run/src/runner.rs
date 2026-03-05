@@ -1,3 +1,18 @@
+//! Program execution loop for the CQAM runner.
+//!
+//! Provides two public entry points:
+//!
+//! - [`run_program`] — execute with default [`SimConfig`] (max 1000 cycles,
+//!   interrupts enabled, fidelity threshold 0.95).
+//! - [`run_program_with_config`] — execute with a caller-supplied
+//!   [`SimConfig`] for full control over cycle limits, interrupt masking, and
+//!   quantum fidelity thresholds.
+//!
+//! The runner owns the instruction fetch-execute loop and ISR dispatch.
+//! [`execute_instruction`](cqam_vm::executor::execute_instruction) is the
+//! sole authority on PC advancement; this module must not advance the PC
+//! independently.
+
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;
@@ -59,7 +74,27 @@ pub fn run_program_with_config(
 
 /// Run a complete CQAM program to termination with default configuration.
 ///
-/// Convenience wrapper that uses `SimConfig::default()`.
+/// Convenience wrapper that uses [`SimConfig::default`] (max 1000 cycles,
+/// interrupts enabled, fidelity threshold 0.95).
+///
+/// # Errors
+///
+/// Returns `Err(CqamError)` on runtime errors such as division by zero,
+/// unresolved labels, or register out-of-bounds access.
+///
+/// # Examples
+///
+/// ```
+/// use cqam_core::parser::parse_program;
+/// use cqam_run::runner::run_program;
+///
+/// let source = "ILDI R0, 7\nILDI R1, 3\nIADD R2, R0, R1\nHALT\n";
+/// let program = parse_program(source).unwrap();
+/// let ctx = run_program(program).unwrap();
+///
+/// // R2 should contain 7 + 3 = 10
+/// assert_eq!(ctx.iregs.get(2).unwrap(), 10);
+/// ```
 pub fn run_program(program: Vec<Instruction>) -> Result<ExecutionContext, CqamError> {
     let config = SimConfig::default();
     run_program_with_config(program, &config)

@@ -1,15 +1,45 @@
 //! Probability distribution type (`QDist`) for quantum measurement outcomes.
+//!
+//! [`QDist<T>`] is a discrete probability distribution over a domain of values
+//! of type `T`. In the CQAM context `T = u16` (basis state indices), and
+//! distributions arise from the diagonal of a density matrix after a
+//! `QOBSERVE` instruction.
+//!
+//! The [`Measurable`] trait provides stochastic (`measure`) and deterministic
+//! (`measure_deterministic`) sampling, plus an `expected_value` computation.
+//!
+//! Fidelity helpers are implemented on `QDist<u16>`:
+//! - [`QDist::superposition_metric`] — normalised Shannon entropy H/log2(n).
+//! - [`QDist::concentration_metric`] — inverse HHI, measuring spread.
 
 use rand::Rng;
 
+/// A discrete probability distribution over a typed domain.
+///
+/// `QDist<T>` pairs a domain `Vec<T>` with a parallel `Vec<f64>` of
+/// probabilities. In the CQAM context `T` is almost always `u16` (basis state
+/// indices 0..2^n), and distributions are produced by reading the diagonal of
+/// a [`cqam_sim::density_matrix::DensityMatrix`] after quantum measurement.
+///
+/// Invariant: `domain.len() == probabilities.len()` (enforced by [`QDist::new`]).
+/// The probabilities are not automatically normalised; call [`QDist::normalize`]
+/// if needed.
 #[derive(Debug, Clone)]
 pub struct QDist<T> {
+    /// Human-readable label for display and debugging.
     pub label: String,
+    /// Ordered list of outcome values.
     pub domain: Vec<T>,
+    /// Probabilities parallel to `domain`; should sum to 1.0 after normalisation.
     pub probabilities: Vec<f64>,
 }
 
 impl<T: Clone> QDist<T> {
+    /// Construct a new distribution.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Err(String)` if `domain.len() != probabilities.len()`.
     pub fn new(label: &str, domain: Vec<T>, probabilities: Vec<f64>) -> Result<Self, String> {
         if domain.len() != probabilities.len() {
             return Err(format!(
@@ -24,6 +54,10 @@ impl<T: Clone> QDist<T> {
         })
     }
 
+    /// Normalise probabilities in-place so they sum to 1.0.
+    ///
+    /// If the total is zero (all probabilities are zero), the distribution is
+    /// left unchanged.
     pub fn normalize(&mut self) {
         let total: f64 = self.probabilities.iter().sum();
         if total > 0.0 {
@@ -89,15 +123,24 @@ impl QDist<u16> {
     }
 }
 
-/// Trait defining classical measurement semantics from a QDist.
+/// Classical measurement semantics for a probability distribution.
+///
+/// Implemented on [`QDist<u16>`] for basis-state distributions arising from
+/// quantum register measurement.
 pub trait Measurable<TOut> {
-    /// Perform a stochastic measurement, sampling probabilistically.
+    /// Sample one outcome stochastically according to the probability weights.
+    ///
+    /// Returns `None` if the domain is empty.
     fn measure(&self) -> Option<TOut>;
 
-    /// Perform a deterministic measurement, returning the argmax (most probable state).
+    /// Return the outcome with the highest probability (argmax).
+    ///
+    /// Ties are broken by index order. Returns `None` if the domain is empty.
     fn measure_deterministic(&self) -> Option<TOut>;
 
-    /// Compute the expected value of the distribution.
+    /// Compute the probability-weighted expectation E[X] = sum_k x_k * p_k.
+    ///
+    /// Returns `None` if the domain is empty.
     fn expected_value(&self) -> Option<f64>;
 }
 

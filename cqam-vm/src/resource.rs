@@ -7,31 +7,50 @@
 
 use cqam_core::instruction::Instruction;
 
-/// Per-instruction or per-kernel resource cost delta.
+/// Per-instruction resource cost contribution.
+///
+/// Returned by [`resource_cost`] for each instruction and accumulated in a
+/// [`ResourceTracker`]. Units are intentionally abstract; they provide a
+/// relative measure of computational weight rather than wall-clock time.
 #[derive(Debug, Clone, Default, PartialEq)]
 pub struct ResourceDelta {
+    /// Simulated clock cycles consumed (1 for most classical ops, 2-4 for complex/quantum).
     pub time: usize,
+    /// Register or memory slots written (0-2 depending on instruction).
     pub space: usize,
+    /// Incremental superposition cost (non-zero for QPREP and QKERNEL).
     pub superposition: f64,
+    /// Incremental entanglement cost (non-zero for QKERNEL).
     pub entanglement: f64,
+    /// Incremental interference cost (non-zero for QOBSERVE).
     pub interference: f64,
 }
 
-/// Tracks cumulative resource usage across execution.
+/// Cumulative resource usage totals across an entire program execution.
+///
+/// Populated by summing [`ResourceDelta`] values returned by [`resource_cost`]
+/// for each executed instruction. Reported by `cqam-run --resource-usage`.
 #[derive(Debug, Default, Clone)]
 pub struct ResourceTracker {
+    /// Total simulated cycles elapsed.
     pub total_time: usize,
+    /// Total register/memory slots written.
     pub total_space: usize,
+    /// Cumulative superposition cost.
     pub total_superposition: f64,
+    /// Cumulative entanglement cost.
     pub total_entanglement: f64,
+    /// Cumulative interference cost.
     pub total_interference: f64,
 }
 
 impl ResourceTracker {
+    /// Create a new zero-initialised resource tracker.
     pub fn new() -> Self {
         Self::default()
     }
 
+    /// Accumulate a per-instruction cost delta into the running totals.
     pub fn apply_delta(&mut self, delta: &ResourceDelta) {
         self.total_time += delta.time;
         self.total_space += delta.space;

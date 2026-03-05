@@ -121,10 +121,44 @@ The `examples/` directory contains five sample programs:
 | `grover.cqam` | Full Grover search with iteration loop |
 | `bell_state.cqam` | Bell state preparation and measurement |
 
+## Documentation
+
+Generate and open the full API reference (all crates):
+
+```bash
+cargo doc --workspace --no-deps --open
+```
+
+The HTML documentation is written to `target/doc/`. Key entry points:
+
+- `cqam_core` -- ISA, parser, opcode encoding, error types
+- `cqam_sim` -- density matrix quantum simulation, kernels, QDist
+- `cqam_vm` -- execution engine, PSW, ISR, resource tracker
+- `cqam_run` -- program runner and report printer
+- `cqam_as` -- assembler, disassembler, binary I/O
+- `cqam_codegen` -- OpenQASM 3.0 code generation
+
+## Quantum Model
+
+CQAM uses the **density matrix** formalism for all quantum register operations.
+A quantum register `Q[k]` holds a 2^n x 2^n complex Hermitian matrix rho, where
+n is the number of qubits. Key properties:
+
+- Tr(rho) = 1 (normalised)
+- rho is positive semi-definite (valid probability interpretation)
+- Purity Tr(rho^2) is 1 for pure states and 1/dim for maximally mixed states
+
+Quantum gates are applied as unitary conjugations: rho' = U rho U†. Measurement
+extracts the diagonal probabilities p_k = Re(rho_kk) (the Born rule) and collapses
+rho to the projector |outcome><outcome|. The measurement result is stored as a
+`HybridValue::Dist` in the hybrid register file, where it can be reduced to a
+classical value by `HREDUCE`.
+
 ## Reference Documentation
 
 Detailed documentation is in the `reference/` directory:
 
+- [ISA Reference Card](reference/isa.md) -- complete instruction set, encoding, named constants
 - [Machine Specification](reference/spec.md) -- register files, memory, interrupts
 - [Binary Opcode Reference](reference/opcodes.md) -- encoding formats and opcode table
 - [QASM Generation Semantics](reference/qasm.md) -- codegen pipeline and templates
