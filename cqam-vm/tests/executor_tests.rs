@@ -52,25 +52,25 @@ fn test_idiv_and_imod() {
 }
 
 #[test]
-fn test_idiv_by_zero_returns_error() {
+fn test_idiv_by_zero_sets_trap_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, 0).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm);
-    assert!(result.is_err());
-    let msg = format!("{}", result.unwrap_err());
-    assert!(msg.contains("Division by zero"));
+    execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    assert!(ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(2).unwrap(), 0); // safe default
 }
 
 #[test]
-fn test_imod_by_zero_returns_error() {
+fn test_imod_by_zero_sets_trap_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, 0).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, &mut fm);
-    assert!(result.is_err());
+    execute_instruction(&mut ctx, &Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    assert!(ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(2).unwrap(), 0);
 }
 
 // ===========================================================================

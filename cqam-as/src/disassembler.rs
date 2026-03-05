@@ -183,6 +183,12 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::HReduce { src, dst, func } => {
             format!("HREDUCE H{}, R{}, {}", src, dst, func)
         }
+
+        // Interrupt handling
+        Instruction::Reti => "RETI".to_string(),
+        Instruction::SetIV { trap_id, target } => {
+            format!("SETIV {}, {}", trap_id, target)
+        }
     }
 }
 

@@ -11,6 +11,7 @@ use crate::qop::execute_qop;
 use crate::hybrid::execute_hybrid;
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
+use crate::isr::{Trap, MaskableTrap};
 
 /// Execute a single instruction in the given context.
 ///
@@ -52,25 +53,25 @@ pub fn execute_instruction(
         Instruction::IDiv { dst, lhs, rhs } => {
             let divisor = ctx.iregs.get(*rhs)?;
             if divisor == 0 {
-                return Err(CqamError::DivisionByZero {
-                    instruction: "IDIV".to_string(),
-                });
+                ctx.iregs.set(*dst, 0)?;
+                ctx.psw.trap_arith = true;
+            } else {
+                let result = ctx.iregs.get(*lhs)? / divisor;
+                ctx.iregs.set(*dst, result)?;
+                ctx.psw.update_from_arithmetic(result);
             }
-            let result = ctx.iregs.get(*lhs)? / divisor;
-            ctx.iregs.set(*dst, result)?;
-            ctx.psw.update_from_arithmetic(result);
         }
 
         Instruction::IMod { dst, lhs, rhs } => {
             let divisor = ctx.iregs.get(*rhs)?;
             if divisor == 0 {
-                return Err(CqamError::DivisionByZero {
-                    instruction: "IMOD".to_string(),
-                });
+                ctx.iregs.set(*dst, 0)?;
+                ctx.psw.trap_arith = true;
+            } else {
+                let result = ctx.iregs.get(*lhs)? % divisor;
+                ctx.iregs.set(*dst, result)?;
+                ctx.psw.update_from_arithmetic(result);
             }
-            let result = ctx.iregs.get(*lhs)? % divisor;
-            ctx.iregs.set(*dst, result)?;
-            ctx.psw.update_from_arithmetic(result);
         }
 
         // =====================================================================
@@ -377,6 +378,24 @@ pub fn execute_instruction(
             return Ok(()); // Do NOT advance PC
         }
 
+        Instruction::Reti => {
+            if let Some(addr) = ctx.pop_call() {
+                ctx.pc = addr;
+                ctx.psw.clear_maskable_traps();
+            } else {
+                // Empty call stack: RETI from top-level acts as HALT
+                ctx.psw.trap_halt = true;
+            }
+            return Ok(()); // Do NOT advance PC (already set)
+        }
+
+        Instruction::SetIV { trap_id, target } => {
+            let mt = trap_id_to_maskable(*trap_id)?;
+            let addr = *ctx.labels.get(target.as_str())
+                .ok_or_else(|| CqamError::UnresolvedLabel(target.clone()))?;
+            ctx.isr_table.set_handler(&Trap::Maskable(mt), addr);
+        }
+
         // =====================================================================
         // Quantum -- delegate to qop.rs
         // =====================================================================
@@ -415,6 +434,19 @@ pub fn execute_instruction(
     ctx.resource_tracker.apply_delta(&delta);
     ctx.advance_pc();
     Ok(())
+}
+
+/// Convert a trap_id (u8) to a MaskableTrap variant.
+fn trap_id_to_maskable(trap_id: u8) -> Result<MaskableTrap, CqamError> {
+    match trap_id {
+        0 => Ok(MaskableTrap::Arithmetic),
+        1 => Ok(MaskableTrap::QuantumError),
+        2 => Ok(MaskableTrap::SyncFailure),
+        _ => Err(CqamError::TypeMismatch {
+            instruction: "SETIV".to_string(),
+            detail: format!("Invalid trap ID: {} (must be 0-2)", trap_id),
+        }),
+    }
 }
 
 /// Validate that an i64 register value is a legal CMEM address.

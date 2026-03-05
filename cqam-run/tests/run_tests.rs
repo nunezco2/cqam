@@ -1,7 +1,7 @@
 // cqam-run/tests/run_tests.rs
 //
-// Phase 4/6: Integration tests for the runner with Result-based error handling
-// and SimConfig enforcement.
+// Phase 4/6/8: Integration tests for the runner with Result-based error handling,
+// SimConfig enforcement, and ISR wiring.
 
 use cqam_core::instruction::Instruction;
 use cqam_run::runner::{run_program, run_program_with_config};
@@ -110,17 +110,17 @@ fn test_arithmetic_with_memory() {
 // ===========================================================================
 
 #[test]
-fn test_division_by_zero_propagates_error() {
+fn test_division_by_zero_halts_via_isr() {
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 42 },
         Instruction::ILdi { dst: 1, imm: 0 },
         Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 },
     ];
 
-    let result = run_program(program);
-    assert!(result.is_err());
-    let msg = format!("{}", result.err().unwrap());
-    assert!(msg.contains("Division by zero"));
+    let ctx = run_program(program).unwrap();
+    // Division by zero sets trap_arith, ISR dispatch (no handler) sets trap_halt
+    assert!(ctx.psw.trap_halt);
+    assert_eq!(ctx.iregs.get(2).unwrap(), 0); // safe default
 }
 
 // ===========================================================================
@@ -183,4 +183,189 @@ fn test_run_program_with_default_config() {
     let ctx = run_program(program).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 100);
     assert!(ctx.psw.trap_halt);
+}
+
+// ===========================================================================
+// Phase 8: ISR wiring and interrupt completion tests
+// ===========================================================================
+
+#[test]
+fn test_setiv_div_by_zero_handler_executes_and_reti_resumes() {
+    // SETIV registers a handler for Arithmetic trap (trap_id=0).
+    // Div by zero fires the trap, handler runs, RETI resumes after the div.
+    let program = vec![
+        Instruction::SetIV { trap_id: 0, target: "ARITH_HANDLER".into() },
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::ILdi { dst: 1, imm: 0 },
+        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // trap_arith fires
+        // After RETI, execution resumes here (PC was saved before handler jump)
+        Instruction::ILdi { dst: 3, imm: 77 },
+        Instruction::Halt,
+        // Handler:
+        Instruction::Label("ARITH_HANDLER".into()),
+        Instruction::ILdi { dst: 15, imm: 99 }, // marker: handler ran
+        Instruction::Reti,
+    ];
+
+    let ctx = run_program(program).unwrap();
+
+    assert_eq!(ctx.iregs.get(15).unwrap(), 99, "Handler should have run");
+    assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should resume after handler");
+    assert!(ctx.psw.trap_halt, "Should halt normally");
+    assert!(!ctx.psw.trap_arith, "RETI should have cleared trap_arith");
+}
+
+#[test]
+fn test_unregistered_trap_falls_through_to_halt() {
+    // No SETIV: div by zero with no handler → default behavior (halt)
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::ILdi { dst: 1, imm: 0 },
+        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 },
+        Instruction::ILdi { dst: 3, imm: 999 }, // should NOT execute
+    ];
+
+    let ctx = run_program(program).unwrap();
+
+    assert!(ctx.psw.trap_halt, "Should halt on unhandled trap");
+    assert_eq!(ctx.iregs.get(3).unwrap(), 0, "Should not reach instruction after trap");
+}
+
+#[test]
+fn test_maskable_trap_ignored_when_interrupts_disabled() {
+    // With enable_interrupts=false, maskable traps are silently ignored
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::ILdi { dst: 1, imm: 0 },
+        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // trap_arith fires
+        Instruction::ILdi { dst: 3, imm: 77 },         // should execute (trap ignored)
+    ];
+
+    let config = SimConfig {
+        fidelity_threshold: None,
+        max_cycles: Some(100),
+        enable_interrupts: Some(false),
+    };
+
+    let ctx = run_program_with_config(program, &config).unwrap();
+
+    assert!(!ctx.psw.trap_halt, "Should NOT halt when interrupts disabled");
+    assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should continue");
+}
+
+#[test]
+fn test_reti_with_empty_call_stack_halts() {
+    // RETI with no call stack entry acts as HALT
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 1 },
+        Instruction::Reti,
+        Instruction::ILdi { dst: 1, imm: 999 },
+    ];
+
+    let ctx = run_program(program).unwrap();
+
+    assert!(ctx.psw.trap_halt);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0, "Should not execute after RETI-halt");
+}
+
+#[test]
+fn test_setiv_invalid_trap_id_returns_error() {
+    let program = vec![
+        Instruction::SetIV { trap_id: 5, target: "HANDLER".into() },
+        Instruction::Label("HANDLER".into()),
+        Instruction::Halt,
+    ];
+
+    let result = run_program(program);
+    assert!(result.is_err(), "Invalid trap_id should return error");
+}
+
+#[test]
+fn test_fidelity_threshold_wiring() {
+    // Verify SimConfig.fidelity_threshold is wired to context config
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 1 },
+        Instruction::Halt,
+    ];
+
+    let config = SimConfig {
+        fidelity_threshold: Some(0.85),
+        max_cycles: Some(100),
+        enable_interrupts: Some(true),
+    };
+
+    let ctx = run_program_with_config(program, &config).unwrap();
+
+    assert!((ctx.config.min_superposition - 0.85).abs() < f64::EPSILON);
+    assert!((ctx.config.min_entanglement - 0.85).abs() < f64::EPSILON);
+}
+
+#[test]
+fn test_setiv_unresolved_label_returns_error() {
+    // SetIV referencing a label that does not exist should return UnresolvedLabel error
+    let program = vec![
+        Instruction::SetIV { trap_id: 0, target: "NONEXISTENT".into() },
+        Instruction::Halt,
+    ];
+
+    let result = run_program(program);
+    assert!(result.is_err(), "SetIV with unresolved label should return error");
+}
+
+#[test]
+fn test_imod_by_zero_halts_via_isr() {
+    // IMod by zero should also set trap_arith and halt through ISR dispatch
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::ILdi { dst: 1, imm: 0 },
+        Instruction::IMod { dst: 2, lhs: 0, rhs: 1 },
+    ];
+
+    let ctx = run_program(program).unwrap();
+    assert!(ctx.psw.trap_halt, "IMod by zero should halt via ISR default");
+    assert_eq!(ctx.iregs.get(2).unwrap(), 0, "IMod by zero should set dst to 0");
+}
+
+#[test]
+fn test_setiv_overwrites_previous_handler() {
+    // Registering a second handler for the same trap_id should overwrite the first.
+    // First handler sets R15=11, second handler sets R15=22.
+    let program = vec![
+        Instruction::SetIV { trap_id: 0, target: "HANDLER_A".into() },
+        Instruction::SetIV { trap_id: 0, target: "HANDLER_B".into() }, // overwrite
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::ILdi { dst: 1, imm: 0 },
+        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // trigger trap
+        Instruction::Halt,
+        Instruction::Label("HANDLER_A".into()),
+        Instruction::ILdi { dst: 15, imm: 11 },
+        Instruction::Reti,
+        Instruction::Label("HANDLER_B".into()),
+        Instruction::ILdi { dst: 15, imm: 22 },
+        Instruction::Reti,
+    ];
+
+    let ctx = run_program(program).unwrap();
+    assert_eq!(ctx.iregs.get(15).unwrap(), 22, "Second handler should have run (overwrite)");
+    assert!(ctx.psw.trap_halt, "Should halt normally");
+}
+
+#[test]
+fn test_imod_by_zero_with_handler_resumes() {
+    // Like the IDiv handler test, but for IMod
+    let program = vec![
+        Instruction::SetIV { trap_id: 0, target: "ARITH_HANDLER".into() },
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::ILdi { dst: 1, imm: 0 },
+        Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, // trap_arith fires
+        Instruction::ILdi { dst: 3, imm: 77 },
+        Instruction::Halt,
+        Instruction::Label("ARITH_HANDLER".into()),
+        Instruction::ILdi { dst: 15, imm: 99 },
+        Instruction::Reti,
+    ];
+
+    let ctx = run_program(program).unwrap();
+    assert_eq!(ctx.iregs.get(15).unwrap(), 99, "Handler should have run");
+    assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should resume after handler");
 }

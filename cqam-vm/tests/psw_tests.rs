@@ -85,3 +85,69 @@ fn test_clear() {
     assert!(!psw.qf);
     assert!(!psw.trap_halt);
 }
+
+// ===========================================================================
+// Phase 8: clear_maskable_traps and check_pending_traps tests
+// ===========================================================================
+
+#[test]
+fn test_clear_maskable_traps_clears_arith_quantum_sync() {
+    let mut psw = ProgramStateWord::new();
+    psw.trap_arith = true;
+    psw.int_quantum_err = true;
+    psw.int_sync_fail = true;
+
+    psw.clear_maskable_traps();
+
+    assert!(!psw.trap_arith, "trap_arith should be cleared");
+    assert!(!psw.int_quantum_err, "int_quantum_err should be cleared");
+    assert!(!psw.int_sync_fail, "int_sync_fail should be cleared");
+}
+
+#[test]
+fn test_clear_maskable_traps_does_not_clear_halt() {
+    let mut psw = ProgramStateWord::new();
+    psw.trap_halt = true;
+    psw.trap_arith = true;
+
+    psw.clear_maskable_traps();
+
+    assert!(psw.trap_halt, "trap_halt (NMI-level) must NOT be cleared by clear_maskable_traps");
+    assert!(!psw.trap_arith, "trap_arith should be cleared");
+}
+
+#[test]
+fn test_check_pending_traps_priority_order() {
+    // When multiple traps are pending, the highest-priority one is returned.
+    // Priority: halt > arith > quantum_err > sync_fail
+    let mut psw = ProgramStateWord::new();
+
+    // All maskable traps pending
+    psw.trap_arith = true;
+    psw.int_quantum_err = true;
+    psw.int_sync_fail = true;
+    assert_eq!(psw.check_pending_traps(), Some(PendingTrap::Arithmetic));
+
+    // Remove arith, quantum_err should be next
+    psw.trap_arith = false;
+    assert_eq!(psw.check_pending_traps(), Some(PendingTrap::QuantumError));
+
+    // Remove quantum_err, sync_fail should be next
+    psw.int_quantum_err = false;
+    assert_eq!(psw.check_pending_traps(), Some(PendingTrap::SyncFailure));
+
+    // Remove sync_fail, none pending
+    psw.int_sync_fail = false;
+    assert_eq!(psw.check_pending_traps(), None);
+}
+
+#[test]
+fn test_check_pending_traps_halt_overrides_all() {
+    let mut psw = ProgramStateWord::new();
+    psw.trap_halt = true;
+    psw.trap_arith = true;
+    psw.int_quantum_err = true;
+    psw.int_sync_fail = true;
+
+    assert_eq!(psw.check_pending_traps(), Some(PendingTrap::Halt));
+}

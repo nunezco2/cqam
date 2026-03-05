@@ -58,6 +58,7 @@ pub enum Trap {
 /// - Maskable Arithmetic: sets trap_arith flag, continues with default value
 /// - Maskable QuantumError: sets int_quantum_err flag
 /// - Maskable SyncFailure: sets int_sync_fail flag
+#[derive(Clone)]
 pub struct IsrTable {
     /// Handlers for non-maskable interrupts.
     nmi_handlers: HashMap<NmiTrap, usize>,
@@ -113,34 +114,33 @@ impl Default for IsrTable {
 
 /// Handle a trap according to the two-level interrupt model.
 ///
-/// - NMI traps always fire. If a handler is registered, execution jumps
+/// - NMI traps always fire. If a handler address is provided, execution jumps
 ///   to the handler (with the current PC saved on the call stack for RETI).
-///   If no handler is registered, the default action (usually halt) applies.
+///   If no handler is provided, the default action (usually halt) applies.
 ///
 /// - Maskable traps check `enable_interrupts`. If interrupts are disabled,
-///   the trap is silently ignored (or a default value is substituted).
-///   If interrupts are enabled, the handler is invoked (or default action
-///   applies if no handler is registered).
+///   the trap is silently ignored. If enabled, the handler is invoked (or
+///   default action applies if no handler is provided).
 ///
 /// # Parameters
 ///
 /// - `trap`: The trap to handle.
 /// - `ctx`: The execution context.
-/// - `isr`: The ISR vector table.
+/// - `handler_addr`: Pre-looked-up handler address (avoids borrow conflict
+///   since IsrTable lives inside ExecutionContext).
 /// - `enable_interrupts`: Whether maskable interrupts are enabled.
 pub fn handle_trap(
     trap: Trap,
     ctx: &mut ExecutionContext,
-    isr: &IsrTable,
+    handler_addr: Option<usize>,
     enable_interrupts: bool,
 ) {
     match &trap {
         Trap::Nmi(nmi) => {
             // NMI always fires
-            if let Some(handler_addr) = isr.get_handler(&trap) {
-                // Save current PC for RETI (use call stack)
+            if let Some(addr) = handler_addr {
                 ctx.call_stack.push(ctx.pc);
-                ctx.pc = handler_addr;
+                ctx.pc = addr;
             } else {
                 // Default NMI behavior
                 match nmi {
@@ -161,25 +161,20 @@ pub fn handle_trap(
                 return;
             }
 
-            if let Some(handler_addr) = isr.get_handler(&trap) {
+            if let Some(addr) = handler_addr {
                 ctx.call_stack.push(ctx.pc);
-                ctx.pc = handler_addr;
+                ctx.pc = addr;
             } else {
                 // Default maskable behavior
                 match maskable {
                     MaskableTrap::Arithmetic => {
-                        log::error!("TRAP: Arithmetic fault at PC {}", ctx.pc);
-                        ctx.psw.trap_arith = true;
                         ctx.psw.trap_halt = true;
                     }
                     MaskableTrap::QuantumError => {
-                        log::warn!("INTERRUPT: Quantum fidelity failure at PC {}", ctx.pc);
-                        ctx.psw.int_quantum_err = true;
                         ctx.psw.trap_halt = true;
                     }
                     MaskableTrap::SyncFailure => {
-                        log::warn!("INTERRUPT: Hybrid sync failure at PC {}", ctx.pc);
-                        ctx.psw.int_sync_fail = true;
+                        ctx.psw.trap_halt = true;
                     }
                 }
             }

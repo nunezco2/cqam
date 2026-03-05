@@ -431,6 +431,15 @@ impl QasmFormat for Instruction {
             Instruction::Label(name) => {
                 vec![format!("// @cqam.label {}", name)]
             }
+
+            // -- Interrupt handling (no QASM equivalent) ---------------------
+
+            Instruction::Reti => {
+                vec!["// @cqam.reti".to_string()]
+            }
+            Instruction::SetIV { trap_id, target } => {
+                vec![format!("// @cqam.setiv trap={}, target={}", trap_id, target)]
+            }
         }
     }
 }
@@ -662,6 +671,10 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::Label(name) => {
             used.labels.push(name.clone());
         }
+
+        // -- Interrupt handling --
+        Instruction::Reti => {}
+        Instruction::SetIV { .. } => {}
     }
 }
 

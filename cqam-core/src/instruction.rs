@@ -262,11 +262,42 @@ pub enum Instruction {
     /// - mean/mode/argmax/variance (10-13): H[src] -> F[dst] or R[dst]
     ///   func: reduction function ID (see reduce_fn module)
     HReduce { src: u8, dst: u8, func: u8 },
+
+    // -- Interrupt handling (Phase 8) -----------------------------------------
+
+    /// Return from interrupt handler.
+    /// Pop saved PC from call stack, clear maskable trap flags, resume.
+    Reti,
+
+    /// Set interrupt vector: register a handler address for a trap ID.
+    /// trap_id: 0=Arithmetic, 1=QuantumError, 2=SyncFailure
+    /// target: label name (resolved to address during encoding)
+    SetIV { trap_id: u8, target: String },
 }
 
 // =============================================================================
 // Named constant modules for numeric IDs
 // =============================================================================
+
+/// Trap IDs for SetIV instruction.
+pub mod trap_id {
+    /// Arithmetic fault (division by zero, overflow).
+    pub const ARITHMETIC: u8 = 0;
+    /// Quantum fidelity dropped below threshold.
+    pub const QUANTUM_ERROR: u8 = 1;
+    /// Hybrid branch synchronization failure.
+    pub const SYNC_FAILURE: u8 = 2;
+}
+
+/// Helper: name string for a trap ID (for display/debug).
+pub fn trap_id_name(id: u8) -> &'static str {
+    match id {
+        trap_id::ARITHMETIC => "arithmetic",
+        trap_id::QUANTUM_ERROR => "quantum_error",
+        trap_id::SYNC_FAILURE => "sync_failure",
+        _ => "unknown",
+    }
+}
 
 /// Distribution IDs for QPrep.
 pub mod dist_id {

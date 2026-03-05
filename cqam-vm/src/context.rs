@@ -11,6 +11,7 @@ use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMem, QMem};
 use cqam_core::register::{IntRegFile, FloatRegFile, ComplexRegFile, HybridRegFile};
 use cqam_sim::density_matrix::DensityMatrix;
+use crate::isr::IsrTable;
 use crate::resource::ResourceTracker;
 use crate::psw::ProgramStateWord;
 use crate::simconfig::QuantumFidelityThreshold;
@@ -57,6 +58,9 @@ pub struct ExecutionContext {
     /// Quantum fidelity thresholds for interrupt generation.
     pub config: QuantumFidelityThreshold,
 
+    /// ISR vector table for trap handler dispatch.
+    pub isr_table: IsrTable,
+
     /// Cumulative resource usage tracker.
     pub resource_tracker: ResourceTracker,
 
@@ -87,6 +91,7 @@ impl ExecutionContext {
             call_stack: Vec::new(),
             psw: ProgramStateWord::new(),
             config: QuantumFidelityThreshold::default(),
+            isr_table: IsrTable::new(),
             resource_tracker: ResourceTracker::new(),
             labels: HashMap::new(),
             program,

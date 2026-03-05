@@ -190,7 +190,34 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             }
         }
         "RET" => Ok(Instruction::Ret),
+        "RETI" => Ok(Instruction::Reti),
         "HALT" => Ok(Instruction::Halt),
+        "SETIV" => {
+            if ops.len() != 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("SETIV requires 2 operands, got {}", ops.len()),
+                });
+            }
+            let trap_id = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("SETIV: invalid trap ID '{}'", ops[0]),
+            })?;
+            if trap_id > 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("SETIV: trap ID must be 0-2, got {}", trap_id),
+                });
+            }
+            let target = ops[1].to_string();
+            if target.is_empty() {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "SETIV: missing target label".to_string(),
+                });
+            }
+            Ok(Instruction::SetIV { trap_id, target })
+        }
 
         // -- Quantum ----------------------------------------------------------
         "QPREP" => {

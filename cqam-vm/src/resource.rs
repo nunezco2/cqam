@@ -233,6 +233,14 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Interrupt handling: 1 cycle
+        Instruction::Reti
+        | Instruction::SetIV { .. } => ResourceDelta {
+            time: 1,
+            space: 0,
+            ..Default::default()
+        },
+
         // No-op / labels: zero cost
         Instruction::Nop
         | Instruction::Label(_) => ResourceDelta::default(),

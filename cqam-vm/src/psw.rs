@@ -77,6 +77,21 @@ impl ProgramStateWord {
         self.cf = true;
     }
 
+    /// Clear all maskable trap/interrupt flags.
+    ///
+    /// Called by RETI to acknowledge that the interrupt handler has
+    /// completed servicing the trap. Clears:
+    /// - trap_arith
+    /// - int_quantum_err
+    /// - int_sync_fail
+    ///
+    /// Does NOT clear trap_halt (that is an NMI-level flag).
+    pub fn clear_maskable_traps(&mut self) {
+        self.trap_arith = false;
+        self.int_quantum_err = false;
+        self.int_sync_fail = false;
+    }
+
     /// Read a PSW flag by numeric ID.
     ///
     /// Flag IDs (matching `flag_id` constants in `instruction.rs`):

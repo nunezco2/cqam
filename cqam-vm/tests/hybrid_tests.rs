@@ -531,16 +531,16 @@ fn test_multiple_sequential_fork_merge_pairs() {
         "Expected at least 2 completed forks, got {}", fm.completed_forks.len());
 }
 
-/// Fork that encounters a division-by-zero error. The error should
-/// propagate through the ForkManager at HMERGE time.
+/// Fork that encounters a division-by-zero trap. The trap sets trap_arith
+/// flag and execution continues (trap flag is set, not a hard error).
 #[test]
-fn test_fork_error_propagation_div_by_zero() {
+fn test_fork_div_by_zero_sets_trap_flag() {
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 42 },    // 0
         Instruction::ILdi { dst: 1, imm: 0 },     // 1: divisor = 0
         Instruction::HFork,                        // 2: fork
         // Both main and fork execute this div-by-zero:
-        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // 3: BOOM
+        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // 3: trap_arith
         Instruction::HMerge,                       // 4
         Instruction::Halt,                         // 5
     ];
@@ -548,28 +548,21 @@ fn test_fork_error_propagation_div_by_zero() {
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
 
-    // Main hits the div-by-zero first (before reaching HMERGE), so
-    // run_program itself returns Err
+    // Division by zero now sets trap_arith flag instead of returning Err
     let result = cqam_vm::executor::run_program(&mut ctx, &mut fm);
-    assert!(result.is_err());
-    let msg = format!("{}", result.unwrap_err());
-    assert!(msg.contains("Division by zero"), "Expected div-by-zero error, got: {}", msg);
+    assert!(result.is_ok());
+    assert!(ctx.psw.trap_arith);
 }
 
 /// Fork where only the fork encounters an error (main skips the error path).
-/// This tests that HMERGE propagates the fork thread's error.
+/// Fork thread with div-by-zero now sets trap_arith (not hard error).
+/// The fork thread completes with the trap flag set.
 #[test]
-fn test_fork_thread_error_propagated_at_merge() {
-    // We need the fork to hit an error while main does not.
-    // Strategy: Main jumps over the error; fork also runs the jump but
-    // since fork is a full copy, it behaves identically. So instead,
-    // we test that when a fork thread returns Err, join_all surfaces it.
-    //
-    // Directly test ForkManager.spawn_fork with a program that errors.
+fn test_fork_thread_div_by_zero_completes_with_trap() {
     let error_program = vec![
         Instruction::ILdi { dst: 0, imm: 1 },
         Instruction::ILdi { dst: 1, imm: 0 },
-        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // div by zero
+        Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // div by zero -> trap_arith
         Instruction::Halt,
     ];
 
@@ -577,11 +570,10 @@ fn test_fork_thread_error_propagated_at_merge() {
     let mut fm = ForkManager::new();
     fm.spawn_fork(fork_ctx).unwrap();
 
-    // join_all should return the error from the fork thread
-    let result = fm.join_all();
-    assert!(result.is_err());
-    let msg = format!("{}", result.unwrap_err());
-    assert!(msg.contains("Fork thread returned error"), "Got: {}", msg);
+    // join_all should succeed (trap is a flag, not an error)
+    fm.join_all().unwrap();
+    assert_eq!(fm.completed_forks.len(), 1);
+    assert!(fm.completed_forks[0].psw.trap_arith);
 }
 
 /// Fork depth limit: attempting to fork beyond max_depth returns ForkError.

@@ -753,11 +753,11 @@ fn error_decode_invalid_opcode_0x40() {
 }
 
 #[test]
-fn error_decode_invalid_opcode_in_gap_0x2d() {
-    // 0x2D is reserved but not assigned
+fn decode_reti_opcode_0x2d() {
+    // 0x2D is now assigned to RETI
     let word: u32 = 0x2D_000000;
-    let result = decode(word);
-    assert!(result.is_err());
+    let result = decode(word).unwrap();
+    assert_eq!(result, Instruction::Reti);
 }
 
 #[test]
@@ -1051,7 +1051,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2D_u8, 0x2E, 0x2F, 0x3F, 0x40, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2F_u8, 0x3F, 0x40, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,

@@ -77,9 +77,9 @@ pub mod op {
     pub const HALT: u8 = 0x2B;
     pub const LABEL: u8 = 0x2C;
 
-    // -- Reserved control flow (0x2D-0x2F) ------------------------------------
-    // pub const RETI:  u8 = 0x2D;  // reserved for Phase 5.4
-    // pub const SETIV: u8 = 0x2E;  // reserved for Phase 5.4
+    // -- Interrupt handling (0x2D-0x2E) ---------------------------------------
+    pub const RETI: u8 = 0x2D;
+    pub const SETIV: u8 = 0x2E;
 
     // -- Quantum operations (0x30-0x34) ---------------------------------------
     pub const QPREP: u8 = 0x30;
@@ -163,6 +163,7 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::Halt => Ok(encode_n(op::HALT)),
         Instruction::HFork => Ok(encode_n(op::HFORK)),
         Instruction::HMerge => Ok(encode_n(op::HMERGE)),
+        Instruction::Reti => Ok(encode_n(op::RETI)),
 
         // -- RRR-format (3-register) ------------------------------------------
         Instruction::IAdd { dst, lhs, rhs } => encode_rrr(op::IADD, *dst, *lhs, *rhs),
@@ -243,6 +244,10 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             let addr = resolve_label_u16(target, label_map)?;
             encode_jr(op::HCEXEC, *flag, addr)
         }
+        Instruction::SetIV { trap_id, target } => {
+            let addr = resolve_label_u16(target, label_map)?;
+            encode_jr(op::SETIV, *trap_id, addr)
+        }
 
         // -- QP-format (quantum prepare) --------------------------------------
         Instruction::QPrep { dst, dist } => encode_qp(op::QPREP, *dst, *dist),
@@ -321,6 +326,7 @@ pub fn decode_with_debug(
         op::HALT => Ok(Instruction::Halt),
         op::HFORK => Ok(Instruction::HFork),
         op::HMERGE => Ok(Instruction::HMerge),
+        op::RETI => Ok(Instruction::Reti),
 
         // -- RRR-format (3-register) ------------------------------------------
         op::IADD => decode_rrr(word, |dst, lhs, rhs| Instruction::IAdd { dst, lhs, rhs }),
@@ -502,6 +508,14 @@ pub fn decode_with_debug(
                 target: format!("@{}", addr),
             })
         }
+        op::SETIV => {
+            let trap_id = extract_reg4(word, 20);
+            let addr = extract_u16(word);
+            Ok(Instruction::SetIV {
+                trap_id,
+                target: format!("@{}", addr),
+            })
+        }
 
         // -- QP-format (quantum prepare) --------------------------------------
         op::QPREP => {
@@ -656,6 +670,8 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::HMERGE => Some("HMERGE"),
         op::HCEXEC => Some("HCEXEC"),
         op::HREDUCE => Some("HREDUCE"),
+        op::RETI => Some("RETI"),
+        op::SETIV => Some("SETIV"),
         _ => None,
     }
 }
