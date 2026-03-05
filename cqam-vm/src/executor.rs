@@ -1,9 +1,11 @@
 // cqam-vm/src/executor.rs
 //
-// Phase 4: Full instruction dispatch returning Result<(), CqamError>.
+// Phase 6: Full instruction dispatch returning Result<(), CqamError>.
 // Routes quantum ops to qop.rs, hybrid ops to hybrid.rs.
+// Passes ForkManager through to hybrid dispatch.
 
 use crate::context::ExecutionContext;
+use crate::fork::ForkManager;
 use crate::resource::resource_cost;
 use crate::qop::execute_qop;
 use crate::hybrid::execute_hybrid;
@@ -19,7 +21,11 @@ use cqam_core::instruction::Instruction;
 ///
 /// This function is the SOLE authority on PC advancement. The runner loop
 /// must NOT call `ctx.advance_pc()` independently.
-pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<(), CqamError> {
+pub fn execute_instruction(
+    ctx: &mut ExecutionContext,
+    instr: &Instruction,
+    fork_mgr: &mut ForkManager,
+) -> Result<(), CqamError> {
     match instr {
         // =====================================================================
         // Integer arithmetic (R-file)
@@ -391,7 +397,7 @@ pub fn execute_instruction(ctx: &mut ExecutionContext, instr: &Instruction) -> R
         | Instruction::HMerge
         | Instruction::HCExec { .. }
         | Instruction::HReduce { .. } => {
-            let jumped = execute_hybrid(ctx, instr)?;
+            let jumped = execute_hybrid(ctx, instr, fork_mgr)?;
             if jumped {
                 return Ok(()); // HCExec took a jump: do NOT advance PC
             }
@@ -428,10 +434,13 @@ fn validate_indirect_addr(val: i64, max_addr: u16, instruction: &str) -> Result<
 /// Run a full program to termination.
 ///
 /// Returns `Ok(())` on normal completion, or `Err(CqamError)` on runtime error.
-pub fn run_program(ctx: &mut ExecutionContext) -> Result<(), CqamError> {
+///
+/// This is also the execution loop used by fork threads (with their own
+/// nested ForkManager).
+pub fn run_program(ctx: &mut ExecutionContext, fork_mgr: &mut ForkManager) -> Result<(), CqamError> {
     while ctx.current_line().is_some() {
         let instr = ctx.program[ctx.pc].clone();
-        execute_instruction(ctx, &instr)?;
+        execute_instruction(ctx, &instr, fork_mgr)?;
 
         if ctx.psw.trap_halt {
             break;

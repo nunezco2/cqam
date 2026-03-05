@@ -1,26 +1,42 @@
 // cqam-vm/src/hybrid.rs
 //
-// Phase 4: Hybrid operation handlers returning Result<bool, CqamError>.
+// Phase 6: Hybrid operation handlers with real HFORK/HMERGE parallelism.
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::{Instruction, reduce_fn};
 use cqam_core::register::HybridValue;
 use crate::context::ExecutionContext;
+use crate::fork::ForkManager;
 
-/// Execute a hybrid instruction.
+/// Execute a hybrid instruction with fork/merge support.
 ///
 /// Returns `Ok(true)` if a jump was taken (HCExec with condition true), in which
 /// case the caller should NOT advance the PC. Returns `Ok(false)` otherwise.
 /// Returns `Err(CqamError)` on runtime errors (unknown reduce function, type mismatch).
-pub fn execute_hybrid(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<bool, CqamError> {
+pub fn execute_hybrid(
+    ctx: &mut ExecutionContext,
+    instr: &Instruction,
+    fork_mgr: &mut ForkManager,
+) -> Result<bool, CqamError> {
     match instr {
         Instruction::HFork => {
+            // Clone context for the fork thread
+            let mut fork_ctx = ctx.clone();
+            fork_ctx.pc = ctx.pc + 1; // Fork starts at next instruction
+            fork_ctx.psw.hf = true;
+            fork_ctx.psw.forked = true;
+
+            fork_mgr.spawn_fork(fork_ctx)?;
+
             ctx.psw.hf = true;
             ctx.psw.forked = true;
             Ok(false)
         }
 
         Instruction::HMerge => {
+            if fork_mgr.active_count() > 0 {
+                fork_mgr.join_all()?;
+            }
             ctx.psw.hf = true;
             ctx.psw.merged = true;
             Ok(false)

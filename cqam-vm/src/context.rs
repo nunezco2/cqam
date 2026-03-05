@@ -19,6 +19,7 @@ use crate::simconfig::QuantumFidelityThreshold;
 ///
 /// Contains the program counter, all register files, memory banks,
 /// call stack, PSW, and the program being executed.
+#[derive(Clone)]
 pub struct ExecutionContext {
     /// Program counter: index into `self.program`.
     pub pc: usize,

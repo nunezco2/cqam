@@ -2,6 +2,7 @@ use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
+use cqam_vm::fork::ForkManager;
 use crate::simconfig::SimConfig;
 
 /// Run a complete CQAM program to termination with simulator configuration.
@@ -9,11 +10,7 @@ use crate::simconfig::SimConfig;
 /// The executor (`execute_instruction`) is the sole authority on PC advancement.
 /// This loop must NOT call `ctx.advance_pc()` independently.
 ///
-/// The `config` parameter controls:
-/// - `max_cycles`: maximum number of instructions to execute before halting
-///   (prevents infinite loops). Default: 1000.
-/// - `enable_interrupts`: whether maskable interrupts are checked each cycle.
-///   Default: true.
+/// Creates a ForkManager internally for HFORK/HMERGE support.
 ///
 /// Returns `Ok(ExecutionContext)` on normal completion, or `Err(CqamError)`
 /// on runtime error.
@@ -22,6 +19,7 @@ pub fn run_program_with_config(
     config: &SimConfig,
 ) -> Result<ExecutionContext, CqamError> {
     let mut ctx = ExecutionContext::new(program);
+    let mut fork_mgr = ForkManager::new();
     let max_cycles = config.max_cycles.unwrap_or(1000);
     let enable_interrupts = config.enable_interrupts.unwrap_or(true);
     let mut cycle_count: usize = 0;
@@ -34,7 +32,7 @@ pub fn run_program_with_config(
         }
 
         let instr = ctx.program[ctx.pc].clone();
-        execute_instruction(&mut ctx, &instr)?;
+        execute_instruction(&mut ctx, &instr, &mut fork_mgr)?;
         cycle_count += 1;
 
         if ctx.psw.trap_halt {

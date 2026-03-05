@@ -68,6 +68,11 @@ pub enum CqamError {
 
     /// Memory address out of range during register-indirect access.
     AddressOutOfRange { instruction: String, address: i64 },
+
+    /// Error during fork/merge thread operations.
+    ///
+    /// Covers fork depth limit exceeded, thread panic, thread join failure.
+    ForkError(String),
 }
 
 impl fmt::Display for CqamError {
@@ -149,6 +154,9 @@ impl fmt::Display for CqamError {
                     "Address out of range in {}: {} is not a valid CMEM address (0..65535)",
                     instruction, address
                 )
+            }
+            CqamError::ForkError(msg) => {
+                write!(f, "Fork error: {}", msg)
             }
         }
     }

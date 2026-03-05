@@ -16,7 +16,7 @@ pub struct ResourceDelta {
 }
 
 /// Tracks cumulative resource usage across execution.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct ResourceTracker {
     pub total_time: usize,
     pub total_space: usize,
