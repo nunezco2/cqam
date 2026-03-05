@@ -1,15 +1,15 @@
 // cqam-as/src/main.rs
 //
-// Phase 5: CLI entry point for the CQAM assembler/disassembler.
+// Phase 5/7: CLI entry point for the CQAM assembler/disassembler.
 //
 // Usage:
-//   cqam-as --assemble input.cqam [-o output.cqb] [--debug]
+//   cqam-as --assemble input.cqam [-o output.cqb] [--debug] [--strip]
 //   cqam-as --disassemble input.cqb [-o output.cqam]
 
 use std::path::{Path, PathBuf};
 use std::process;
 
-use cqam_as::assembler;
+use cqam_as::assembler::{self, AssemblyOptions};
 use cqam_as::binary;
 use cqam_as::disassembler;
 use cqam_core::error::CqamError;
@@ -28,6 +28,9 @@ struct CliArgs {
     output: PathBuf,
     /// Whether to include debug symbols in the .cqb output.
     include_debug: bool,
+    /// Whether to strip label pseudo-instructions from the binary.
+    /// Only meaningful in Assemble mode. Default: false.
+    strip_labels: bool,
 }
 
 /// The two operating modes.
@@ -46,6 +49,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut input: Option<PathBuf> = None;
     let mut output: Option<PathBuf> = None;
     let mut include_debug = false;
+    let mut strip_labels = false;
 
     let mut i = 1; // skip program name
     while i < args.len() {
@@ -82,6 +86,9 @@ fn parse_args() -> Result<CliArgs, String> {
             "--debug" => {
                 include_debug = true;
             }
+            "--strip" => {
+                strip_labels = true;
+            }
             other => {
                 // If we haven't got an input file yet, treat this as the input
                 if input.is_none() {
@@ -103,6 +110,7 @@ fn parse_args() -> Result<CliArgs, String> {
         input,
         output,
         include_debug,
+        strip_labels,
     })
 }
 
@@ -135,7 +143,12 @@ fn main() {
     };
 
     let result = match args.mode {
-        Mode::Assemble => run_assemble(&args.input, &args.output, args.include_debug),
+        Mode::Assemble => run_assemble(
+            &args.input,
+            &args.output,
+            args.include_debug,
+            args.strip_labels,
+        ),
         Mode::Disassemble => run_disassemble(&args.input, &args.output),
     };
 
@@ -146,16 +159,31 @@ fn main() {
 }
 
 /// Run the assembler pipeline: read .cqam -> parse -> assemble -> write .cqb.
-fn run_assemble(input: &Path, output: &Path, include_debug: bool) -> Result<(), CqamError> {
+fn run_assemble(
+    input: &Path,
+    output: &Path,
+    include_debug: bool,
+    strip_labels: bool,
+) -> Result<(), CqamError> {
     let source = std::fs::read_to_string(input)?;
-    let result = assembler::assemble_source(&source)?;
+    let options = AssemblyOptions { strip_labels };
+    let result = assembler::assemble_source_with_options(&source, &options)?;
 
-    eprintln!(
-        "Assembled {} instructions ({} labels, entry at word {})",
-        result.code.len(),
-        result.debug_symbols.len(),
-        result.entry_point,
-    );
+    if strip_labels {
+        eprintln!(
+            "Assembled {} instructions ({} labels stripped, entry at word {})",
+            result.code.len(),
+            result.debug_symbols.len(),
+            result.entry_point,
+        );
+    } else {
+        eprintln!(
+            "Assembled {} instructions ({} labels, entry at word {})",
+            result.code.len(),
+            result.debug_symbols.len(),
+            result.entry_point,
+        );
+    }
 
     binary::write_cqb_file(output, &result, include_debug)?;
 
@@ -195,7 +223,7 @@ fn run_disassemble(input: &Path, output: &Path) -> Result<(), CqamError> {
 /// Print usage information to stderr.
 fn print_usage() {
     eprintln!("Usage:");
-    eprintln!("  cqam-as --assemble <input.cqam> [-o <output.cqb>] [--debug]");
+    eprintln!("  cqam-as --assemble <input.cqam> [-o <output.cqb>] [--debug] [--strip]");
     eprintln!("  cqam-as --disassemble <input.cqb> [-o <output.cqam>]");
     eprintln!();
     eprintln!("Options:");
@@ -203,4 +231,5 @@ fn print_usage() {
     eprintln!("  --disassemble   Disassemble .cqb binary to .cqam text");
     eprintln!("  -o <path>       Output file path (default: derived from input)");
     eprintln!("  --debug         Include debug symbol table in .cqb output");
+    eprintln!("  --strip         Remove label pseudo-instructions from binary output");
 }
