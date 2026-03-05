@@ -399,7 +399,7 @@ fn test_decl_hybrid_regs() {
 fn test_decl_cmem() {
     let used = UsedRegisters { uses_cmem: true, ..Default::default() };
     let decls = emit_declarations(&used);
-    assert!(decls.contains("array[int[64], 65536] CMEM;"));
+    assert!(decls.contains("// @cqam.cmem: classical memory (65536 x int[64]) -- no QASM equivalent"));
 }
 
 #[test]
@@ -433,7 +433,7 @@ fn test_decl_ordering() {
     let complex_pos = decls.find("float[64] Z0_re;").unwrap();
     let quantum_pos = decls.find("qubit[16] q0;").unwrap();
     let hybrid_pos = decls.find("bit[16] H0;").unwrap();
-    let cmem_pos = decls.find("CMEM").unwrap();
+    let cmem_pos = decls.find("@cqam.cmem").unwrap();
 
     assert!(int_pos < float_pos);
     assert!(float_pos < complex_pos);
@@ -520,7 +520,7 @@ fn test_emit_ixor() {
 fn test_emit_inot() {
     let instr = Instruction::INot { dst: 9, src: 10 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R9 = ~R10;");
+    assert_eq!(lines[0], "R9 = R10 ^ -1;");
 }
 
 #[test]
@@ -555,35 +555,35 @@ fn test_emit_ildi_negative() {
 fn test_emit_ildm() {
     let instr = Instruction::ILdm { dst: 0, addr: 256 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R0 = CMEM[256];");
+    assert_eq!(lines[0], "// @cqam.ldm R0, CMEM[256]");
 }
 
 #[test]
 fn test_emit_istr() {
     let instr = Instruction::IStr { src: 3, addr: 100 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "CMEM[100] = R3;");
+    assert_eq!(lines[0], "// @cqam.str CMEM[100], R3");
 }
 
 #[test]
 fn test_emit_ieq() {
     let instr = Instruction::IEq { dst: 0, lhs: 1, rhs: 2 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R0 = (R1 == R2) ? 1 : 0;");
+    assert_eq!(lines[0], "if (R1 == R2) { R0 = 1; } else { R0 = 0; }");
 }
 
 #[test]
 fn test_emit_ilt() {
     let instr = Instruction::ILt { dst: 3, lhs: 4, rhs: 5 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R3 = (R4 < R5) ? 1 : 0;");
+    assert_eq!(lines[0], "if (R4 < R5) { R3 = 1; } else { R3 = 0; }");
 }
 
 #[test]
 fn test_emit_igt() {
     let instr = Instruction::IGt { dst: 6, lhs: 7, rhs: 8 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R6 = (R7 > R8) ? 1 : 0;");
+    assert_eq!(lines[0], "if (R7 > R8) { R6 = 1; } else { R6 = 0; }");
 }
 
 // -- Float arithmetic --
@@ -627,35 +627,35 @@ fn test_emit_fldi() {
 fn test_emit_fldm() {
     let instr = Instruction::FLdm { dst: 1, addr: 200 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "F1 = CMEM[200];");
+    assert_eq!(lines[0], "// @cqam.ldm F1, CMEM[200]");
 }
 
 #[test]
 fn test_emit_fstr() {
     let instr = Instruction::FStr { src: 2, addr: 300 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "CMEM[300] = F2;");
+    assert_eq!(lines[0], "// @cqam.str CMEM[300], F2");
 }
 
 #[test]
 fn test_emit_feq() {
     let instr = Instruction::FEq { dst: 0, lhs: 1, rhs: 2 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R0 = (F1 == F2) ? 1 : 0;");
+    assert_eq!(lines[0], "if (F1 == F2) { R0 = 1; } else { R0 = 0; }");
 }
 
 #[test]
 fn test_emit_flt() {
     let instr = Instruction::FLt { dst: 3, lhs: 4, rhs: 5 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R3 = (F4 < F5) ? 1 : 0;");
+    assert_eq!(lines[0], "if (F4 < F5) { R3 = 1; } else { R3 = 0; }");
 }
 
 #[test]
 fn test_emit_fgt() {
     let instr = Instruction::FGt { dst: 6, lhs: 7, rhs: 8 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "R6 = (F7 > F8) ? 1 : 0;");
+    assert_eq!(lines[0], "if (F7 > F8) { R6 = 1; } else { R6 = 0; }");
 }
 
 // -- Complex arithmetic (lowered to paired floats) --
@@ -682,25 +682,29 @@ fn test_emit_zsub() {
 fn test_emit_zmul() {
     let instr = Instruction::ZMul { dst: 0, lhs: 1, rhs: 2 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines.len(), 3);
+    assert_eq!(lines.len(), 5);
     assert!(lines[0].starts_with("// ZMUL:"));
-    assert!(lines[1].contains("Z0_re ="));
+    assert!(lines[1].contains("_tmp_re"));
     assert!(lines[1].contains("Z1_re * Z2_re"));
     assert!(lines[1].contains("Z1_im * Z2_im"));
-    assert!(lines[2].contains("Z0_im ="));
+    assert!(lines[2].contains("_tmp_im"));
     assert!(lines[2].contains("Z1_re * Z2_im"));
     assert!(lines[2].contains("Z1_im * Z2_re"));
+    assert_eq!(lines[3], "Z0_re = _tmp_re;");
+    assert_eq!(lines[4], "Z0_im = _tmp_im;");
 }
 
 #[test]
 fn test_emit_zdiv() {
     let instr = Instruction::ZDiv { dst: 3, lhs: 1, rhs: 2 };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines.len(), 4);
+    assert_eq!(lines.len(), 6);
     assert!(lines[0].starts_with("// ZDIV:"));
-    assert!(lines[1].starts_with("// denom"));
-    assert!(lines[2].contains("Z3_re ="));
-    assert!(lines[3].contains("Z3_im ="));
+    assert!(lines[1].contains("_denom"));
+    assert!(lines[2].contains("_tmp_re"));
+    assert!(lines[3].contains("_tmp_im"));
+    assert_eq!(lines[4], "Z3_re = _tmp_re;");
+    assert_eq!(lines[5], "Z3_im = _tmp_im;");
 }
 
 #[test]
@@ -717,8 +721,8 @@ fn test_emit_zldm() {
     let instr = Instruction::ZLdm { dst: 1, addr: 100 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 2);
-    assert_eq!(lines[0], "Z1_re = CMEM[100];");
-    assert_eq!(lines[1], "Z1_im = CMEM[101];");
+    assert_eq!(lines[0], "// @cqam.ldm Z1_re, CMEM[100]");
+    assert_eq!(lines[1], "// @cqam.ldm Z1_im, CMEM[101]");
 }
 
 #[test]
@@ -726,8 +730,8 @@ fn test_emit_zstr() {
     let instr = Instruction::ZStr { src: 2, addr: 200 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 2);
-    assert_eq!(lines[0], "CMEM[200] = Z2_re;");
-    assert_eq!(lines[1], "CMEM[201] = Z2_im;");
+    assert_eq!(lines[0], "// @cqam.str CMEM[200], Z2_re");
+    assert_eq!(lines[1], "// @cqam.str CMEM[201], Z2_im");
 }
 
 // -- Register-indirect memory --
@@ -737,7 +741,7 @@ fn test_emit_ildx() {
     let instr = Instruction::ILdx { dst: 0, addr_reg: 3 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0], "R0 = CMEM[R3];  // indirect");
+    assert_eq!(lines[0], "// @cqam.ldx R0, CMEM[R3]");
 }
 
 #[test]
@@ -745,7 +749,7 @@ fn test_emit_istrx() {
     let instr = Instruction::IStrx { src: 5, addr_reg: 2 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0], "CMEM[R2] = R5;  // indirect");
+    assert_eq!(lines[0], "// @cqam.strx CMEM[R2], R5");
 }
 
 #[test]
@@ -753,7 +757,7 @@ fn test_emit_fldx() {
     let instr = Instruction::FLdx { dst: 1, addr_reg: 4 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0], "F1 = CMEM[R4];  // indirect");
+    assert_eq!(lines[0], "// @cqam.ldx F1, CMEM[R4]");
 }
 
 #[test]
@@ -761,7 +765,7 @@ fn test_emit_fstrx() {
     let instr = Instruction::FStrx { src: 7, addr_reg: 6 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0], "CMEM[R6] = F7;  // indirect");
+    assert_eq!(lines[0], "// @cqam.strx CMEM[R6], F7");
 }
 
 #[test]
@@ -769,8 +773,8 @@ fn test_emit_zldx() {
     let instr = Instruction::ZLdx { dst: 2, addr_reg: 8 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 2);
-    assert_eq!(lines[0], "Z2_re = CMEM[R8];  // indirect");
-    assert_eq!(lines[1], "Z2_im = CMEM[R8 + 1];  // indirect");
+    assert_eq!(lines[0], "// @cqam.ldx Z2_re, CMEM[R8]");
+    assert_eq!(lines[1], "// @cqam.ldx Z2_im, CMEM[R8 + 1]");
 }
 
 #[test]
@@ -778,8 +782,8 @@ fn test_emit_zstrx() {
     let instr = Instruction::ZStrx { src: 3, addr_reg: 9 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 2);
-    assert_eq!(lines[0], "CMEM[R9] = Z3_re;  // indirect");
-    assert_eq!(lines[1], "CMEM[R9 + 1] = Z3_im;  // indirect");
+    assert_eq!(lines[0], "// @cqam.strx CMEM[R9], Z3_re");
+    assert_eq!(lines[1], "// @cqam.strx CMEM[R9 + 1], Z3_im");
 }
 
 // -- Type conversion --
@@ -820,14 +824,14 @@ fn test_emit_cvtzf() {
 fn test_emit_jmp() {
     let instr = Instruction::Jmp { target: "LOOP".into() };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "goto LOOP;");
+    assert_eq!(lines[0], "// @cqam.jmp LOOP");
 }
 
 #[test]
 fn test_emit_jif() {
     let instr = Instruction::Jif { pred: 0, target: "THEN".into() };
     let lines = instr.to_qasm(&fragment_config());
-    assert_eq!(lines[0], "if (R0 != 0) goto THEN;");
+    assert_eq!(lines[0], "if (bool(R0)) { } // @cqam.branch THEN");
 }
 
 #[test]
@@ -993,7 +997,7 @@ fn test_emit_label() {
     let instr = Instruction::Label("LOOP".into());
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
-    assert_eq!(lines[0], "LOOP:");
+    assert_eq!(lines[0], "// @cqam.label LOOP");
 }
 
 // ===========================================================================
@@ -1186,7 +1190,7 @@ fn test_label_emitted_in_body() {
     ];
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
-    assert!(output.contains("START:"));
+    assert!(output.contains("// @cqam.label START"));
 }
 
 #[test]
@@ -1219,8 +1223,9 @@ fn test_standalone_indirect_declarations() {
     assert!(output.contains("float[64] Z4_im;"));
     // Should declare CMEM
     assert!(output.contains("CMEM"));
-    // Body should contain indirect comments
-    assert!(output.contains("// indirect"));
+    // Body should contain pragma comments for indirect memory access
+    assert!(output.contains("@cqam.ldx"));
+    assert!(output.contains("@cqam.strx"));
 }
 
 #[test]

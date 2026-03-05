@@ -69,7 +69,7 @@ fn test_qasm_integer_bitwise() {
     assert!(output.contains("R0 = R1 & R2;"));
     assert!(output.contains("R3 = R4 | R5;"));
     assert!(output.contains("R6 = R7 ^ R8;"));
-    assert!(output.contains("R9 = ~R10;"));
+    assert!(output.contains("R9 = R10 ^ -1;"));
     assert!(output.contains("R11 = R12 << 4;"));
     assert!(output.contains("R13 = R14 >> 2;"));
 }
@@ -84,13 +84,13 @@ fn test_qasm_integer_memory() {
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
 
-    // CMEM should be declared since ILdm and IStr are present.
-    assert!(output.contains("array[int[64], 65536] CMEM;"));
+    // CMEM should be declared since ILdm and IStr are present (as pragma comment).
+    assert!(output.contains("@cqam.cmem"));
 
-    // Body lines reference CMEM
+    // Body lines reference CMEM via pragma comments
     assert!(output.contains("R0 = 42;"));
-    assert!(output.contains("R1 = CMEM[100];"));
-    assert!(output.contains("CMEM[200] = R0;"));
+    assert!(output.contains("// @cqam.ldm R1, CMEM[100]"));
+    assert!(output.contains("// @cqam.str CMEM[200], R0"));
 }
 
 #[test]
@@ -102,9 +102,9 @@ fn test_qasm_integer_comparison() {
     ];
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
-    assert!(output.contains("R0 = (R1 == R2) ? 1 : 0;"));
-    assert!(output.contains("R3 = (R4 < R5) ? 1 : 0;"));
-    assert!(output.contains("R6 = (R7 > R8) ? 1 : 0;"));
+    assert!(output.contains("if (R1 == R2) { R0 = 1; } else { R0 = 0; }"));
+    assert!(output.contains("if (R4 < R5) { R3 = 1; } else { R3 = 0; }"));
+    assert!(output.contains("if (R7 > R8) { R6 = 1; } else { R6 = 0; }"));
 }
 
 // ===========================================================================
@@ -143,7 +143,7 @@ fn test_qasm_float_comparison_cross_file() {
     assert!(output.contains("int[64] R0;"));
     assert!(output.contains("float[64] F1;"));
     assert!(output.contains("float[64] F2;"));
-    assert!(output.contains("R0 = (F1 == F2) ? 1 : 0;"));
+    assert!(output.contains("if (F1 == F2) { R0 = 1; } else { R0 = 0; }"));
 }
 
 #[test]
@@ -156,9 +156,9 @@ fn test_qasm_float_memory() {
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
     assert!(output.contains("F0 = 314.0;"));
-    assert!(output.contains("F1 = CMEM[500];"));
-    assert!(output.contains("CMEM[600] = F0;"));
-    assert!(output.contains("array[int[64], 65536] CMEM;"));
+    assert!(output.contains("// @cqam.ldm F1, CMEM[500]"));
+    assert!(output.contains("// @cqam.str CMEM[600], F0"));
+    assert!(output.contains("@cqam.cmem"));
 }
 
 // ===========================================================================
@@ -194,8 +194,11 @@ fn test_qasm_complex_mul_lowering() {
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
     // Check cross-term multiplication formula
-    assert!(output.contains("Z0_re = Z1_re * Z2_re - Z1_im * Z2_im;"));
-    assert!(output.contains("Z0_im = Z1_re * Z2_im + Z1_im * Z2_re;"));
+    // ZMul now uses temporaries to avoid aliasing
+    assert!(output.contains("float[64] _tmp_re = Z1_re * Z2_re - Z1_im * Z2_im;"));
+    assert!(output.contains("float[64] _tmp_im = Z1_re * Z2_im + Z1_im * Z2_re;"));
+    assert!(output.contains("Z0_re = _tmp_re;"));
+    assert!(output.contains("Z0_im = _tmp_im;"));
 }
 
 #[test]
@@ -229,11 +232,11 @@ fn test_qasm_complex_memory() {
     ];
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
-    assert!(output.contains("Z1_re = CMEM[100];"));
-    assert!(output.contains("Z1_im = CMEM[101];"));
-    assert!(output.contains("CMEM[200] = Z2_re;"));
-    assert!(output.contains("CMEM[201] = Z2_im;"));
-    assert!(output.contains("array[int[64], 65536] CMEM;"));
+    assert!(output.contains("// @cqam.ldm Z1_re, CMEM[100]"));
+    assert!(output.contains("// @cqam.ldm Z1_im, CMEM[101]"));
+    assert!(output.contains("// @cqam.str CMEM[200], Z2_re"));
+    assert!(output.contains("// @cqam.str CMEM[201], Z2_im"));
+    assert!(output.contains("@cqam.cmem"));
 }
 
 // ===========================================================================
@@ -350,9 +353,9 @@ fn test_qasm_label_emission() {
     ];
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);
-    assert!(output.contains("START:"));
-    assert!(output.contains("LOOP:"));
-    assert!(output.contains("goto LOOP;"));
+    assert!(output.contains("// @cqam.label START"));
+    assert!(output.contains("// @cqam.label LOOP"));
+    assert!(output.contains("// @cqam.jmp LOOP"));
 }
 
 #[test]
@@ -366,8 +369,8 @@ fn test_qasm_control_flow() {
     ];
     let config = EmitConfig::fragment();
     let output = emit_qasm_program(&program, &config);
-    assert!(output.contains("goto END;"));
-    assert!(output.contains("if (R0 != 0) goto THEN;"));
+    assert!(output.contains("// @cqam.jmp END"));
+    assert!(output.contains("if (bool(R0)) { } // @cqam.branch THEN"));
     assert!(output.contains("// CALL FUNC"));
     assert!(output.contains("// RET"));
     assert!(output.contains("// HALT"));
@@ -500,7 +503,7 @@ fn test_qasm_all_register_files_declared() {
     assert!(output.contains("float[64]"));
     assert!(output.contains("qubit[16]"));
     assert!(output.contains("bit[16]"));
-    assert!(output.contains("array[int[64], 65536] CMEM;"));
+    assert!(output.contains("@cqam.cmem"));
 }
 
 #[test]

@@ -150,7 +150,7 @@ impl QasmFormat for Instruction {
                 vec![format!("R{} = R{} ^ R{};", dst, lhs, rhs)]
             }
             Instruction::INot { dst, src } => {
-                vec![format!("R{} = ~R{};", dst, src)]
+                vec![format!("R{} = R{} ^ -1;", dst, src)]
             }
             Instruction::IShl { dst, src, amt } => {
                 vec![format!("R{} = R{} << {};", dst, src, amt)]
@@ -165,22 +165,22 @@ impl QasmFormat for Instruction {
                 vec![format!("R{} = {};", dst, imm)]
             }
             Instruction::ILdm { dst, addr } => {
-                vec![format!("R{} = CMEM[{}];", dst, addr)]
+                vec![format!("// @cqam.ldm R{}, CMEM[{}]", dst, addr)]
             }
             Instruction::IStr { src, addr } => {
-                vec![format!("CMEM[{}] = R{};", addr, src)]
+                vec![format!("// @cqam.str CMEM[{}], R{}", addr, src)]
             }
 
             // -- Integer comparison ------------------------------------------
 
             Instruction::IEq { dst, lhs, rhs } => {
-                vec![format!("R{} = (R{} == R{}) ? 1 : 0;", dst, lhs, rhs)]
+                emit_comparison(*dst, "R", *lhs, "==", "R", *rhs)
             }
             Instruction::ILt { dst, lhs, rhs } => {
-                vec![format!("R{} = (R{} < R{}) ? 1 : 0;", dst, lhs, rhs)]
+                emit_comparison(*dst, "R", *lhs, "<", "R", *rhs)
             }
             Instruction::IGt { dst, lhs, rhs } => {
-                vec![format!("R{} = (R{} > R{}) ? 1 : 0;", dst, lhs, rhs)]
+                emit_comparison(*dst, "R", *lhs, ">", "R", *rhs)
             }
 
             // -- Float arithmetic --------------------------------------------
@@ -201,22 +201,22 @@ impl QasmFormat for Instruction {
                 vec![format!("F{} = {}.0;", dst, imm)]
             }
             Instruction::FLdm { dst, addr } => {
-                vec![format!("F{} = CMEM[{}];", dst, addr)]
+                vec![format!("// @cqam.ldm F{}, CMEM[{}]", dst, addr)]
             }
             Instruction::FStr { src, addr } => {
-                vec![format!("CMEM[{}] = F{};", addr, src)]
+                vec![format!("// @cqam.str CMEM[{}], F{}", addr, src)]
             }
 
             // -- Float comparison (result to int register) -------------------
 
             Instruction::FEq { dst, lhs, rhs } => {
-                vec![format!("R{} = (F{} == F{}) ? 1 : 0;", dst, lhs, rhs)]
+                emit_comparison(*dst, "F", *lhs, "==", "F", *rhs)
             }
             Instruction::FLt { dst, lhs, rhs } => {
-                vec![format!("R{} = (F{} < F{}) ? 1 : 0;", dst, lhs, rhs)]
+                emit_comparison(*dst, "F", *lhs, "<", "F", *rhs)
             }
             Instruction::FGt { dst, lhs, rhs } => {
-                vec![format!("R{} = (F{} > F{}) ? 1 : 0;", dst, lhs, rhs)]
+                emit_comparison(*dst, "F", *lhs, ">", "F", *rhs)
             }
 
             // -- Complex arithmetic (lowered to paired floats) ---------------
@@ -237,27 +237,34 @@ impl QasmFormat for Instruction {
                 vec![
                     format!("// ZMUL: Z{} = Z{} * Z{}", dst, lhs, rhs),
                     format!(
-                        "Z{}_re = Z{}_re * Z{}_re - Z{}_im * Z{}_im;",
-                        dst, lhs, rhs, lhs, rhs
+                        "float[64] _tmp_re = Z{}_re * Z{}_re - Z{}_im * Z{}_im;",
+                        lhs, rhs, lhs, rhs
                     ),
                     format!(
-                        "Z{}_im = Z{}_re * Z{}_im + Z{}_im * Z{}_re;",
-                        dst, lhs, rhs, lhs, rhs
+                        "float[64] _tmp_im = Z{}_re * Z{}_im + Z{}_im * Z{}_re;",
+                        lhs, rhs, lhs, rhs
                     ),
+                    format!("Z{}_re = _tmp_re;", dst),
+                    format!("Z{}_im = _tmp_im;", dst),
                 ]
             }
             Instruction::ZDiv { dst, lhs, rhs } => {
                 vec![
                     format!("// ZDIV: Z{} = Z{} / Z{}", dst, lhs, rhs),
-                    format!("// denom = Z{}_re^2 + Z{}_im^2", rhs, rhs),
                     format!(
-                        "Z{}_re = (Z{}_re * Z{}_re + Z{}_im * Z{}_im) / (Z{}_re * Z{}_re + Z{}_im * Z{}_im);",
-                        dst, lhs, rhs, lhs, rhs, rhs, rhs, rhs, rhs
+                        "float[64] _denom = Z{}_re * Z{}_re + Z{}_im * Z{}_im;",
+                        rhs, rhs, rhs, rhs
                     ),
                     format!(
-                        "Z{}_im = (Z{}_im * Z{}_re - Z{}_re * Z{}_im) / (Z{}_re * Z{}_re + Z{}_im * Z{}_im);",
-                        dst, lhs, rhs, lhs, rhs, rhs, rhs, rhs, rhs
+                        "float[64] _tmp_re = (Z{}_re * Z{}_re + Z{}_im * Z{}_im) / _denom;",
+                        lhs, rhs, lhs, rhs
                     ),
+                    format!(
+                        "float[64] _tmp_im = (Z{}_im * Z{}_re - Z{}_re * Z{}_im) / _denom;",
+                        lhs, rhs, lhs, rhs
+                    ),
+                    format!("Z{}_re = _tmp_re;", dst),
+                    format!("Z{}_im = _tmp_im;", dst),
                 ]
             }
 
@@ -271,41 +278,41 @@ impl QasmFormat for Instruction {
             }
             Instruction::ZLdm { dst, addr } => {
                 vec![
-                    format!("Z{}_re = CMEM[{}];", dst, addr),
-                    format!("Z{}_im = CMEM[{}];", dst, addr + 1),
+                    format!("// @cqam.ldm Z{}_re, CMEM[{}]", dst, addr),
+                    format!("// @cqam.ldm Z{}_im, CMEM[{}]", dst, addr + 1),
                 ]
             }
             Instruction::ZStr { src, addr } => {
                 vec![
-                    format!("CMEM[{}] = Z{}_re;", addr, src),
-                    format!("CMEM[{}] = Z{}_im;", addr + 1, src),
+                    format!("// @cqam.str CMEM[{}], Z{}_re", addr, src),
+                    format!("// @cqam.str CMEM[{}], Z{}_im", addr + 1, src),
                 ]
             }
 
             // -- Register-indirect memory ------------------------------------
 
             Instruction::ILdx { dst, addr_reg } => {
-                vec![format!("R{} = CMEM[R{}];  // indirect", dst, addr_reg)]
+                vec![format!("// @cqam.ldx R{}, CMEM[R{}]", dst, addr_reg)]
             }
             Instruction::IStrx { src, addr_reg } => {
-                vec![format!("CMEM[R{}] = R{};  // indirect", addr_reg, src)]
+                vec![format!("// @cqam.strx CMEM[R{}], R{}", addr_reg, src)]
             }
             Instruction::FLdx { dst, addr_reg } => {
-                vec![format!("F{} = CMEM[R{}];  // indirect", dst, addr_reg)]
+                vec![format!("// @cqam.ldx F{}, CMEM[R{}]", dst, addr_reg)]
             }
             Instruction::FStrx { src, addr_reg } => {
-                vec![format!("CMEM[R{}] = F{};  // indirect", addr_reg, src)]
+                vec![format!("// @cqam.strx CMEM[R{}], F{}", addr_reg, src)]
             }
             Instruction::ZLdx { dst, addr_reg } => {
                 vec![
-                    format!("Z{}_re = CMEM[R{}];  // indirect", dst, addr_reg),
-                    format!("Z{}_im = CMEM[R{} + 1];  // indirect", dst, addr_reg),
+                    format!("// @cqam.ldx Z{}_re, CMEM[R{}]", dst, addr_reg),
+                    format!("// @cqam.ldx Z{}_im, CMEM[R{} + 1]", dst, addr_reg),
                 ]
             }
             Instruction::ZStrx { src, addr_reg } => {
                 vec![
-                    format!("CMEM[R{}] = Z{}_re;  // indirect", addr_reg, src),
-                    format!("CMEM[R{} + 1] = Z{}_im;  // indirect", addr_reg, src),
+                    format!("// @cqam.strx CMEM[R{}], Z{}_re", addr_reg, src),
+                    format!("// @cqam.strx CMEM[R{} + 1], Z{}_im", addr_reg, src),
                 ]
             }
 
@@ -330,10 +337,10 @@ impl QasmFormat for Instruction {
             // -- Control flow ------------------------------------------------
 
             Instruction::Jmp { target } => {
-                vec![format!("goto {};", target)]
+                vec![format!("// @cqam.jmp {}", target)]
             }
             Instruction::Jif { pred, target } => {
-                vec![format!("if (R{} != 0) goto {};", pred, target)]
+                vec![format!("if (bool(R{})) {{ }} // @cqam.branch {}", pred, target)]
             }
             Instruction::Call { target } => {
                 vec![format!("// CALL {} [no QASM equivalent]", target)]
@@ -422,7 +429,7 @@ impl QasmFormat for Instruction {
                 vec![]
             }
             Instruction::Label(name) => {
-                vec![format!("{}:", name)]
+                vec![format!("// @cqam.label {}", name)]
             }
         }
     }
@@ -702,9 +709,9 @@ pub fn emit_declarations(used: &UsedRegisters) -> String {
         lines.push(format!("bit[16] H{};", r));
     }
 
-    // CMEM array
+    // CMEM (no QASM 3.0 equivalent — emit as pragma comment)
     if used.uses_cmem {
-        lines.push("array[int[64], 65536] CMEM;".to_string());
+        lines.push("// @cqam.cmem: classical memory (65536 x int[64]) -- no QASM equivalent".to_string());
     }
 
     lines.join("\n")
@@ -734,7 +741,18 @@ pub fn emit_kernel_stubs(
     for &kid in &used.kernel_ids {
         let kname = kernel_name(kid);
         lines.push(format!("gate {} q {{", kname));
-        lines.push(format!("    // {} kernel logic", kname));
+        match load_gate_template(&config.template_dir, kname) {
+            Some(body) => {
+                for line in body.lines() {
+                    if !line.trim().is_empty() {
+                        lines.push(format!("    {}", line));
+                    }
+                }
+            }
+            None => {
+                lines.push(format!("    // {} kernel logic", kname));
+            }
+        }
         lines.push("}".to_string());
     }
 
@@ -851,4 +869,40 @@ pub fn emit_qasm_program(
 /// "F" for float-producing reduction functions (func 6-13).
 fn hreduce_dst_file(func: u8) -> &'static str {
     if func <= 5 { "R" } else { "F" }
+}
+
+// ---------------------------------------------------------------------------
+// Helper: emit comparison as if/else (valid QASM 3.0)
+// ---------------------------------------------------------------------------
+
+/// Emit an if/else comparison block for comparison instructions.
+///
+/// Produces valid OpenQASM 3.0 (no ternary `?:` operator).
+fn emit_comparison(dst: u8, lhs_prefix: &str, lhs: u8, op: &str, rhs_prefix: &str, rhs: u8) -> Vec<String> {
+    vec![format!(
+        "if ({}{} {} {}{}) {{ R{} = 1; }} else {{ R{} = 0; }}",
+        lhs_prefix, lhs, op, rhs_prefix, rhs, dst, dst
+    )]
+}
+
+// ---------------------------------------------------------------------------
+// Helper: load kernel template for gate body
+// ---------------------------------------------------------------------------
+
+/// Load a kernel template for use inside a `gate` definition.
+///
+/// Replaces `{{DST}}` and `{{SRC}}` with the gate qubit parameter `q`.
+/// Strips `{{PARAM0}}` and `{{PARAM1}}` (classical registers cannot appear
+/// inside QASM 3.0 gate bodies).
+///
+/// Returns None if the template file does not exist.
+pub fn load_gate_template(template_dir: &str, kernel_name: &str) -> Option<String> {
+    let path = format!("{}/{}.qasm", template_dir, kernel_name);
+    let content = fs::read_to_string(Path::new(&path)).ok()?;
+    let substituted = content
+        .replace("{{DST}}", "q")
+        .replace("{{SRC}}", "q")
+        .replace("{{PARAM0}}", "/* ctx0 */")
+        .replace("{{PARAM1}}", "/* ctx1 */");
+    Some(substituted)
 }
