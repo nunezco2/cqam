@@ -4,7 +4,7 @@
 //! `DensityMatrix` simulation backend from `cqam-sim`.
 
 use cqam_core::error::CqamError;
-use cqam_core::instruction::{Instruction, dist_id, kernel_id, observe_mode};
+use cqam_core::instruction::{Instruction, dist_id, file_sel, kernel_id, observe_mode};
 use cqam_core::register::HybridValue;
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernel::Kernel;
@@ -296,6 +296,85 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     index: *src_q,
                 })
             }
+        }
+
+        Instruction::QPrepR { dst, dist_reg } => {
+            let dist_id_val = ctx.iregs.get(*dist_reg)? as u8;
+            let num_qubits = ctx.config.default_qubits;
+            let dm = match dist_id_val {
+                dist_id::UNIFORM => DensityMatrix::new_uniform(num_qubits),
+                dist_id::ZERO => DensityMatrix::new_zero_state(num_qubits),
+                dist_id::BELL => DensityMatrix::new_bell(),
+                dist_id::GHZ => DensityMatrix::new_ghz(num_qubits),
+                _ => {
+                    return Err(CqamError::UnknownDistribution(dist_id_val));
+                }
+            };
+            ctx.qregs[*dst as usize] = Some(dm);
+            Ok(())
+        }
+
+        Instruction::QEncode { dst, src_base, count, file_sel: fs } => {
+            let count_val = *count as usize;
+
+            // Pre-validate: count must be > 0 and a power of 2
+            if count_val == 0 || (count_val & (count_val - 1)) != 0 {
+                return Err(CqamError::TypeMismatch {
+                    instruction: "QENCODE".to_string(),
+                    detail: format!(
+                        "count must be a power of 2, got {}",
+                        count_val
+                    ),
+                });
+            }
+
+            // Build statevector from the selected register file
+            let mut psi: Vec<(f64, f64)> = Vec::with_capacity(count_val);
+            for i in 0..count_val {
+                let reg_idx = src_base + i as u8;
+                let amplitude: (f64, f64) = match *fs {
+                    file_sel::R_FILE => {
+                        let val = ctx.iregs.get(reg_idx)?;
+                        (val as f64, 0.0)
+                    }
+                    file_sel::F_FILE => {
+                        let val = ctx.fregs.get(reg_idx)?;
+                        (val, 0.0)
+                    }
+                    file_sel::Z_FILE => {
+                        ctx.zregs.get(reg_idx)?
+                    }
+                    _ => {
+                        return Err(CqamError::TypeMismatch {
+                            instruction: "QENCODE".to_string(),
+                            detail: format!("invalid file_sel: {}", fs),
+                        });
+                    }
+                };
+                psi.push(amplitude);
+            }
+
+            // Validate statevector is not all-zero before constructing DM
+            let norm_sq: f64 = psi.iter()
+                .map(|(re, im)| re * re + im * im)
+                .sum();
+            if norm_sq < 1e-30 {
+                return Err(CqamError::TypeMismatch {
+                    instruction: "QENCODE".to_string(),
+                    detail: "statevector has zero norm".to_string(),
+                });
+            }
+
+            // Delegate to DensityMatrix::from_statevector (handles normalization)
+            let dm = DensityMatrix::from_statevector(&psi).map_err(|e| {
+                CqamError::TypeMismatch {
+                    instruction: "QENCODE".to_string(),
+                    detail: e,
+                }
+            })?;
+
+            ctx.qregs[*dst as usize] = Some(dm);
+            Ok(())
         }
 
         _ => {

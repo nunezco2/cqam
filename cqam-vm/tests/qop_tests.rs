@@ -1314,3 +1314,521 @@ fn test_qkernelz_phase_shift_nonzero_preserves_diag() {
     assert!((dm.purity() - 1.0).abs() < 1e-10,
         "PhaseShift should preserve purity, got {}", dm.purity());
 }
+
+// =============================================================================
+// QPrepR tests (Phase 4)
+// =============================================================================
+
+#[test]
+fn test_qprepr_uniform() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Set R[0] = 0 (UNIFORM)
+    ctx.iregs.set(0, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+
+    assert!(ctx.qregs[0].is_some());
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-6, "Expected uniform 0.25, got {}", p);
+    }
+}
+
+#[test]
+fn test_qprepr_bell() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Set R[0] = 2 (BELL)
+    ctx.iregs.set(0, 2).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    // Bell state: |00> and |11> with equal probability
+    assert!((dm.get(0, 0).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(3, 3).0 - 0.5).abs() < 1e-10);
+    assert!((dm.get(1, 1).0).abs() < 1e-10);
+    assert!((dm.get(2, 2).0).abs() < 1e-10);
+}
+
+#[test]
+fn test_qprepr_invalid_dist() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Set R[0] = 99 (invalid)
+    ctx.iregs.set(0, 99).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 });
+    assert!(result.is_err());
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(err_msg.contains("distribution") || err_msg.contains("99"),
+        "Error should mention unknown distribution, got: {}", err_msg);
+}
+
+// =============================================================================
+// QEncode tests (Phase 4)
+// =============================================================================
+
+#[test]
+fn test_qencode_from_int() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Load R[0..3] with [1, 1, 1, 1]
+    for i in 0..4u8 {
+        ctx.iregs.set(i, 1).unwrap();
+    }
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 4, file_sel: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    // All equal amplitudes -> uniform-ish state
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-6, "Expected ~0.25, got {}", p);
+    }
+}
+
+#[test]
+fn test_qencode_from_float() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Load F[0..3] with [0.5, 0.5, 0.5, 0.5]
+    for i in 0..4u8 {
+        ctx.fregs.set(i, 0.5).unwrap();
+    }
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 4, file_sel: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    // All equal amplitudes -> uniform state after normalization
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-6, "Expected ~0.25, got {}", p);
+    }
+}
+
+#[test]
+fn test_qencode_from_complex() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Z[0] = (1, 0), Z[1] = (0, 0) -> |0> state after normalization
+    ctx.zregs.set(0, (1.0, 0.0)).unwrap();
+    ctx.zregs.set(1, (0.0, 0.0)).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 2,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    // |0> state: prob(0) = 1, prob(1) = 0
+    assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10);
+    assert!((dm.get(1, 1).0).abs() < 1e-10);
+}
+
+#[test]
+fn test_qencode_non_power_of_2() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    for i in 0..3u8 {
+        ctx.fregs.set(i, 1.0).unwrap();
+    }
+
+    let result = execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 3, file_sel: 1,
+    });
+    assert!(result.is_err());
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(err_msg.contains("power of 2"), "Error should mention power of 2, got: {}", err_msg);
+}
+
+#[test]
+fn test_qencode_normalizes() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Load unnormalized values: F[0]=3.0, F[1]=4.0
+    ctx.fregs.set(0, 3.0).unwrap();
+    ctx.fregs.set(1, 4.0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    // Trace should be 1 (normalized)
+    let trace = dm.get(0, 0).0 + dm.get(1, 1).0;
+    assert!((trace - 1.0).abs() < 1e-10,
+        "Trace should be 1.0 after normalization, got {}", trace);
+    // Specific probabilities: |3/5|^2 = 9/25, |4/5|^2 = 16/25
+    assert!((dm.get(0, 0).0 - 9.0/25.0).abs() < 1e-10);
+    assert!((dm.get(1, 1).0 - 16.0/25.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_qencode_count_zero() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    let result = execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 0, file_sel: 0,
+    });
+    assert!(result.is_err());
+}
+
+#[test]
+fn test_qencode_zero_norm() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // All-zero statevector
+    ctx.fregs.set(0, 0.0).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 1,
+    });
+    assert!(result.is_err());
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(err_msg.contains("zero norm"), "Error should mention zero norm, got: {}", err_msg);
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QPrepR equivalence with QPrep
+// =============================================================================
+
+/// QPrepR with each dist_id must produce the same density matrix as QPrep
+/// with the same dist literal. This validates that the register-indirect path
+/// dispatches through the same DensityMatrix constructors.
+#[test]
+fn test_qprepr_matches_qprep_uniform() {
+    let mut ctx_lit = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx_lit, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    let mut ctx_reg = ExecutionContext::new(vec![]);
+    ctx_reg.iregs.set(0, dist_id::UNIFORM as i64).unwrap();
+    execute_qop(&mut ctx_reg, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+
+    let dm_lit = ctx_lit.qregs[0].as_ref().unwrap();
+    let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
+    assert_eq!(dm_lit.num_qubits(), dm_reg.num_qubits());
+    assert_eq!(dm_lit.dimension(), dm_reg.dimension());
+    for i in 0..dm_lit.dimension() {
+        for j in 0..dm_lit.dimension() {
+            let (r1, i1) = dm_lit.get(i, j);
+            let (r2, i2) = dm_reg.get(i, j);
+            assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
+                "UNIFORM mismatch at ({},{}): ({},{}) vs ({},{})", i, j, r1, i1, r2, i2);
+        }
+    }
+}
+
+#[test]
+fn test_qprepr_matches_qprep_zero() {
+    let mut ctx_lit = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx_lit, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    let mut ctx_reg = ExecutionContext::new(vec![]);
+    ctx_reg.iregs.set(0, dist_id::ZERO as i64).unwrap();
+    execute_qop(&mut ctx_reg, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+
+    let dm_lit = ctx_lit.qregs[0].as_ref().unwrap();
+    let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
+    for i in 0..dm_lit.dimension() {
+        for j in 0..dm_lit.dimension() {
+            let (r1, i1) = dm_lit.get(i, j);
+            let (r2, i2) = dm_reg.get(i, j);
+            assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
+                "ZERO mismatch at ({},{})", i, j);
+        }
+    }
+}
+
+#[test]
+fn test_qprepr_matches_qprep_bell() {
+    let mut ctx_lit = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx_lit, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+
+    let mut ctx_reg = ExecutionContext::new(vec![]);
+    ctx_reg.iregs.set(0, dist_id::BELL as i64).unwrap();
+    execute_qop(&mut ctx_reg, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+
+    let dm_lit = ctx_lit.qregs[0].as_ref().unwrap();
+    let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
+    for i in 0..dm_lit.dimension() {
+        for j in 0..dm_lit.dimension() {
+            let (r1, i1) = dm_lit.get(i, j);
+            let (r2, i2) = dm_reg.get(i, j);
+            assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
+                "BELL mismatch at ({},{})", i, j);
+        }
+    }
+}
+
+#[test]
+fn test_qprepr_matches_qprep_ghz() {
+    let mut ctx_lit = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx_lit, &Instruction::QPrep { dst: 0, dist: dist_id::GHZ }).unwrap();
+
+    let mut ctx_reg = ExecutionContext::new(vec![]);
+    ctx_reg.iregs.set(0, dist_id::GHZ as i64).unwrap();
+    execute_qop(&mut ctx_reg, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+
+    let dm_lit = ctx_lit.qregs[0].as_ref().unwrap();
+    let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
+    for i in 0..dm_lit.dimension() {
+        for j in 0..dm_lit.dimension() {
+            let (r1, i1) = dm_lit.get(i, j);
+            let (r2, i2) = dm_reg.get(i, j);
+            assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
+                "GHZ mismatch at ({},{})", i, j);
+        }
+    }
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QPrepR edge cases
+// =============================================================================
+
+/// Negative register value wraps to large u8 -> UnknownDistribution error.
+#[test]
+fn test_qprepr_negative_dist_id_wraps() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // -1i64 as u8 = 255
+    ctx.iregs.set(0, -1).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 });
+    assert!(result.is_err());
+    let err_msg = format!("{}", result.unwrap_err());
+    assert!(err_msg.contains("distribution") || err_msg.contains("255"),
+        "Negative dist wraps to 255, error should reflect this, got: {}", err_msg);
+}
+
+/// Large positive value (256) wraps to 0 -> UNIFORM (same as dist_id=0).
+#[test]
+fn test_qprepr_large_value_wraps_modulo_256() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // 256 as u8 = 0 = UNIFORM
+    ctx.iregs.set(0, 256).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 }).unwrap();
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    // Should produce uniform (4-state, each prob = 0.25)
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-6, "256 wraps to 0 (UNIFORM), expected 0.25, got {}", p);
+    }
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QEncode count=1 (single amplitude)
+// =============================================================================
+
+/// count=1 produces a 0-qubit 1x1 density matrix. This is a degenerate case
+/// where the statevector has a single amplitude, normalized to 1.
+#[test]
+fn test_qencode_count_1_single_amplitude() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(0, 5.0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 1, file_sel: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    // 1 amplitude -> dimension 1, 0 qubits
+    assert_eq!(dm.dimension(), 1);
+    // The single entry should be (1.0, 0.0) after normalization
+    assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10,
+        "Single amplitude DM should have rho[0][0] = 1.0, got {}", dm.get(0, 0).0);
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QEncode with negative R-file integers
+// =============================================================================
+
+/// Negative integers from R-file are cast to f64, producing negative amplitudes.
+/// After normalization, the resulting state should have correct probabilities.
+#[test]
+fn test_qencode_r_file_negative_values() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // [-3, 4] -> amplitudes (-3, 0) and (4, 0) -> norm = 5
+    // probs: 9/25 and 16/25
+    ctx.iregs.set(0, -3).unwrap();
+    ctx.iregs.set(1, 4).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    assert!((dm.get(0, 0).0 - 9.0 / 25.0).abs() < 1e-10,
+        "Expected prob 9/25, got {}", dm.get(0, 0).0);
+    assert!((dm.get(1, 1).0 - 16.0 / 25.0).abs() < 1e-10,
+        "Expected prob 16/25, got {}", dm.get(1, 1).0);
+    // Off-diagonal should reflect negative sign: rho[0][1] = (-3/5)(4/5) = -12/25
+    assert!((dm.get(0, 1).0 - (-12.0 / 25.0)).abs() < 1e-10,
+        "Expected off-diag real = -12/25, got {}", dm.get(0, 1).0);
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QEncode from Z-file with complex amplitudes
+// =============================================================================
+
+/// Complex amplitudes from Z-file producing a known state.
+/// Z[0] = (1/sqrt(2), 0), Z[1] = (0, 1/sqrt(2)) -> |psi> = (1+i|1>)/sqrt(2)
+/// This is already normalized: |1/sqrt(2)|^2 + |i/sqrt(2)|^2 = 0.5 + 0.5 = 1.
+#[test]
+fn test_qencode_z_file_complex_amplitudes() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let s = std::f64::consts::FRAC_1_SQRT_2;
+    ctx.zregs.set(0, (s, 0.0)).unwrap();
+    ctx.zregs.set(1, (0.0, s)).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 2,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    // Both diagonal entries should be 0.5
+    assert!((dm.get(0, 0).0 - 0.5).abs() < 1e-10,
+        "Expected prob 0.5 for |0>, got {}", dm.get(0, 0).0);
+    assert!((dm.get(1, 1).0 - 0.5).abs() < 1e-10,
+        "Expected prob 0.5 for |1>, got {}", dm.get(1, 1).0);
+    // Off-diagonal: rho[0][1] = (1/sqrt(2))(0-i/sqrt(2))* = (1/sqrt(2))(-i/sqrt(2))* = ... wait
+    // rho[0][1] = psi[0] * conj(psi[1]) = (1/sqrt(2))*(0 - i/sqrt(2)) = (0, -1/2)
+    assert!((dm.get(0, 1).0).abs() < 1e-10,
+        "Expected off-diag real = 0, got {}", dm.get(0, 1).0);
+    assert!((dm.get(0, 1).1 - (-0.5)).abs() < 1e-10,
+        "Expected off-diag imag = -0.5, got {}", dm.get(0, 1).1);
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QEncode count=8 (max useful with 16 regs)
+// =============================================================================
+
+/// count=8 with 3-qubit state from float registers.
+#[test]
+fn test_qencode_count_8_from_floats() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Set up |0> state: first amplitude = 1.0, rest = 0.0
+    ctx.fregs.set(0, 1.0).unwrap();
+    for i in 1..8u8 {
+        ctx.fregs.set(i, 0.0).unwrap();
+    }
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 8, file_sel: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 3);
+    assert_eq!(dm.dimension(), 8);
+    // Should be |000> state
+    assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10);
+    for i in 1..8 {
+        assert!((dm.get(i, i).0).abs() < 1e-10,
+            "Non-zero diagonal at ({},{}): {}", i, i, dm.get(i, i).0);
+    }
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QEncode src_base near register limit
+// =============================================================================
+
+/// src_base=14, count=2 should work (registers 14 and 15).
+#[test]
+fn test_qencode_src_base_near_limit() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(14, 1.0).unwrap();
+    ctx.fregs.set(15, 0.0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 14, count: 2, file_sel: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10);
+}
+
+/// src_base=15, count=2 should fail: register 16 does not exist.
+#[test]
+fn test_qencode_src_base_overflow() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(15, 1.0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 15, count: 2, file_sel: 1,
+    });
+    assert!(result.is_err(),
+        "src_base=15 + count=2 accesses F[16], should produce RegisterOutOfBounds");
+}
+
+// =============================================================================
+// Phase 4 additional coverage: QEncode invalid file_sel at runtime
+// =============================================================================
+
+/// file_sel=3 should be caught by the parser, but if it reaches runtime
+/// the match arm in qop.rs should produce an error.
+#[test]
+fn test_qencode_invalid_file_sel_runtime() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 1).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 3,
+    });
+    assert!(result.is_err(), "file_sel=3 should produce error at runtime");
+}
+
+// =============================================================================
+// Phase 4 additional coverage: End-to-end pipeline
+// QEncode -> QKERNEL -> QOBSERVE -> HREDUCE
+// =============================================================================
+
+/// Full pipeline: encode a known state from F-file, apply init kernel,
+/// observe, and reduce to verify the chain works end-to-end.
+#[test]
+fn test_qencode_observe_reduce_pipeline() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Step 1: Load F[0..3] = [1, 0, 0, 0] -> |00> state
+    ctx.fregs.set(0, 1.0).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+    ctx.fregs.set(2, 0.0).unwrap();
+    ctx.fregs.set(3, 0.0).unwrap();
+
+    // Step 2: QEncode Q0 from F-file
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 4, file_sel: 1,
+    }).unwrap();
+
+    // Verify: Q0 should be |00> state
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 2);
+    assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10);
+
+    // Step 3: Apply Init kernel Q1 = kernel(Q0)
+    execute_qop(&mut ctx, &Instruction::QKernel {
+        dst: 1, src: 0, kernel: kernel_id::INIT, ctx0: 0, ctx1: 0,
+    }).unwrap();
+    assert!(ctx.qregs[1].is_some());
+
+    // Step 4: Observe Q1 -> H0
+    execute_qop(&mut ctx, &Instruction::QObserve {
+        dst_h: 0, src_q: 1, mode: observe_mode::DIST, ctx0: 0, ctx1: 0,
+    }).unwrap();
+
+    // Step 5: HReduce H0 -> R2 (argmax)
+    // (We can't easily call execute_hybrid from here, so just verify
+    // the observation result is a Dist.)
+    match ctx.hregs.get(0).unwrap() {
+        HybridValue::Dist(pairs) => {
+            let total_prob: f64 = pairs.iter().map(|(_, p)| p).sum();
+            assert!((total_prob - 1.0).abs() < 1e-6,
+                "Observed distribution probabilities should sum to 1.0, got {}", total_prob);
+        }
+        other => panic!("Expected Dist after QOBSERVE, got {:?}", other),
+    }
+}

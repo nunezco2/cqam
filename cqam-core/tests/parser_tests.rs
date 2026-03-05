@@ -1082,3 +1082,104 @@ HALT
     assert_eq!(program.len(), 6);
     assert_eq!(program[3], Instruction::QKernelZ { dst: 1, src: 0, kernel: 6, zctx0: 0, zctx1: 1 });
 }
+
+// ===========================================================================
+// QPREPR / QENCODE (Phase 4)
+// ===========================================================================
+
+#[test]
+fn test_parse_qprepr() {
+    assert_eq!(
+        parse_instruction("QPREPR Q0, R3").unwrap(),
+        Instruction::QPrepR { dst: 0, dist_reg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qprepr_max_regs() {
+    assert_eq!(
+        parse_instruction("QPREPR Q7, R15").unwrap(),
+        Instruction::QPrepR { dst: 7, dist_reg: 15 }
+    );
+}
+
+#[test]
+fn test_parse_qprepr_missing_operand() {
+    assert!(parse_instruction("QPREPR Q0").is_err());
+}
+
+#[test]
+fn test_parse_qprepr_too_many_operands() {
+    assert!(parse_instruction("QPREPR Q0, R3, R4").is_err());
+}
+
+#[test]
+fn test_parse_qprepr_invalid_register() {
+    assert!(parse_instruction("QPREPR Q0, 5").is_err());
+}
+
+#[test]
+fn test_parse_qencode_r_file() {
+    assert_eq!(
+        parse_instruction("QENCODE Q0, R0, 4, 0").unwrap(),
+        Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: 0 }
+    );
+}
+
+#[test]
+fn test_parse_qencode_f_file() {
+    assert_eq!(
+        parse_instruction("QENCODE Q1, F2, 2, 1").unwrap(),
+        Instruction::QEncode { dst: 1, src_base: 2, count: 2, file_sel: 1 }
+    );
+}
+
+#[test]
+fn test_parse_qencode_z_file() {
+    assert_eq!(
+        parse_instruction("QENCODE Q3, Z0, 8, 2").unwrap(),
+        Instruction::QEncode { dst: 3, src_base: 0, count: 8, file_sel: 2 }
+    );
+}
+
+#[test]
+fn test_parse_qencode_invalid_file_sel() {
+    assert!(parse_instruction("QENCODE Q0, R0, 4, 5").is_err());
+}
+
+#[test]
+fn test_parse_qencode_missing_operand() {
+    assert!(parse_instruction("QENCODE Q0, R0, 4").is_err());
+}
+
+#[test]
+fn test_parse_qencode_too_many_operands() {
+    assert!(parse_instruction("QENCODE Q0, R0, 4, 0, extra").is_err());
+}
+
+#[test]
+fn test_parse_program_qprepr_workflow() {
+    let source = "\
+ILDI R0, 0
+QPREPR Q0, R0
+QOBSERVE H0, Q0
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 4);
+    assert_eq!(program[1], Instruction::QPrepR { dst: 0, dist_reg: 0 });
+}
+
+#[test]
+fn test_parse_program_qencode_workflow() {
+    let source = "\
+FLDI F0, 1
+FLDI F1, 0
+QENCODE Q0, F0, 2, 1
+QOBSERVE H0, Q0
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 5);
+    assert_eq!(program[2], Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: 1 });
+}

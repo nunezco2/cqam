@@ -360,6 +360,58 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             Ok(Instruction::QStore { src_q, addr })
         }
 
+        "QPREPR" => {
+            if ops.len() != 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QPREPR requires 2 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPR: invalid destination register '{}'", ops[0]),
+            })?;
+            let dist_reg = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPR: invalid dist_reg register '{}'", ops[1]),
+            })?;
+            Ok(Instruction::QPrepR { dst, dist_reg })
+        }
+        "QENCODE" => {
+            if ops.len() != 4 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QENCODE requires 4 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QENCODE: invalid destination register '{}'", ops[0]),
+            })?;
+            let src_base = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QENCODE: invalid source base register '{}'", ops[1]),
+            })?;
+            let count = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QENCODE: invalid count '{}'", ops[2]),
+            })?;
+            let file_sel = parse_u8(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QENCODE: invalid file_sel '{}'", ops[3]),
+            })?;
+            if file_sel > 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!(
+                        "QENCODE: file_sel must be 0 (R), 1 (F), or 2 (Z), got {}",
+                        file_sel
+                    ),
+                });
+            }
+            Ok(Instruction::QEncode { dst, src_base, count, file_sel })
+        }
+
         // -- Hybrid -----------------------------------------------------------
         "HFORK" => Ok(Instruction::HFork),
         "HMERGE" => Ok(Instruction::HMerge),

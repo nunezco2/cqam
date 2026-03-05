@@ -402,6 +402,8 @@ pub fn execute_instruction(
         // =====================================================================
 
         Instruction::QPrep { .. }
+        | Instruction::QPrepR { .. }
+        | Instruction::QEncode { .. }
         | Instruction::QKernel { .. }
         | Instruction::QKernelF { .. }
         | Instruction::QKernelZ { .. }

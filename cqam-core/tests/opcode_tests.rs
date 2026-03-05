@@ -1123,7 +1123,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2F_u8, 0x3F, 0x43, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2F_u8, 0x3F, 0x45, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,
@@ -1385,4 +1385,98 @@ fn roundtrip_qkernelz_zero_values() {
         dst: 0, src: 0, kernel: 0, zctx0: 0, zctx1: 0,
     };
     assert_eq!(roundtrip(&instr), instr);
+}
+
+// =============================================================================
+// Round-trip tests: QR-format (QPrepR -- Phase 4)
+// =============================================================================
+
+#[test]
+fn roundtrip_qprepr() {
+    let instr = Instruction::QPrepR { dst: 0, dist_reg: 3 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qprepr_max_values() {
+    let instr = Instruction::QPrepR { dst: 7, dist_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qprepr_zero_values() {
+    let instr = Instruction::QPrepR { dst: 0, dist_reg: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn test_qprepr_mnemonic() {
+    assert_eq!(mnemonic(op::QPREPR), Some("QPREPR"));
+}
+
+// =============================================================================
+// Round-trip tests: QE-format (QEncode -- Phase 4)
+// =============================================================================
+
+#[test]
+fn roundtrip_qencode_r_file() {
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qencode_f_file() {
+    let instr = Instruction::QEncode { dst: 1, src_base: 2, count: 2, file_sel: 1 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qencode_z_file() {
+    let instr = Instruction::QEncode { dst: 3, src_base: 4, count: 8, file_sel: 2 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qencode_max_values() {
+    let instr = Instruction::QEncode { dst: 7, src_base: 15, count: 15, file_sel: 2 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qencode_zero_values() {
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 0, file_sel: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn test_qencode_mnemonic() {
+    assert_eq!(mnemonic(op::QENCODE), Some("QENCODE"));
+}
+
+#[test]
+fn error_qencode_file_sel_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: 3 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qencode_count_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 16, file_sel: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qprepr_dst_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QPrepR { dst: 8, dist_reg: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qprepr_dist_reg_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QPrepR { dst: 0, dist_reg: 16 };
+    assert!(encode(&instr, &labels).is_err());
 }

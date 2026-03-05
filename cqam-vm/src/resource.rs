@@ -200,9 +200,18 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         },
 
         // Quantum prep: 2 cycles, creates superposition
-        Instruction::QPrep { .. } => ResourceDelta {
+        Instruction::QPrep { .. }
+        | Instruction::QPrepR { .. } => ResourceDelta {
             time: 2,
             space: 2,
+            superposition: 1.0,
+            ..Default::default()
+        },
+
+        // Quantum encode: 1 cycle, quantum operation
+        Instruction::QEncode { .. } => ResourceDelta {
+            time: 1,
+            space: 1,
             superposition: 1.0,
             ..Default::default()
         },

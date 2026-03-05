@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use cqam_core::instruction::{Instruction, dist_name, kernel_name, flag_name, reduce_fn_name};
+use cqam_core::instruction::{Instruction, dist_name, file_sel_name, kernel_name, flag_name, reduce_fn_name};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -423,6 +423,16 @@ impl QasmFormat for Instruction {
             Instruction::QStore { src_q, addr } => {
                 vec![format!("// QSTORE q{} to QMEM[{}] [no QASM equivalent]", src_q, addr)]
             }
+            Instruction::QPrepR { dst, dist_reg } => {
+                vec![format!("// @cqam.qprepr Q{} = prep(R[{}]);", dst, dist_reg)]
+            }
+            Instruction::QEncode { dst, src_base, count, file_sel } => {
+                let file = file_sel_name(*file_sel);
+                vec![format!(
+                    "// @cqam.qencode Q{} = encode({}, base={}, count={});",
+                    dst, file, src_base, count
+                )]
+            }
 
             // -- Hybrid operations (CQAM-specific annotations) ---------------
 
@@ -698,6 +708,26 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::QStore { src_q, .. } => {
             used.quantum_regs.insert(*src_q);
             used.uses_qmem = true;
+        }
+        Instruction::QPrepR { dst, dist_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.int_regs.insert(*dist_reg);
+        }
+        Instruction::QEncode { dst, src_base, count, file_sel } => {
+            used.quantum_regs.insert(*dst);
+            let n = *count;
+            match *file_sel {
+                0 => {
+                    for i in 0..n { used.int_regs.insert(*src_base + i); }
+                }
+                1 => {
+                    for i in 0..n { used.float_regs.insert(*src_base + i); }
+                }
+                2 => {
+                    for i in 0..n { used.complex_regs.insert(*src_base + i); }
+                }
+                _ => {}
+            }
         }
 
         // -- Hybrid operations --

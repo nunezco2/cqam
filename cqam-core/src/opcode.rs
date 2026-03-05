@@ -99,6 +99,8 @@ pub mod op {
     pub const QSAMPLE: u8 = 0x40;
     pub const QKERNELF: u8 = 0x41;
     pub const QKERNELZ: u8 = 0x42;
+    pub const QPREPR: u8 = 0x43;
+    pub const QENCODE: u8 = 0x44;
 
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
@@ -131,6 +133,9 @@ const MAX_MODE: u8 = 3;
 
 /// Maximum value for a 3-bit distribution ID.
 const MAX_DIST: u8 = 7;
+
+/// Maximum value for a 2-bit file selector field.
+const MAX_FILE_SEL: u8 = 2;
 
 /// Maximum value for a 16-bit address.
 const MAX_ADDR16: u32 = 0xFFFF;
@@ -294,6 +299,14 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } =>
             encode_q(op::QKERNELZ, *dst, *src, *kernel, *zctx0, *zctx1),
+
+        // -- QR-format (quantum prepare from register) ----------------------------
+        Instruction::QPrepR { dst, dist_reg } =>
+            encode_qr(op::QPREPR, *dst, *dist_reg),
+
+        // -- QE-format (quantum encode from registers) ----------------------------
+        Instruction::QEncode { dst, src_base, count, file_sel } =>
+            encode_qe(op::QENCODE, *dst, *src_base, *count, *file_sel),
 
         // -- QO-format (quantum observe, extended) --------------------------------
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } =>
@@ -594,6 +607,22 @@ pub fn decode_with_debug(
             Ok(Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 })
         }
 
+        // -- QR-format (quantum prepare from register) ----------------------------
+        op::QPREPR => {
+            let dst = extract_reg3(word, 21);
+            let dist_reg = extract_reg4(word, 16);
+            Ok(Instruction::QPrepR { dst, dist_reg })
+        }
+
+        // -- QE-format (quantum encode from registers) ----------------------------
+        op::QENCODE => {
+            let dst = extract_reg3(word, 21);
+            let src_base = extract_reg4(word, 16);
+            let count = extract_reg4(word, 12);
+            let file_sel = extract_u2(word, 10);
+            Ok(Instruction::QEncode { dst, src_base, count, file_sel })
+        }
+
         // -- QO-format (quantum observe, extended) --------------------------------
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
@@ -728,6 +757,8 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QSAMPLE => Some("QSAMPLE"),
         op::QKERNELF => Some("QKERNELF"),
         op::QKERNELZ => Some("QKERNELZ"),
+        op::QPREPR => Some("QPREPR"),
+        op::QENCODE => Some("QENCODE"),
         op::ILDX => Some("ILDX"),
         op::ISTRX => Some("ISTRX"),
         op::FLDX => Some("FLDX"),
@@ -876,6 +907,40 @@ fn encode_qp(opcode: u8, dst_q: u8, dist: u8) -> Result<u32, CqamError> {
     Ok(((opcode as u32) << 24)
         | ((dst_q as u32) << 21)
         | ((dist as u32) << 18))
+}
+
+/// Encode a QR-format word: [opcode:8][dst_q:3][_:1][dist_reg:4][_:16]
+fn encode_qr(opcode: u8, dst_q: u8, dist_reg: u8) -> Result<u32, CqamError> {
+    validate_reg3(dst_q, "dst_q")?;
+    validate_reg4(dist_reg, "dist_reg")?;
+    Ok(((opcode as u32) << 24)
+        | ((dst_q as u32) << 21)
+        | ((dist_reg as u32) << 16))
+}
+
+/// Encode a QE-format word: [opcode:8][dst_q:3][_:1][src_base:4][count:4][file_sel:2][_:10]
+fn encode_qe(opcode: u8, dst_q: u8, src_base: u8, count: u8, file_sel: u8) -> Result<u32, CqamError> {
+    validate_reg3(dst_q, "dst_q")?;
+    validate_reg4(src_base, "src_base")?;
+    if count > 15 {
+        return Err(CqamError::OperandOverflow {
+            field: "count".to_string(),
+            value: count as u32,
+            max: 15,
+        });
+    }
+    if file_sel > MAX_FILE_SEL {
+        return Err(CqamError::OperandOverflow {
+            field: "file_sel".to_string(),
+            value: file_sel as u32,
+            max: MAX_FILE_SEL as u32,
+        });
+    }
+    Ok(((opcode as u32) << 24)
+        | ((dst_q as u32) << 21)
+        | ((src_base as u32) << 16)
+        | ((count as u32) << 12)
+        | ((file_sel as u32) << 10))
 }
 
 /// Encode a QS-format word: [opcode:8][qreg:3][_:5][addr:8][_:8]

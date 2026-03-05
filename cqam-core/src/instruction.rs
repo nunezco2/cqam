@@ -260,6 +260,20 @@ pub enum Instruction {
     /// zctx0, zctx1: complex register indices providing classical context
     QKernelZ { dst: u8, src: u8, kernel: u8, zctx0: u8, zctx1: u8 },
 
+    /// Prepare quantum register with distribution ID from integer register.
+    /// Q[dst] = new_qdist(R[dist_reg] as u8)
+    /// dist_reg: integer register index whose value is interpreted as a dist_id.
+    /// At runtime, the value is cast to u8 and dispatched through the same
+    /// dist_id table as QPrep (UNIFORM=0, ZERO=1, BELL=2, GHZ=3).
+    QPrepR { dst: u8, dist_reg: u8 },
+
+    /// Encode classical register values as quantum state amplitudes.
+    /// Q[dst] = from_statevector(read_regs(file_sel, src_base, count))
+    /// src_base: first register index in the selected file (R, F, or Z)
+    /// count: number of consecutive registers to read (must be power of 2)
+    /// file_sel: register file selector (0=R, 1=F, 2=Z; see file_sel module)
+    QEncode { dst: u8, src_base: u8, count: u8, file_sel: u8 },
+
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
     /// Fork hybrid execution into parallel threads. Sets PSW fork flags.
@@ -466,6 +480,36 @@ pub fn observe_mode_name(mode: u8) -> &'static str {
         observe_mode::DIST => "dist",
         observe_mode::PROB => "prob",
         observe_mode::AMP => "amp",
+        _ => "unknown",
+    }
+}
+
+/// Register file selector constants for QEncode instruction.
+///
+/// Determines which classical register file provides the source amplitudes:
+/// - R_FILE (0): Read from integer registers (R-file), values cast i64 -> f64
+/// - F_FILE (1): Read from float registers (F-file), values used as real part
+/// - Z_FILE (2): Read from complex registers (Z-file), values used directly
+pub mod file_sel {
+    /// Integer register file: R[src_base]..R[src_base+count-1] as i64.
+    /// Each value is converted to a complex amplitude: (val as f64, 0.0).
+    pub const R_FILE: u8 = 0;
+
+    /// Float register file: F[src_base]..F[src_base+count-1] as f64.
+    /// Each value is converted to a complex amplitude: (val, 0.0).
+    pub const F_FILE: u8 = 1;
+
+    /// Complex register file: Z[src_base]..Z[src_base+count-1] as (f64, f64).
+    /// Values are used directly as complex amplitudes.
+    pub const Z_FILE: u8 = 2;
+}
+
+/// Helper: name string for a file selector ID (for display/debug).
+pub fn file_sel_name(id: u8) -> &'static str {
+    match id {
+        0 => "R",
+        1 => "F",
+        2 => "Z",
         _ => "unknown",
     }
 }
