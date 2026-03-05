@@ -404,6 +404,7 @@ pub fn execute_instruction(
         Instruction::QPrep { .. }
         | Instruction::QKernel { .. }
         | Instruction::QObserve { .. }
+        | Instruction::QSample { .. }
         | Instruction::QLoad { .. }
         | Instruction::QStore { .. } => {
             execute_qop(ctx, instr)?;

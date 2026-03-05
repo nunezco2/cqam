@@ -249,7 +249,7 @@ fn test_qasm_quantum_flow() {
         Instruction::QKernel {
             dst: 0, src: 0, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 0,
         },
-        Instruction::QObserve { dst_h: 0, src_q: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
     ];
     let config = EmitConfig {
         expand_templates: false,
@@ -285,7 +285,7 @@ fn test_qasm_qprep_all_distributions() {
 
 #[test]
 fn test_qasm_qobserve_uses_lowercase_q() {
-    let instr = Instruction::QObserve { dst_h: 0, src_q: 1 };
+    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
     let lines = instr.to_qasm(&EmitConfig::fragment());
     assert!(lines[0].contains("measure q1"));
     assert!(!lines[0].contains("measure Q1"));
@@ -300,7 +300,7 @@ fn test_qasm_standalone_vs_fragment() {
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 42 },
         Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
-        Instruction::QObserve { dst_h: 0, src_q: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
     ];
     let standalone = emit_qasm_program(&program, &EmitConfig::standalone());
     let fragment = emit_qasm_program(&program, &EmitConfig::fragment());
@@ -493,7 +493,7 @@ fn test_qasm_all_register_files_declared() {
         Instruction::FLdi { dst: 0, imm: 1 },         // float
         Instruction::ZLdi { dst: 0, imm_re: 1, imm_im: 0 }, // complex
         Instruction::QPrep { dst: 0, dist: 0 },       // quantum
-        Instruction::QObserve { dst_h: 0, src_q: 0 }, // hybrid
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 }, // hybrid
         Instruction::ILdm { dst: 1, addr: 0 },        // cmem
     ];
     let config = EmitConfig::standalone();

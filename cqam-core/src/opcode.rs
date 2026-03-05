@@ -95,6 +95,9 @@ pub mod op {
     pub const ZLDX: u8 = 0x3D;
     pub const ZSTRX: u8 = 0x3E;
 
+    // -- PLAN3 extension range (0x40-0x4F) ------------------------------------
+    pub const QSAMPLE: u8 = 0x40;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;
@@ -120,6 +123,9 @@ const MAX_KERNEL: u8 = 31;
 
 /// Maximum value for a 4-bit function ID.
 const MAX_FUNC: u8 = 15;
+
+/// Maximum value for a 2-bit mode field.
+const MAX_MODE: u8 = 3;
 
 /// Maximum value for a 3-bit distribution ID.
 const MAX_DIST: u8 = 7;
@@ -281,8 +287,11 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             ctx1,
         } => encode_q(op::QKERNEL, *dst, *src, *kernel, *ctx0, *ctx1),
 
-        // -- QO-format (quantum observe) --------------------------------------
-        Instruction::QObserve { dst_h, src_q } => encode_qo(op::QOBSERVE, *dst_h, *src_q),
+        // -- QO-format (quantum observe, extended) --------------------------------
+        Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } =>
+            encode_qo_ext(op::QOBSERVE, *dst_h, *src_q, *mode, *ctx0, *ctx1),
+        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } =>
+            encode_qo_ext(op::QSAMPLE, *dst_h, *src_q, *mode, *ctx0, *ctx1),
 
         // -- QS-format (quantum memory) ---------------------------------------
         Instruction::QLoad { dst_q, addr } => encode_qs(op::QLOAD, *dst_q, *addr),
@@ -557,11 +566,22 @@ pub fn decode_with_debug(
             })
         }
 
-        // -- QO-format (quantum observe) --------------------------------------
+        // -- QO-format (quantum observe, extended) --------------------------------
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
             let src_q = extract_reg3(word, 18);
-            Ok(Instruction::QObserve { dst_h, src_q })
+            let mode = extract_u2(word, 16);
+            let ctx0 = extract_reg4(word, 12);
+            let ctx1 = extract_reg4(word, 8);
+            Ok(Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 })
+        }
+        op::QSAMPLE => {
+            let dst_h = extract_reg3(word, 21);
+            let src_q = extract_reg3(word, 18);
+            let mode = extract_u2(word, 16);
+            let ctx0 = extract_reg4(word, 12);
+            let ctx1 = extract_reg4(word, 8);
+            Ok(Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 })
         }
 
         // -- QS-format (quantum memory) ---------------------------------------
@@ -677,6 +697,7 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QOBSERVE => Some("QOBSERVE"),
         op::QLOAD => Some("QLOAD"),
         op::QSTORE => Some("QSTORE"),
+        op::QSAMPLE => Some("QSAMPLE"),
         op::ILDX => Some("ILDX"),
         op::ISTRX => Some("ISTRX"),
         op::FLDX => Some("FLDX"),
@@ -835,13 +856,33 @@ fn encode_qs(opcode: u8, qreg: u8, addr: u8) -> Result<u32, CqamError> {
         | ((addr as u32) << 8))
 }
 
-/// Encode a QO-format word: [opcode:8][dst_h:3][src_q:3][_:18]
-fn encode_qo(opcode: u8, dst_h: u8, src_q: u8) -> Result<u32, CqamError> {
+/// Encode extended QO-format word:
+/// [opcode:8][dst_h:3][src_q:3][mode:2][ctx0:4][ctx1:4][_:8]
+fn encode_qo_ext(
+    opcode: u8,
+    dst_h: u8,
+    src_q: u8,
+    mode: u8,
+    ctx0: u8,
+    ctx1: u8,
+) -> Result<u32, CqamError> {
     validate_reg3(dst_h, "dst_h")?;
     validate_reg3(src_q, "src_q")?;
+    if mode > MAX_MODE {
+        return Err(CqamError::OperandOverflow {
+            field: "mode".to_string(),
+            value: mode as u32,
+            max: MAX_MODE as u32,
+        });
+    }
+    validate_reg4(ctx0, "ctx0")?;
+    validate_reg4(ctx1, "ctx1")?;
     Ok(((opcode as u32) << 24)
         | ((dst_h as u32) << 21)
-        | ((src_q as u32) << 18))
+        | ((src_q as u32) << 18)
+        | ((mode as u32) << 16)
+        | ((ctx0 as u32) << 12)
+        | ((ctx1 as u32) << 8))
 }
 
 /// Encode an HR-format word: [opcode:8][src:4][dst:4][func:4][_:12]
@@ -883,6 +924,11 @@ fn extract_reg4(word: u32, shift: u32) -> u8 {
 /// Extract a 3-bit field at the given bit position.
 fn extract_reg3(word: u32, shift: u32) -> u8 {
     ((word >> shift) & 0x07) as u8
+}
+
+/// Extract a 2-bit field at the given bit position.
+fn extract_u2(word: u32, shift: u32) -> u8 {
+    ((word >> shift) & 0x03) as u8
 }
 
 /// Extract a 5-bit field at the given bit position.

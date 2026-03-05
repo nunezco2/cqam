@@ -224,6 +224,14 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Quantum sample: 1 cycle, non-destructive (no interference)
+        Instruction::QSample { .. } => ResourceDelta {
+            time: 1,
+            space: 1,
+            interference: 0.0,
+            ..Default::default()
+        },
+
         // Quantum load/store: 1 cycle
         Instruction::QLoad { .. }
         | Instruction::QStore { .. } => ResourceDelta {

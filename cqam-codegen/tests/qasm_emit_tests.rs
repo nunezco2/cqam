@@ -78,7 +78,7 @@ fn test_scan_quantum_regs() {
     let program = vec![
         Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
         Instruction::QKernel { dst: 1, src: 0, kernel: kernel_id::FOURIER, ctx0: 2, ctx1: 3 },
-        Instruction::QObserve { dst_h: 0, src_q: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
     ];
     let used = scan_registers(&program);
     assert!(used.quantum_regs.contains(&0));
@@ -89,7 +89,7 @@ fn test_scan_quantum_regs() {
 #[test]
 fn test_scan_hybrid_regs() {
     let program = vec![
-        Instruction::QObserve { dst_h: 0, src_q: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
     ];
     let used = scan_registers(&program);
     assert!(used.hybrid_regs.contains(&0));
@@ -910,7 +910,7 @@ fn test_emit_qkernel_with_expand_missing_template() {
 
 #[test]
 fn test_emit_qobserve() {
-    let instr = Instruction::QObserve { dst_h: 0, src_q: 1 };
+    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines[0], "H0 = measure q1;");
 }
@@ -1149,7 +1149,7 @@ fn test_mixed_program() {
         Instruction::ILdi { dst: 0, imm: 5 },
         Instruction::FLdi { dst: 0, imm: 314 },
         Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
-        Instruction::QObserve { dst_h: 0, src_q: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
     ];
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);

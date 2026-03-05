@@ -387,8 +387,21 @@ impl QasmFormat for Instruction {
                     ]
                 }
             }
-            Instruction::QObserve { dst_h, src_q } => {
-                vec![format!("H{} = measure q{};", dst_h, src_q)]
+            Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
+                match *mode {
+                    0 => vec![format!("H{} = measure q{};", dst_h, src_q)],
+                    1 => vec![format!("// @cqam.observe_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
+                    2 => vec![format!("// @cqam.observe_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
+                    _ => vec![format!("// @cqam.observe H{} = observe(q{}, mode={});", dst_h, src_q, mode)],
+                }
+            }
+            Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
+                match *mode {
+                    0 => vec![format!("// @cqam.qsample H{} = sample(q{});", dst_h, src_q)],
+                    1 => vec![format!("// @cqam.qsample_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
+                    2 => vec![format!("// @cqam.qsample_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
+                    _ => vec![format!("// @cqam.qsample H{} = sample(q{}, mode={});", dst_h, src_q, mode)],
+                }
             }
             Instruction::QLoad { dst_q, addr } => {
                 vec![format!("// QLOAD q{} from QMEM[{}] [no QASM equivalent]", dst_q, addr)]
@@ -638,9 +651,17 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.int_regs.insert(*ctx1);
             used.kernel_ids.insert(*kernel);
         }
-        Instruction::QObserve { dst_h, src_q } => {
+        Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
             used.quantum_regs.insert(*src_q);
             used.hybrid_regs.insert(*dst_h);
+            if *mode >= 1 { used.int_regs.insert(*ctx0); }
+            if *mode >= 2 { used.int_regs.insert(*ctx1); }
+        }
+        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
+            used.quantum_regs.insert(*src_q);
+            used.hybrid_regs.insert(*dst_h);
+            if *mode >= 1 { used.int_regs.insert(*ctx0); }
+            if *mode >= 2 { used.int_regs.insert(*ctx1); }
         }
         Instruction::QLoad { dst_q, .. } => {
             used.quantum_regs.insert(*dst_q);
@@ -656,10 +677,10 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::HCExec { .. } => {}
         Instruction::HReduce { src, dst, func } => {
             used.hybrid_regs.insert(*src);
-            if *func <= 5 {
-                used.int_regs.insert(*dst);
-            } else {
-                used.float_regs.insert(*dst);
+            match *func {
+                0..=5 => { used.int_regs.insert(*dst); }
+                14..=15 => { used.complex_regs.insert(*dst); }
+                _ => { used.float_regs.insert(*dst); }
             }
         }
 
@@ -876,9 +897,14 @@ pub fn emit_qasm_program(
 // ---------------------------------------------------------------------------
 
 /// Returns "R" for int-producing reduction functions (func 0-5),
+/// "Z" for complex-to-Z reductions (func 14-15),
 /// "F" for float-producing reduction functions (func 6-13).
 fn hreduce_dst_file(func: u8) -> &'static str {
-    if func <= 5 { "R" } else { "F" }
+    match func {
+        0..=5 => "R",
+        14..=15 => "Z",
+        _ => "F",
+    }
 }
 
 // ---------------------------------------------------------------------------

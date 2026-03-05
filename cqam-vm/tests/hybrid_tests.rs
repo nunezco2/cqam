@@ -653,6 +653,318 @@ fn test_sequential_fork_merge_pairs_with_nesting() {
         "Expected >= 3 completed forks, got {}", fm.completed_forks.len());
 }
 
+// =============================================================================
+// HREDUCE CONJ_Z and NEGATE_Z tests (PLAN3 Phase 2)
+// =============================================================================
+
+#[test]
+fn test_hreduce_conj_z() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CONJ_Z },
+        &mut fm,
+    ).unwrap();
+
+    // conj(3+4i) = 3-4i -> written to Z[0]
+    let (re, im) = ctx.zregs.get(0).unwrap();
+    assert!((re - 3.0).abs() < 1e-10, "re should be 3.0, got {}", re);
+    assert!((im - (-4.0)).abs() < 1e-10, "im should be -4.0, got {}", im);
+}
+
+#[test]
+fn test_hreduce_negate_z() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::NEGATE_Z },
+        &mut fm,
+    ).unwrap();
+
+    // negate(3+4i) = -3-4i -> written to Z[1]
+    let (re, im) = ctx.zregs.get(1).unwrap();
+    assert!((re - (-3.0)).abs() < 1e-10, "re should be -3.0, got {}", re);
+    assert!((im - (-4.0)).abs() < 1e-10, "im should be -4.0, got {}", im);
+}
+
+#[test]
+fn test_hreduce_conj_z_type_mismatch() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.hregs.set(0, HybridValue::Float(1.0)).unwrap();
+
+    let mut fm = ForkManager::new();
+    let result = execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CONJ_Z },
+        &mut fm,
+    );
+    assert!(result.is_err(), "CONJ_Z on Float should fail");
+}
+
+#[test]
+fn test_hreduce_negate_z_type_mismatch() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.hregs.set(0, HybridValue::Int(42)).unwrap();
+
+    let mut fm = ForkManager::new();
+    let result = execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::NEGATE_Z },
+        &mut fm,
+    );
+    assert!(result.is_err(), "NEGATE_Z on Int should fail");
+}
+
+// =============================================================================
+// HREDUCE Dist fallback tests (PLAN3 Phase 2)
+// =============================================================================
+
+#[test]
+fn test_hreduce_round_dist_fallback() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Dist with mean = 0*0.25 + 1*0.25 + 2*0.25 + 3*0.25 = 1.5
+    // round(1.5) = 2
+    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::ROUND },
+        &mut fm,
+    ).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), 2, "round(1.5) = 2");
+}
+
+#[test]
+fn test_hreduce_floor_dist_fallback() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Dist with mean = 0*0.25 + 1*0.25 + 2*0.25 + 3*0.25 = 1.5
+    // floor(1.5) = 1
+    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::FLOOR },
+        &mut fm,
+    ).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), 1, "floor(1.5) = 1");
+}
+
+#[test]
+fn test_hreduce_ceil_dist_fallback() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Mean = 1.5, ceil(1.5) = 2
+    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CEIL },
+        &mut fm,
+    ).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), 2, "ceil(1.5) = 2");
+}
+
+#[test]
+fn test_hreduce_negate_dist_fallback() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Mean = 1.5, negate(1.5) = -1 (as i64)
+    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::NEGATE },
+        &mut fm,
+    ).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), -1, "negate(mean=1.5) = -1 as i64");
+}
+
+#[test]
+fn test_hreduce_trunc_dist_fallback() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Mean = 1.5, trunc(1.5) = 1
+    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::TRUNC },
+        &mut fm,
+    ).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), 1, "trunc(1.5) = 1");
+}
+
+#[test]
+fn test_hreduce_abs_dist_fallback() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Dist with mean = 1.5, abs(1.5) = 1 (as i64)
+    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
+
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::ABS },
+        &mut fm,
+    ).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), 1, "abs(1.5) = 1 as i64");
+}
+
+/// Verify all 6 Dist fallback functions produce correct results with a
+/// skewed distribution whose mean is 2.3.
+#[test]
+fn test_hreduce_all_six_dist_fallback_skewed() {
+    // Distribution: mean = 1*0.1 + 2*0.2 + 3*0.7 = 0.1 + 0.4 + 2.1 = 2.6
+    let dist = vec![(1u16, 0.1), (2, 0.2), (3, 0.7)];
+    let mean = 2.6_f64;
+
+    let funcs_and_expected: Vec<(u8, i64)> = vec![
+        (reduce_fn::ROUND,  mean.round() as i64),   // round(2.6) = 3
+        (reduce_fn::FLOOR,  mean.floor() as i64),    // floor(2.6) = 2
+        (reduce_fn::CEIL,   mean.ceil() as i64),     // ceil(2.6) = 3
+        (reduce_fn::TRUNC,  mean.trunc() as i64),    // trunc(2.6) = 2
+        (reduce_fn::ABS,    mean.abs() as i64),      // abs(2.6) = 2
+        (reduce_fn::NEGATE, (-mean) as i64),          // negate(2.6) = -2
+    ];
+
+    for (func, expected) in funcs_and_expected {
+        let mut ctx = ExecutionContext::new(vec![]);
+        ctx.hregs.set(0, HybridValue::Dist(dist.clone())).unwrap();
+
+        let mut fm = ForkManager::new();
+        execute_hybrid(
+            &mut ctx,
+            &Instruction::HReduce { src: 0, dst: 1, func },
+            &mut fm,
+        ).unwrap();
+
+        assert_eq!(
+            ctx.iregs.get(1).unwrap(), expected,
+            "Dist fallback for func {} (mean={}) should yield {}, got {}",
+            func, mean, expected, ctx.iregs.get(1).unwrap()
+        );
+    }
+}
+
+/// End-to-end pipeline: QPREP -> QOBSERVE(AMP) -> HREDUCE(NEGATE_Z) -> verify Z register.
+#[test]
+fn test_e2e_observe_amp_then_negate_z() {
+    use cqam_vm::qop::execute_qop;
+
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Bell state: rho[3][0] = 0.5 + 0i
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+
+    // Query rho[3][0]: row=3, col=0
+    ctx.iregs.set(0, 3).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QObserve {
+        dst_h: 0, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1,
+    }).unwrap();
+
+    // H[0] = Complex(0.5, 0.0)
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
+        assert!((re - 0.5).abs() < 1e-10);
+        assert!(im.abs() < 1e-10);
+    } else {
+        panic!("Expected HybridValue::Complex");
+    }
+
+    // HREDUCE NEGATE_Z: Z[3] = (-0.5, -0.0)
+    let mut fm = ForkManager::new();
+    execute_hybrid(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 3, func: reduce_fn::NEGATE_Z },
+        &mut fm,
+    ).unwrap();
+
+    let (re, im) = ctx.zregs.get(3).unwrap();
+    assert!((re - (-0.5)).abs() < 1e-10, "Z[3].re should be -0.5, got {}", re);
+    assert!(im.abs() < 1e-10, "Z[3].im should be ~0.0, got {}", im);
+}
+
+/// End-to-end pipeline via text assembly:
+/// QPREP -> QOBSERVE(PROB) -> HREDUCE(ROUND) -> verify R register.
+#[test]
+fn test_e2e_text_observe_prob_round_pipeline() {
+    use cqam_core::parser::parse_program;
+    use cqam_vm::fork::ForkManager;
+    use cqam_vm::executor::run_program;
+
+    let source = r#"
+# Prepare uniform 2-qubit state: each |k> has p=0.25
+QPREP Q0, 0
+# Set R0 = 2 (query basis state 2)
+ILDI R0, 2
+# QOBSERVE in PROB mode: H0 = p(|2>) = 0.25
+QOBSERVE H0, Q0, PROB, R0
+# Round 0.25 -> R1 = 0
+HREDUCE H0, R1, 0
+HALT
+"#;
+
+    let program = parse_program(source).expect("Failed to parse");
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    run_program(&mut ctx, &mut fm).expect("Program failed");
+
+    assert!(ctx.psw.trap_halt);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 0, "round(0.25) should be 0");
+}
+
+/// End-to-end pipeline via text assembly:
+/// QPREP -> QOBSERVE(AMP) -> HREDUCE(CONJ_Z) -> verify Z register.
+#[test]
+fn test_e2e_text_observe_amp_conj_z_pipeline() {
+    use cqam_core::parser::parse_program;
+    use cqam_vm::fork::ForkManager;
+    use cqam_vm::executor::run_program;
+
+    let source = r#"
+# Prepare Bell state: rho[0][3] = 0.5 + 0i
+QPREP Q0, 2
+# Set R0 = 0 (row), R1 = 3 (col) for amplitude query
+ILDI R0, 0
+ILDI R1, 3
+# QOBSERVE in AMP mode: H0 = rho[0][3] = Complex(0.5, 0.0)
+QOBSERVE H0, Q0, AMP, R0, R1
+# Conjugate: Z2 = conj(0.5 + 0i) = (0.5, -0.0)
+HREDUCE H0, Z2, 14
+HALT
+"#;
+
+    let program = parse_program(source).expect("Failed to parse");
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    run_program(&mut ctx, &mut fm).expect("Program failed");
+
+    assert!(ctx.psw.trap_halt);
+    let (re, im) = ctx.zregs.get(2).unwrap();
+    assert!((re - 0.5).abs() < 1e-10, "Z[2].re should be 0.5, got {}", re);
+    assert!(im.abs() < 1e-10, "Z[2].im should be ~0.0, got {}", im);
+}
+
 /// Verify that fork and main both compute their respective results correctly
 /// when running a small loop. Both run the same loop, so results should match.
 #[test]

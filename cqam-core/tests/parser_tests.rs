@@ -577,8 +577,34 @@ fn test_parse_qkernel() {
 fn test_parse_qobserve() {
     assert_eq!(
         parse_instruction("QOBSERVE H0, Q1").unwrap(),
-        Instruction::QObserve { dst_h: 0, src_q: 1 }
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }
     );
+}
+
+#[test]
+fn test_parse_qsample() {
+    assert_eq!(
+        parse_instruction("QSAMPLE H0, Q1").unwrap(),
+        Instruction::QSample { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }
+    );
+}
+
+#[test]
+fn test_parse_qsample_max_regs() {
+    assert_eq!(
+        parse_instruction("QSAMPLE H7, Q7").unwrap(),
+        Instruction::QSample { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 }
+    );
+}
+
+#[test]
+fn test_parse_qsample_missing_operand() {
+    assert!(parse_instruction("QSAMPLE H0").is_err());
+}
+
+#[test]
+fn test_parse_qsample_too_many_operands() {
+    assert!(parse_instruction("QSAMPLE H0, Q1, Q2").is_err());
 }
 
 #[test]
@@ -667,7 +693,7 @@ fn test_parse_max_quantum_register() {
 fn test_parse_max_hybrid_register() {
     assert_eq!(
         parse_instruction("QOBSERVE H7, Q7").unwrap(),
-        Instruction::QObserve { dst_h: 7, src_q: 7 }
+        Instruction::QObserve { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 }
     );
 }
 
@@ -785,7 +811,7 @@ HALT
     assert_eq!(program.len(), 5);
     assert_eq!(program[0], Instruction::QPrep { dst: 0, dist: 0 });
     assert_eq!(program[1], Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 });
-    assert_eq!(program[2], Instruction::QObserve { dst_h: 0, src_q: 1 });
+    assert_eq!(program[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 });
     assert_eq!(program[3], Instruction::HReduce { src: 0, dst: 2, func: 12 });
     assert_eq!(program[4], Instruction::Halt);
 }

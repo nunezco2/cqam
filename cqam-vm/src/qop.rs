@@ -4,7 +4,7 @@
 //! `DensityMatrix` simulation backend from `cqam-sim`.
 
 use cqam_core::error::CqamError;
-use cqam_core::instruction::{Instruction, dist_id, kernel_id};
+use cqam_core::instruction::{Instruction, dist_id, kernel_id, observe_mode};
 use cqam_core::register::HybridValue;
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernel::Kernel;
@@ -38,7 +38,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
         Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
             let param0 = ctx.iregs.get(*ctx0)?;
-            let _param1 = ctx.iregs.get(*ctx1)?;
+            let param1 = ctx.iregs.get(*ctx1)?;
+            let _ = param1;
 
             if let Some(ref dm) = ctx.qregs[*src as usize] {
                 let k: Box<dyn Kernel> = match *kernel {
@@ -78,12 +79,104 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             }
         }
 
-        Instruction::QObserve { dst_h, src_q } => {
+        Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
             if let Some(dm) = ctx.qregs[*src_q as usize].take() {
-                let (measured_value, _collapsed) = dm.measure_all();
-                let dist_pairs: Vec<(u16, f64)> = vec![(measured_value, 1.0)];
-                ctx.hregs.set(*dst_h, HybridValue::Dist(dist_pairs))?;
+                let hval = match *mode {
+                    observe_mode::DIST => {
+                        let probs = dm.diagonal_probabilities();
+                        let dist_pairs: Vec<(u16, f64)> = probs.iter().enumerate()
+                            .filter(|(_, p)| **p >= 1e-15)
+                            .map(|(k, p)| (k as u16, *p))
+                            .collect();
+                        HybridValue::Dist(dist_pairs)
+                    }
+                    observe_mode::PROB => {
+                        let index = ctx.iregs.get(*ctx0)? as usize;
+                        let dim = dm.dimension();
+                        if index >= dim {
+                            return Err(CqamError::AddressOutOfRange {
+                                instruction: "QOBSERVE/PROB".to_string(),
+                                address: index as i64,
+                            });
+                        }
+                        let prob = dm.get(index, index).0;
+                        HybridValue::Float(prob)
+                    }
+                    observe_mode::AMP => {
+                        let row = ctx.iregs.get(*ctx0)? as usize;
+                        let col = ctx.iregs.get(*ctx1)? as usize;
+                        let dim = dm.dimension();
+                        if row >= dim || col >= dim {
+                            return Err(CqamError::AddressOutOfRange {
+                                instruction: "QOBSERVE/AMP".to_string(),
+                                address: row.max(col) as i64,
+                            });
+                        }
+                        let (re, im) = dm.get(row, col);
+                        HybridValue::Complex(re, im)
+                    }
+                    _ => {
+                        return Err(CqamError::TypeMismatch {
+                            instruction: "QOBSERVE".to_string(),
+                            detail: format!("unknown mode: {}", mode),
+                        });
+                    }
+                };
+                ctx.hregs.set(*dst_h, hval)?;
                 ctx.psw.mark_measured();
+                Ok(())
+            } else {
+                Err(CqamError::UninitializedRegister {
+                    file: "Q".to_string(),
+                    index: *src_q,
+                })
+            }
+        }
+
+        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
+            if let Some(ref dm) = ctx.qregs[*src_q as usize] {
+                let hval = match *mode {
+                    observe_mode::DIST => {
+                        let probs = dm.diagonal_probabilities();
+                        let dist_pairs: Vec<(u16, f64)> = probs.iter().enumerate()
+                            .filter(|(_, p)| **p >= 1e-15)
+                            .map(|(k, p)| (k as u16, *p))
+                            .collect();
+                        HybridValue::Dist(dist_pairs)
+                    }
+                    observe_mode::PROB => {
+                        let index = ctx.iregs.get(*ctx0)? as usize;
+                        let dim = dm.dimension();
+                        if index >= dim {
+                            return Err(CqamError::AddressOutOfRange {
+                                instruction: "QSAMPLE/PROB".to_string(),
+                                address: index as i64,
+                            });
+                        }
+                        let prob = dm.get(index, index).0;
+                        HybridValue::Float(prob)
+                    }
+                    observe_mode::AMP => {
+                        let row = ctx.iregs.get(*ctx0)? as usize;
+                        let col = ctx.iregs.get(*ctx1)? as usize;
+                        let dim = dm.dimension();
+                        if row >= dim || col >= dim {
+                            return Err(CqamError::AddressOutOfRange {
+                                instruction: "QSAMPLE/AMP".to_string(),
+                                address: row.max(col) as i64,
+                            });
+                        }
+                        let (re, im) = dm.get(row, col);
+                        HybridValue::Complex(re, im)
+                    }
+                    _ => {
+                        return Err(CqamError::TypeMismatch {
+                            instruction: "QSAMPLE".to_string(),
+                            detail: format!("unknown mode: {}", mode),
+                        });
+                    }
+                };
+                ctx.hregs.set(*dst_h, hval)?;
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {

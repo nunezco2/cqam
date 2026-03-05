@@ -42,7 +42,7 @@ fn test_resource_quantum_pipeline() {
     let instrs = [
         Instruction::QPrep { dst: 0, dist: 0 },
         Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 0 },
-        Instruction::QObserve { dst_h: 0, src_q: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
     ];
     let t = accumulate_resources(&instrs);
     assert_eq!(t.total_time, 6); // 2+3+1
@@ -98,7 +98,7 @@ fn test_resource_mixed_program() {
         Instruction::FAdd { dst: 0, lhs: 1, rhs: 2 },                   // t=1, s=1
         Instruction::QPrep { dst: 0, dist: 0 },                         // t=2, s=2, sup=1.0
         Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 }, // t=3, s=2, sup=0.5, ent=0.7
-        Instruction::QObserve { dst_h: 0, src_q: 1 },                   // t=1, s=1, int=0.3
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },                   // t=1, s=1, int=0.3
         Instruction::HFork,                                              // t=1, s=0
         Instruction::HMerge,                                             // t=1, s=0
         Instruction::Nop,                                                // t=0, s=0

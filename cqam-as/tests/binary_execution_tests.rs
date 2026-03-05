@@ -49,7 +49,7 @@ HALT
 
     assert!(matches!(roundtripped[0], Instruction::QPrep { dst: 0, dist: 0 }));
     assert!(matches!(roundtripped[1], Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 }));
-    assert!(matches!(roundtripped[2], Instruction::QObserve { dst_h: 0, src_q: 1 }));
+    assert!(matches!(roundtripped[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }));
     assert!(matches!(roundtripped[3], Instruction::Halt));
 }
 

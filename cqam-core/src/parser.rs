@@ -265,7 +265,8 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             })?;
             Ok(Instruction::QKernel { dst, src, kernel, ctx0, ctx1 })
         }
-        "QOBSERVE" => parse_rr(&ops, |dst_h, src_q| Instruction::QObserve { dst_h, src_q }, "QOBSERVE", line_num),
+        "QOBSERVE" => parse_qobserve(&ops, "QOBSERVE", line_num),
+        "QSAMPLE" => parse_qobserve(&ops, "QSAMPLE", line_num),
         "QLOAD" => {
             if ops.len() != 2 {
                 return Err(CqamError::ParseError {
@@ -607,6 +608,70 @@ where
         message: format!("{}: invalid immediate '{}'", name, ops[1]),
     })?;
     Ok(build(reg, imm))
+}
+
+/// Parse an observe mode token: numeric (0-2) or named (DIST, PROB, AMP).
+fn parse_observe_mode(token: &str) -> Option<u8> {
+    let token = token.trim();
+    match token {
+        "DIST" | "dist" => Some(0),
+        "PROB" | "prob" => Some(1),
+        "AMP" | "amp" => Some(2),
+        _ => parse_u8(token).filter(|&v| v <= 3),
+    }
+}
+
+/// Helper: parse QOBSERVE/QSAMPLE with 2-5 operands.
+///
+/// Syntax forms:
+///   QOBSERVE H0, Q0              -> mode=0, ctx0=0, ctx1=0 (backward compat)
+///   QOBSERVE H0, Q0, PROB        -> mode=1, ctx0=0, ctx1=0
+///   QOBSERVE H0, Q0, PROB, R3    -> mode=1, ctx0=3, ctx1=0
+///   QOBSERVE H0, Q0, AMP, R3, R4 -> mode=2, ctx0=3, ctx1=4
+fn parse_qobserve(ops: &[&str], name: &str, line_num: usize) -> ParseResult {
+    if ops.len() < 2 || ops.len() > 5 {
+        return Err(CqamError::ParseError {
+            line: line_num,
+            message: format!("{} requires 2-5 operands, got {}", name, ops.len()),
+        });
+    }
+    let dst_h = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+        line: line_num,
+        message: format!("{}: invalid destination register '{}'", name, ops[0]),
+    })?;
+    let src_q = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+        line: line_num,
+        message: format!("{}: invalid source register '{}'", name, ops[1]),
+    })?;
+    let mode = if ops.len() >= 3 {
+        parse_observe_mode(ops[2]).ok_or_else(|| CqamError::ParseError {
+            line: line_num,
+            message: format!("{}: invalid mode '{}'", name, ops[2]),
+        })?
+    } else {
+        0
+    };
+    let ctx0 = if ops.len() >= 4 {
+        parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+            line: line_num,
+            message: format!("{}: invalid ctx0 register '{}'", name, ops[3]),
+        })?
+    } else {
+        0
+    };
+    let ctx1 = if ops.len() >= 5 {
+        parse_reg(ops[4]).ok_or_else(|| CqamError::ParseError {
+            line: line_num,
+            message: format!("{}: invalid ctx1 register '{}'", name, ops[4]),
+        })?
+    } else {
+        0
+    };
+    match name {
+        "QOBSERVE" => Ok(Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 }),
+        "QSAMPLE" => Ok(Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 }),
+        _ => unreachable!(),
+    }
 }
 
 /// Helper: parse reg, u16 instruction (e.g. ILDM, ISTR).

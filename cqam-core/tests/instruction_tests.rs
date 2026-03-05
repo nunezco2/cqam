@@ -118,7 +118,7 @@ fn test_all_control_flow_variants() {
 fn test_all_quantum_variants() {
     let _prep = Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM };
     let _kernel = Instruction::QKernel { dst: 1, src: 0, kernel: kernel_id::ENTANGLE, ctx0: 2, ctx1: 3 };
-    let _observe = Instruction::QObserve { dst_h: 0, src_q: 1 };
+    let _observe = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
     let _load = Instruction::QLoad { dst_q: 2, addr: 10 };
     let _store = Instruction::QStore { src_q: 2, addr: 10 };
 }
@@ -134,8 +134,8 @@ fn test_all_hybrid_variants() {
 #[test]
 fn test_qobserve_replaces_qmeas() {
     // QObserve is the sole measurement instruction.
-    let observe = Instruction::QObserve { dst_h: 0, src_q: 1 };
-    assert!(matches!(observe, Instruction::QObserve { dst_h: 0, src_q: 1 }));
+    let observe = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
+    assert!(matches!(observe, Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }));
 }
 
 #[test]

@@ -229,8 +229,9 @@ pub enum Instruction {
     /// Destructively observe (measure) a quantum register.
     /// H[dst_h] = measure(Q[src_q])
     /// The quantum register Q[src_q] is consumed (set to None).
-    /// The measurement result is stored as HybridValue::Dist in H[dst_h].
-    QObserve { dst_h: u8, src_q: u8 },
+    /// mode: 0=DIST (full distribution), 1=PROB (single probability), 2=AMP (amplitude)
+    /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
+    QObserve { dst_h: u8, src_q: u8, mode: u8, ctx0: u8, ctx1: u8 },
 
     /// Load quantum distribution from QMEM into quantum register.
     /// Q[dst_q] = QMEM[addr]
@@ -239,6 +240,13 @@ pub enum Instruction {
     /// Store quantum register into QMEM slot.
     /// QMEM[addr] = Q[src_q]
     QStore { src_q: u8, addr: u8 },
+
+    /// Non-destructively sample the probability distribution of a quantum register.
+    /// H[dst_h] = diagonal_probabilities(Q[src_q])
+    /// The quantum register Q[src_q] is NOT consumed (non-destructive read).
+    /// mode: 0=DIST (full distribution), 1=PROB (single probability), 2=AMP (amplitude)
+    /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
+    QSample { dst_h: u8, src_q: u8, mode: u8, ctx0: u8, ctx1: u8 },
 
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
@@ -343,6 +351,16 @@ pub mod flag_id {
     pub const HF: u8 = 7;
 }
 
+/// Observation mode IDs for QObserve/QSample.
+pub mod observe_mode {
+    /// Full diagonal distribution (default, Phase 1 behavior).
+    pub const DIST: u8 = 0;
+    /// Probability of basis state at index R[ctx0].
+    pub const PROB: u8 = 1;
+    /// Amplitude dm.get(row, col) where row=R[ctx0], col=R[ctx1].
+    pub const AMP: u8 = 2;
+}
+
 /// Reduction function IDs for HReduce.
 pub mod reduce_fn {
     // Float -> Int reductions
@@ -378,6 +396,12 @@ pub mod reduce_fn {
     pub const ARGMAX: u8 = 12;
     /// Variance of distribution.
     pub const VARIANCE: u8 = 13;
+
+    // Complex -> Z-file reductions
+    /// Conjugate: Z[dst] = (re, -im).
+    pub const CONJ_Z: u8 = 14;
+    /// Negate: Z[dst] = (-re, -im).
+    pub const NEGATE_Z: u8 = 15;
 }
 
 /// Helper: name string for a distribution ID (for display/debug).
@@ -418,6 +442,16 @@ pub fn flag_name(id: u8) -> &'static str {
     }
 }
 
+/// Helper: name string for an observation mode (for display/debug).
+pub fn observe_mode_name(mode: u8) -> &'static str {
+    match mode {
+        observe_mode::DIST => "dist",
+        observe_mode::PROB => "prob",
+        observe_mode::AMP => "amp",
+        _ => "unknown",
+    }
+}
+
 /// Helper: name string for a reduction function ID (for display/debug).
 pub fn reduce_fn_name(id: u8) -> &'static str {
     match id {
@@ -435,6 +469,8 @@ pub fn reduce_fn_name(id: u8) -> &'static str {
         reduce_fn::MODE => "mode",
         reduce_fn::ARGMAX => "argmax",
         reduce_fn::VARIANCE => "variance",
+        reduce_fn::CONJ_Z => "conj_z",
+        reduce_fn::NEGATE_Z => "negate_z",
         _ => "unknown",
     }
 }

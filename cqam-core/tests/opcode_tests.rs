@@ -524,13 +524,83 @@ fn roundtrip_qkernel_zero_values() {
 
 #[test]
 fn roundtrip_qobserve() {
-    let instr = Instruction::QObserve { dst_h: 2, src_q: 5 };
+    let instr = Instruction::QObserve { dst_h: 2, src_q: 5, mode: 0, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qobserve_max() {
-    let instr = Instruction::QObserve { dst_h: 7, src_q: 7 };
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+// =============================================================================
+// Round-trip tests: QO-format (quantum sample -- PLAN3 Phase 1)
+// =============================================================================
+
+#[test]
+fn roundtrip_qsample() {
+    let instr = Instruction::QSample { dst_h: 2, src_q: 5, mode: 0, ctx0: 0, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qsample_max() {
+    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qsample_zero() {
+    let instr = Instruction::QSample { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+// =============================================================================
+// Round-trip tests: QO-format with mode (PLAN3 Phase 2)
+// =============================================================================
+
+#[test]
+fn roundtrip_qobserve_mode_prob() {
+    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 1, ctx0: 3, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qobserve_mode_amp() {
+    let instr = Instruction::QObserve { dst_h: 2, src_q: 4, mode: 2, ctx0: 5, ctx1: 7 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qsample_mode_prob() {
+    let instr = Instruction::QSample { dst_h: 1, src_q: 3, mode: 1, ctx0: 6, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qsample_mode_amp() {
+    let instr = Instruction::QSample { dst_h: 5, src_q: 2, mode: 2, ctx0: 8, ctx1: 9 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qobserve_backward_compat() {
+    // mode=0, ctx0=0, ctx1=0 should round-trip identically to legacy format
+    let instr = Instruction::QObserve { dst_h: 3, src_q: 6, mode: 0, ctx0: 0, ctx1: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qobserve_mode_max_ctx() {
+    // Max ctx0/ctx1 values (4 bits each = 15)
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: 2, ctx0: 15, ctx1: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qsample_mode_max_ctx() {
+    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: 2, ctx0: 15, ctx1: 15 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -744,11 +814,11 @@ fn error_decode_invalid_opcode_0xfe() {
 }
 
 #[test]
-fn error_decode_invalid_opcode_0x40() {
-    // 0x40 is unassigned
+fn decode_qsample_opcode_0x40() {
+    // 0x40 is now assigned to QSAMPLE
     let word: u32 = 0x40_000000;
-    let result = decode(word);
-    assert!(result.is_err());
+    let result = decode(word).unwrap();
+    assert_eq!(result, Instruction::QSample { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 });
 }
 
 #[test]
@@ -918,7 +988,7 @@ fn edge_max_reg4_values() {
 
 #[test]
 fn edge_max_reg3_values_qobserve() {
-    let instr = Instruction::QObserve { dst_h: 7, src_q: 7 };
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -1025,6 +1095,7 @@ fn mnemonic_all_assigned_opcodes() {
         (op::QOBSERVE, "QOBSERVE"),
         (op::QLOAD, "QLOAD"),
         (op::QSTORE, "QSTORE"),
+        (op::QSAMPLE, "QSAMPLE"),
         (op::ILDX, "ILDX"),
         (op::ISTRX, "ISTRX"),
         (op::FLDX, "FLDX"),
@@ -1050,7 +1121,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2F_u8, 0x3F, 0x40, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2F_u8, 0x3F, 0x41, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,
@@ -1230,7 +1301,8 @@ fn roundtrip_all_variants_comprehensive() {
         Instruction::QPrep { dst: 0, dist: 0 },
         Instruction::QPrep { dst: 7, dist: 3 },
         Instruction::QKernel { dst: 1, src: 0, kernel: 2, ctx0: 3, ctx1: 4 },
-        Instruction::QObserve { dst_h: 2, src_q: 5 },
+        Instruction::QObserve { dst_h: 2, src_q: 5, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 1, src_q: 3, mode: 0, ctx0: 0, ctx1: 0 },
         Instruction::QLoad { dst_q: 3, addr: 100 },
         Instruction::QStore { src_q: 0, addr: 0 },
     ];

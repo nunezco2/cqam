@@ -145,7 +145,7 @@ fn test_roundtrip_quantum_ops() {
         Instruction::QPrep { dst: 0, dist: 0 },
         Instruction::QPrep { dst: 7, dist: 3 },
         Instruction::QKernel { dst: 1, src: 2, kernel: 4, ctx0: 3, ctx1: 4 },
-        Instruction::QObserve { dst_h: 0, src_q: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
         Instruction::QLoad { dst_q: 3, addr: 255 },
         Instruction::QStore { src_q: 7, addr: 0 },
     ];
