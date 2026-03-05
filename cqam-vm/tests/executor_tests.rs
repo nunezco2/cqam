@@ -497,22 +497,22 @@ fn test_istrx_basic() {
 fn test_fldx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    let val: f64 = 3.14;
+    let val: f64 = 3.15;
     ctx.cmem.store(50, val.to_bits() as i64);
     ctx.iregs.set(1, 50).unwrap();
     execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
-    assert!((ctx.fregs.get(0).unwrap() - 3.14).abs() < 1e-10);
+    assert!((ctx.fregs.get(0).unwrap() - 3.15).abs() < 1e-10);
 }
 
 #[test]
 fn test_fstrx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    ctx.fregs.set(0, 3.14).unwrap();
+    ctx.fregs.set(0, 3.15).unwrap();
     ctx.iregs.set(1, 60).unwrap();
     execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
     let stored = f64::from_bits(ctx.cmem.load(60) as u64);
-    assert!((stored - 3.14).abs() < 1e-10);
+    assert!((stored - 3.15).abs() < 1e-10);
 }
 
 #[test]
@@ -722,11 +722,11 @@ fn test_istrx_address_65535_succeeds() {
 fn test_fldx_address_65535_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    let val: f64 = 2.718;
+    let val: f64 = 2.719;
     ctx.cmem.store(65535, val.to_bits() as i64);
     ctx.iregs.set(1, 65535).unwrap();
     execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
-    assert!((ctx.fregs.get(0).unwrap() - 2.718).abs() < 1e-10);
+    assert!((ctx.fregs.get(0).unwrap() - 2.719).abs() < 1e-10);
 }
 
 #[test]

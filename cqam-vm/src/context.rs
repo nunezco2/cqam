@@ -37,7 +37,7 @@ pub struct ExecutionContext {
     /// Hybrid register file: H0-H7 (8 x HybridValue).
     pub hregs: HybridRegFile,
 
-    /// Quantum register file: Q0-Q7 (8 x Option<DensityMatrix>).
+    /// Quantum register file: Q0-Q7 (8 x `Option<DensityMatrix>`).
     /// Separate from QMEM. These are the "live" quantum registers
     /// that QPREP, QKERNEL, and QOBSERVE operate on.
     pub qregs: [Option<DensityMatrix>; 8],

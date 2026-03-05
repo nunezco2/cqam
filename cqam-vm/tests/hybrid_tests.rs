@@ -419,14 +419,14 @@ fn test_fork_manager_take_completed() {
 fn test_context_clone_preserves_state() {
     let mut ctx = ExecutionContext::new(vec![Instruction::Halt]);
     ctx.iregs.set(0, 42).unwrap();
-    ctx.fregs.set(1, 3.14).unwrap();
+    ctx.fregs.set(1, 3.15).unwrap();
     ctx.zregs.set(2, (1.0, 2.0)).unwrap();
     ctx.cmem.store(100, 999);
     ctx.pc = 0;
 
     let cloned = ctx.clone();
     assert_eq!(cloned.iregs.get(0).unwrap(), 42);
-    assert!((cloned.fregs.get(1).unwrap() - 3.14).abs() < 1e-10);
+    assert!((cloned.fregs.get(1).unwrap() - 3.15).abs() < 1e-10);
     assert_eq!(cloned.zregs.get(2).unwrap(), (1.0, 2.0));
     assert_eq!(cloned.cmem.load(100), 999);
     assert_eq!(cloned.pc, 0);

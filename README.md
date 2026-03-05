@@ -42,7 +42,7 @@ The codegen tool (`cqam2qasm`) translates IR to OpenQASM 3.0.
 | Crate | Type | Description |
 |-------|------|-------------|
 | `cqam-core` | library | ISA definition, parser, opcode encoding/decoding, error types |
-| `cqam-sim` | library | Quantum probability distribution simulator (`QDist<T>`) |
+| `cqam-sim` | library | Quantum simulator: density matrices, kernels, QDist |
 | `cqam-vm` | library | Execution engine, PSW, ISR table, resource tracker |
 | `cqam-run` | binary | CLI runner: loads programs, runs the VM, prints reports |
 | `cqam-as` | binary | Assembler and disassembler for the 32-bit binary format |
@@ -111,7 +111,7 @@ cargo run --bin cqam2qasm -- examples/quantum_observe.cqam
 
 ## Example Programs
 
-The `examples/` directory contains four sample programs:
+The `examples/` directory contains five sample programs:
 
 | File | Description |
 |------|-------------|
@@ -119,6 +119,7 @@ The `examples/` directory contains four sample programs:
 | `quantum_observe.cqam` | QPREP, QKERNEL, QOBSERVE, HREDUCE pipeline |
 | `hybrid_fork.cqam` | HFORK/HCEXEC/HMERGE conditional execution |
 | `grover.cqam` | Full Grover search with iteration loop |
+| `bell_state.cqam` | Bell state preparation and measurement |
 
 ## Reference Documentation
 

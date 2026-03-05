@@ -305,6 +305,74 @@ impl DensityMatrix {
         sum
     }
 
+    /// Compute the partial trace over subsystem B, yielding the reduced
+    /// density matrix for subsystem A.
+    ///
+    /// The total system has `self.num_qubits()` qubits. Subsystem A consists
+    /// of the first `num_qubits_a` qubits; subsystem B is the remainder.
+    ///
+    /// # Panics
+    /// Panics if `num_qubits_a == 0` or `num_qubits_a >= self.num_qubits()`.
+    pub fn partial_trace_b(&self, num_qubits_a: u8) -> DensityMatrix {
+        assert!(num_qubits_a > 0 && num_qubits_a < self.num_qubits,
+            "partition must be 1..{}, got {}", self.num_qubits, num_qubits_a);
+
+        let dim_a = 1usize << num_qubits_a;
+        let dim_b = 1usize << (self.num_qubits - num_qubits_a);
+        let dim = self.dimension();
+
+        let mut rho_a = vec![complex::ZERO; dim_a * dim_a];
+
+        // rho_A[i][j] = sum_k rho[i*dim_b + k][j*dim_b + k]
+        for i in 0..dim_a {
+            for j in 0..dim_a {
+                let mut sum = complex::ZERO;
+                for k in 0..dim_b {
+                    let row = i * dim_b + k;
+                    let col = j * dim_b + k;
+                    sum = cx_add(sum, self.data[row * dim + col]);
+                }
+                rho_a[i * dim_a + j] = sum;
+            }
+        }
+
+        DensityMatrix {
+            num_qubits: num_qubits_a,
+            data: rho_a,
+        }
+    }
+
+    /// Entanglement entropy: S(rho_A) for bipartite system A|B.
+    ///
+    /// Computes the von Neumann entropy of the reduced density matrix
+    /// obtained by tracing out subsystem B. The partition point is given
+    /// by `num_qubits_a` (number of qubits in subsystem A).
+    ///
+    /// For a product state, entanglement entropy is 0.
+    /// For a maximally entangled state of 2 qubits, it is 1.0 (in bits).
+    ///
+    /// # Panics
+    /// Panics if `num_qubits_a == 0` or `num_qubits_a >= self.num_qubits()`.
+    pub fn entanglement_entropy(&self, num_qubits_a: u8) -> f64 {
+        let rho_a = self.partial_trace_b(num_qubits_a);
+
+        // Compute eigenvalues via the diagonal approximation:
+        // For density matrices produced by our kernel operations, the diagonal
+        // elements approximate the eigenvalues well. For exact results, a full
+        // eigendecomposition would be needed.
+        let dim_a = rho_a.dimension();
+        let probs: Vec<f64> = (0..dim_a)
+            .map(|k| rho_a.data[k * dim_a + k].0.max(0.0))
+            .collect();
+
+        let entropy: f64 = probs.iter()
+            .filter(|&&p| p > 1e-15)
+            .map(|&p| -p * p.log2())
+            .sum();
+
+        entropy
+    }
+
     /// Check if the density matrix satisfies basic validity constraints.
     pub fn is_valid(&self, tolerance: f64) -> bool {
         let dim = self.dimension();

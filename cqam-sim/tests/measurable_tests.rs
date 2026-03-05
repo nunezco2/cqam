@@ -108,38 +108,38 @@ fn test_superposition_metric_partial() {
 }
 
 #[test]
-fn test_entanglement_metric_uniform() {
+fn test_concentration_metric_uniform() {
     // Uniform: effective_states = n, so metric = n/n = 1.0
     let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.25, 0.25, 0.25, 0.25]).unwrap();
-    let metric = qdist.entanglement_metric();
+    let metric = qdist.concentration_metric();
     assert!(
         (metric - 1.0).abs() < 1e-6,
-        "Uniform should have entanglement_metric ~1.0, got {}",
+        "Uniform should have concentration_metric ~1.0, got {}",
         metric
     );
 }
 
 #[test]
-fn test_entanglement_metric_delta() {
+fn test_concentration_metric_delta() {
     // Delta: effective_states = 1, metric = 1/1 = 1.0
     let qdist = QDist::new("q", vec![0u16], vec![1.0]).unwrap();
-    let metric = qdist.entanglement_metric();
+    let metric = qdist.concentration_metric();
     assert!(
         (metric - 1.0).abs() < 1e-6,
-        "Delta with 1 state should have entanglement_metric ~1.0, got {}",
+        "Delta with 1 state should have concentration_metric ~1.0, got {}",
         metric
     );
 }
 
 #[test]
-fn test_entanglement_metric_concentrated() {
+fn test_concentration_metric_concentrated() {
     // Concentrated: one state with most probability
     let qdist = QDist::new("q", vec![0u16, 1, 2, 3], vec![0.97, 0.01, 0.01, 0.01]).unwrap();
-    let metric = qdist.entanglement_metric();
+    let metric = qdist.concentration_metric();
     // effective_states ~ 1.06, metric ~ 1.06/4 ~ 0.27
     assert!(
         metric < 0.5,
-        "Concentrated distribution should have low entanglement_metric, got {}",
+        "Concentrated distribution should have low concentration_metric, got {}",
         metric
     );
 }

@@ -333,4 +333,71 @@ fn test_unknown_distribution_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let result = execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: 99 });
     assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Unknown distribution ID"), "Expected UnknownDistribution error, got: {}", msg);
+    assert!(msg.contains("99"), "Error should contain the bad dist ID 99, got: {}", msg);
+}
+
+#[test]
+fn test_unknown_distribution_boundary_values() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // dist_id::GHZ (3) is the last valid ID; 4 should fail
+    let result = execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: 4 });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Unknown distribution ID"));
+
+    // Max u8 value
+    let result = execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: 255 });
+    assert!(result.is_err());
+}
+
+// =============================================================================
+// Bell state example end-to-end test (Phase 10)
+// =============================================================================
+
+#[test]
+fn test_bell_state_example_runs_through_vm() {
+    use cqam_core::parser::parse_program;
+    use cqam_vm::fork::ForkManager;
+    use cqam_vm::executor::run_program;
+
+    let source = r#"
+# Bell state example
+QPREP Q0, 2
+QOBSERVE H0, Q0
+HREDUCE H0, R0, 11
+HREDUCE H0, F0, 10
+HALT
+"#;
+
+    let program = parse_program(source).expect("Failed to parse bell_state program");
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+
+    run_program(&mut ctx, &mut fm).expect("bell_state program failed");
+
+    // The program should have halted
+    assert!(ctx.psw.trap_halt, "Program should have halted");
+
+    // QObserve should have consumed Q0
+    assert!(ctx.qregs[0].is_none(), "Q0 should be consumed after QOBSERVE");
+
+    // HREDUCE with MODE (11) should have written the measured state to R0
+    let r0 = ctx.iregs.get(0).unwrap();
+    // Bell state collapses to either |00> (0) or |11> (3)
+    assert!(r0 == 0 || r0 == 3,
+        "Bell state MODE should be 0 or 3, got {}", r0);
+
+    // HREDUCE with MEAN (10) should have written the mean to F0
+    let f0 = ctx.fregs.get(0).unwrap();
+    // After collapse, the distribution is a delta at r0 with p=1.0
+    // So mean = r0 as f64
+    assert!((f0 - r0 as f64).abs() < 1e-10,
+        "Mean should equal the collapsed state value, got F0={}, R0={}", f0, r0);
+
+    // Measurement flags should be set
+    assert!(ctx.psw.df, "Decoherence flag should be set after QObserve");
+    assert!(ctx.psw.cf, "Collapse flag should be set after QObserve");
 }

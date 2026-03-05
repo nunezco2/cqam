@@ -28,9 +28,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 dist_id::BELL => DensityMatrix::new_bell(),
                 dist_id::GHZ => DensityMatrix::new_ghz(num_qubits),
                 _ => {
-                    return Err(CqamError::UnknownKernel(
-                        format!("Unknown distribution ID: {}", dist),
-                    ));
+                    return Err(CqamError::UnknownDistribution(*dist));
                 }
             };
             ctx.qregs[*dst as usize] = Some(dm);

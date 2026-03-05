@@ -73,6 +73,9 @@ pub enum CqamError {
     ///
     /// Covers fork depth limit exceeded, thread panic, thread join failure.
     ForkError(String),
+
+    /// Unknown distribution ID in QPREP instruction.
+    UnknownDistribution(u8),
 }
 
 impl fmt::Display for CqamError {
@@ -157,6 +160,9 @@ impl fmt::Display for CqamError {
             }
             CqamError::ForkError(msg) => {
                 write!(f, "Fork error: {}", msg)
+            }
+            CqamError::UnknownDistribution(id) => {
+                write!(f, "Unknown distribution ID: {}", id)
             }
         }
     }

@@ -471,6 +471,12 @@ fn validate_indirect_addr(val: i64, max_addr: u16, instruction: &str) -> Result<
 /// nested ForkManager).
 pub fn run_program(ctx: &mut ExecutionContext, fork_mgr: &mut ForkManager) -> Result<(), CqamError> {
     while ctx.current_line().is_some() {
+        // Clone is required here due to Rust's borrow rules: ctx.program[pc]
+        // borrows ctx immutably, but execute_instruction needs &mut ctx.
+        // The cost is O(1) for most variants; only String-containing variants
+        // (Label, Jmp, Jif, Call, HCExec) allocate, and these are a small
+        // fraction of typical execution. Eliminating this clone would require
+        // splitting ExecutionContext into separate immutable/mutable parts.
         let instr = ctx.program[ctx.pc].clone();
         execute_instruction(ctx, &instr, fork_mgr)?;
 

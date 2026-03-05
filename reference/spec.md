@@ -8,8 +8,9 @@ integer, floating-point, and complex arithmetic with an ensemble/probability
 quantum model and a hybrid classical-quantum execution layer.
 
 Design philosophy:
-- Quantum state is represented as probability distributions (`QDist<u16>`), not
-  complex amplitude vectors. This avoids exponential memory scaling.
+- Quantum state is internally represented as density matrices (`DensityMatrix`),
+  enabling correct simulation of superposition, interference, and entanglement.
+  Measurement results are represented as probability distributions (`QDist<u16>`).
 - All instructions encode into a single 32-bit word with an 8-bit opcode prefix.
 - The machine supports five register files, two memory banks, a hardware call
   stack, and a two-level interrupt model.
@@ -30,7 +31,7 @@ Design philosophy:
 | IntRegFile | R0-R15 | 16 | i64 | Integer arithmetic, comparisons, predicates |
 | FloatRegFile | F0-F15 | 16 | f64 | Floating-point arithmetic |
 | ComplexRegFile | Z0-Z15 | 16 | (f64, f64) | Complex number arithmetic |
-| Quantum registers | Q0-Q7 | 8 | Option\<QDist\<u16\>\> | Quantum probability distributions |
+| Quantum registers | Q0-Q7 | 8 | Option\<DensityMatrix\> | Quantum state as density matrices |
 | HybridRegFile | H0-H7 | 8 | HybridValue | Measurement results (Dist, Int, Float, Complex, Empty) |
 
 ### 2.3 Memory Banks
@@ -38,7 +39,7 @@ Design philosophy:
 | Bank | Address Type | Size | Element Type | Description |
 |------|-------------|------|--------------|-------------|
 | CMEM | u16 | 65536 cells | i64 | Classical memory, heap-allocated |
-| QMEM | u8 | 256 slots | Option\<QDist\<u16\>\> | Quantum memory (8-qubit distributions) |
+| QMEM | u8 | 256 slots | Option\<DensityMatrix\> | Quantum memory (density matrices) |
 
 CMEM is accessed by ILdm, IStr, FLdm, FStr, ZLdm, ZStr.
 QMEM is accessed by QLoad, QStore.
@@ -136,21 +137,36 @@ Labels are resolved once during `ExecutionContext` construction into a
 
 ## 6. Quantum Model
 
-### 6.1 QDist\<u16\> -- Probability Distribution
+### 6.1 DensityMatrix -- Quantum State Representation
 
-- Domain: `Vec<u16>` (basis states)
-- Probabilities: `Vec<f64>` (real-valued, normalized to sum to 1.0)
-- No complex amplitudes; ensemble/probability semantics.
+Quantum state is represented by density matrices (`DensityMatrix`): 2^n x 2^n
+Hermitian, positive semi-definite matrices with Tr(rho) = 1. Stored as flat
+row-major `Vec<C64>` where `C64 = (f64, f64)`.
+
+Invariants maintained by all operations:
+- `data.len() == dim * dim` where `dim = 2^num_qubits`
+- `Tr(rho) = 1.0` (within floating-point tolerance)
+- `rho` is Hermitian: `rho[i][j] = conj(rho[j][i])`
+- `rho` is positive semi-definite
+
+The `QDist<u16>` type remains for measurement-outcome distributions used in
+hybrid reduction operations.
 
 ### 6.2 Measurement
 
-- Stochastic: `measure()` samples probabilistically.
-- Deterministic: `measure_deterministic()` returns the mode (for testing).
+- Stochastic: `DensityMatrix::measure_all()` samples via the Born rule.
+- Deterministic: `measure_deterministic()` returns the argmax (for testing).
+- Measurement produces a collapsed state `|k><k|` and a `HybridValue::Dist`
+  containing `[(k, 1.0)]`.
 
 ### 6.3 Fidelity Metrics
 
-- `superposition_metric()`: Shannon entropy normalized to [0,1].
-- `entanglement_metric()`: multi-state correlation measure.
+- `von_neumann_entropy()`: diagonal entropy normalized to [0,1].
+- `purity()`: Tr(rho^2), equals 1.0 for pure states.
+- `concentration_metric()`: inverse Herfindahl index (on QDist), measures
+  distribution concentration.
+- `entanglement_entropy()`: von Neumann entropy of the reduced density matrix
+  after partial trace, measures bipartite entanglement.
 - Thresholds are configurable; violations trigger QuantumError interrupt.
 
 ### 6.4 Kernels (5 implemented)
@@ -199,3 +215,135 @@ Each instruction has an associated `ResourceDelta` with five fields:
 | interference | Interference effects (from measurement) |
 
 The `ResourceTracker` accumulates deltas across execution for reporting.
+
+## 9. Formal Operational Semantics
+
+### 9.1 Machine State
+
+The machine state is a tuple:
+
+```
+Sigma = (PC, R, F, Z, Q, H, CMEM, QMEM, PSW, CS)
+```
+
+where:
+- `PC : N` -- program counter (instruction index)
+- `R : [0..15] -> Z` -- integer register file (64-bit signed integers)
+- `F : [0..15] -> R` -- floating-point register file (64-bit IEEE 754)
+- `Z : [0..15] -> C` -- complex register file (pairs of f64)
+- `Q : [0..7] -> DensityMatrix | NULL` -- quantum register file
+- `H : [0..7] -> HybridValue | EMPTY` -- hybrid register file
+- `CMEM : [0..65535] -> Z` -- classical memory (64-bit cells)
+- `QMEM : [0..255] -> DensityMatrix | NULL` -- quantum memory
+- `PSW : PSW_State` -- program status word (all flags)
+- `CS : List<N>` -- call stack (return addresses)
+
+### 9.2 State Transition Function
+
+The single-step transition function is:
+
+```
+step : Sigma x Program -> Sigma
+step(sigma, P) = dispatch(sigma, P[sigma.PC])
+```
+
+### 9.3 Transition Rules
+
+Notation: `sigma' = sigma[field := value]` denotes a state identical to
+`sigma` except that `field` is updated to `value`.
+
+**Arithmetic (IADD):**
+```
+                  v = R[lhs] + R[rhs]
+  -------------------------------------------------------
+  sigma --IADD(dst, lhs, rhs)--> sigma[R[dst] := v,
+                                       PSW := update_arith(PSW, v),
+                                       PC := PC + 1]
+```
+
+**Unconditional Jump (JMP):**
+```
+                  addr = labels(target)
+  -------------------------------------------------------
+  sigma --JMP(target)--> sigma[PC := addr]
+```
+
+**Conditional Jump (JIF):**
+```
+          R[pred] != 0       addr = labels(target)
+  -------------------------------------------------------
+  sigma --JIF(pred, target)--> sigma[PC := addr]
+
+          R[pred] == 0
+  -------------------------------------------------------
+  sigma --JIF(pred, target)--> sigma[PC := PC + 1]
+```
+
+**Subroutine Call (CALL):**
+```
+                  addr = labels(target)
+  -------------------------------------------------------
+  sigma --CALL(target)--> sigma[CS := (PC + 1) :: CS,
+                                PC := addr]
+```
+
+**Quantum Preparation (QPREP):**
+```
+                  dm = init_density_matrix(dist)
+  -------------------------------------------------------
+  sigma --QPREP(dst, dist)--> sigma[Q[dst] := dm,
+                                     PC := PC + 1]
+```
+
+**Quantum Kernel (QKERNEL):**
+```
+    Q[src] != NULL     dm' = kernel_k.apply(Q[src], R[c0], R[c1])
+  -------------------------------------------------------
+  sigma --QKERNEL(dst, src, k, c0, c1)--> sigma[Q[dst] := dm',
+                                                  PSW := update_qmeta(PSW, dm'),
+                                                  PC := PC + 1]
+```
+
+**Quantum Observation (QOBSERVE):**
+```
+    Q[src] != NULL     (v, _) = measure_all(Q[src])
+  -------------------------------------------------------
+  sigma --QOBSERVE(dst_h, src_q)--> sigma[H[dst_h] := Dist([(v, 1.0)]),
+                                           Q[src_q] := NULL,
+                                           PSW.DF := true,
+                                           PC := PC + 1]
+```
+
+**Hybrid Reduce (HREDUCE):**
+```
+    H[src] = val     result = reduce(val, func)
+  -------------------------------------------------------
+  sigma --HREDUCE(src, dst, func)--> sigma[target_reg[dst] := result,
+                                           PC := PC + 1]
+```
+
+**Halt (HALT):**
+```
+  -------------------------------------------------------
+  sigma --HALT--> sigma[PSW.trap_halt := true]
+```
+
+### 9.4 Execution Semantics
+
+A program P executes from initial state sigma_0:
+
+```
+run(sigma_0, P) = sigma_n
+  where sigma_n = step^n(sigma_0, P)
+  and   sigma_n.PSW.trap_halt = true
+  or    sigma_n.PC >= |P|
+```
+
+### 9.5 Resource Accounting
+
+Each transition produces a resource delta:
+
+```
+step_r : Sigma x Program -> (Sigma, ResourceDelta)
+R_total = sum_{i=0}^{n-1} delta_i
+```

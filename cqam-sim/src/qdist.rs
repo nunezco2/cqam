@@ -63,14 +63,17 @@ impl QDist<u16> {
         }
     }
 
-    /// Entanglement metric based on the inverse Herfindahl index.
+    /// Concentration metric based on the inverse Herfindahl-Hirschman index.
     ///
     /// Computes the effective number of states (1 / sum(p^2)) divided by the
     /// total number of states. A value near 0 means concentrated (few effective
-    /// states), and 1.0 means uniform.
+    /// states), and 1.0 means uniform (maximally spread).
+    ///
+    /// This measures distribution concentration, NOT quantum entanglement.
+    /// For entanglement measures, see `DensityMatrix::entanglement_entropy()`.
     ///
     /// Returns 0.0 for empty distributions.
-    pub fn entanglement_metric(&self) -> f64 {
+    pub fn concentration_metric(&self) -> f64 {
         let n = self.probabilities.len();
         if n == 0 {
             return 0.0;
