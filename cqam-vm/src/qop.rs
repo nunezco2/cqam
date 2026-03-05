@@ -13,6 +13,8 @@ use cqam_sim::kernels::entangle::Entangle;
 use cqam_sim::kernels::fourier::Fourier;
 use cqam_sim::kernels::diffuse::Diffuse;
 use cqam_sim::kernels::grover::GroverIter;
+use cqam_sim::kernels::rotate::Rotate;
+use cqam_sim::kernels::phase::PhaseShift;
 use crate::context::ExecutionContext;
 
 /// Execute a quantum instruction.
@@ -61,6 +63,92 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 let result = k.apply(dm);
 
                 // Compute metrics from density matrix
+                let superposition = result.von_neumann_entropy();
+                let purity = result.purity();
+
+                ctx.qregs[*dst as usize] = Some(result);
+                ctx.psw.update_from_qmeta(
+                    superposition,
+                    purity,
+                    (ctx.config.min_superposition, ctx.config.min_entanglement),
+                );
+                Ok(())
+            } else {
+                Err(CqamError::UninitializedRegister {
+                    file: "Q".to_string(),
+                    index: *src,
+                })
+            }
+        }
+
+        Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
+            let fparam0 = ctx.fregs.get(*fctx0)?;
+            let fparam1 = ctx.fregs.get(*fctx1)?;
+            let _ = fparam1; // reserved for future use
+
+            if let Some(ref dm) = ctx.qregs[*src as usize] {
+                let k: Box<dyn Kernel> = match *kernel {
+                    kernel_id::INIT => Box::new(Init),
+                    kernel_id::ENTANGLE => Box::new(Entangle),
+                    kernel_id::FOURIER => Box::new(Fourier),
+                    kernel_id::DIFFUSE => Box::new(Diffuse),
+                    kernel_id::GROVER_ITER => {
+                        let target = fparam0 as u16;
+                        Box::new(GroverIter { target })
+                    }
+                    kernel_id::ROTATE => Box::new(Rotate { theta: fparam0 }),
+                    kernel_id::PHASE_SHIFT => Box::new(PhaseShift { amplitude: (fparam0, 0.0) }),
+                    _ => {
+                        return Err(CqamError::UnknownKernel(
+                            format!("Unknown kernel ID: {}", kernel),
+                        ));
+                    }
+                };
+
+                let result = k.apply(dm);
+                let superposition = result.von_neumann_entropy();
+                let purity = result.purity();
+
+                ctx.qregs[*dst as usize] = Some(result);
+                ctx.psw.update_from_qmeta(
+                    superposition,
+                    purity,
+                    (ctx.config.min_superposition, ctx.config.min_entanglement),
+                );
+                Ok(())
+            } else {
+                Err(CqamError::UninitializedRegister {
+                    file: "Q".to_string(),
+                    index: *src,
+                })
+            }
+        }
+
+        Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
+            let zparam0 = ctx.zregs.get(*zctx0)?;
+            let zparam1 = ctx.zregs.get(*zctx1)?;
+            let _ = zparam1; // reserved for future use
+
+            if let Some(ref dm) = ctx.qregs[*src as usize] {
+                let k: Box<dyn Kernel> = match *kernel {
+                    kernel_id::INIT => Box::new(Init),
+                    kernel_id::ENTANGLE => Box::new(Entangle),
+                    kernel_id::FOURIER => Box::new(Fourier),
+                    kernel_id::DIFFUSE => Box::new(Diffuse),
+                    kernel_id::GROVER_ITER => {
+                        let target = zparam0.0 as u16;
+                        Box::new(GroverIter { target })
+                    }
+                    kernel_id::ROTATE => Box::new(Rotate { theta: zparam0.0 }),
+                    kernel_id::PHASE_SHIFT => Box::new(PhaseShift { amplitude: zparam0 }),
+                    _ => {
+                        return Err(CqamError::UnknownKernel(
+                            format!("Unknown kernel ID: {}", kernel),
+                        ));
+                    }
+                };
+
+                let result = k.apply(dm);
                 let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 

@@ -1096,6 +1096,8 @@ fn mnemonic_all_assigned_opcodes() {
         (op::QLOAD, "QLOAD"),
         (op::QSTORE, "QSTORE"),
         (op::QSAMPLE, "QSAMPLE"),
+        (op::QKERNELF, "QKERNELF"),
+        (op::QKERNELZ, "QKERNELZ"),
         (op::ILDX, "ILDX"),
         (op::ISTRX, "ISTRX"),
         (op::FLDX, "FLDX"),
@@ -1121,7 +1123,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2F_u8, 0x3F, 0x41, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2F_u8, 0x3F, 0x43, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,
@@ -1331,4 +1333,56 @@ fn roundtrip_all_variants_comprehensive() {
         let w = encode(instr, &labels).unwrap();
         assert_eq!(decode(w).unwrap(), *instr, "Indirect round-trip failed for {:?}", instr);
     }
+}
+
+// =============================================================================
+// Round-trip tests: Q-format (QKERNELF, QKERNELZ -- Phase 3)
+// =============================================================================
+
+#[test]
+fn roundtrip_qkernelf() {
+    let instr = Instruction::QKernelF {
+        dst: 1, src: 0, kernel: 5, fctx0: 3, fctx1: 4,
+    };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qkernelf_max_values() {
+    let instr = Instruction::QKernelF {
+        dst: 7, src: 7, kernel: 31, fctx0: 15, fctx1: 15,
+    };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qkernelf_zero_values() {
+    let instr = Instruction::QKernelF {
+        dst: 0, src: 0, kernel: 0, fctx0: 0, fctx1: 0,
+    };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qkernelz() {
+    let instr = Instruction::QKernelZ {
+        dst: 1, src: 0, kernel: 6, zctx0: 2, zctx1: 3,
+    };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qkernelz_max_values() {
+    let instr = Instruction::QKernelZ {
+        dst: 7, src: 7, kernel: 31, zctx0: 15, zctx1: 15,
+    };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qkernelz_zero_values() {
+    let instr = Instruction::QKernelZ {
+        dst: 0, src: 0, kernel: 0, zctx0: 0, zctx1: 0,
+    };
+    assert_eq!(roundtrip(&instr), instr);
 }

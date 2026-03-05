@@ -403,6 +403,8 @@ pub fn execute_instruction(
 
         Instruction::QPrep { .. }
         | Instruction::QKernel { .. }
+        | Instruction::QKernelF { .. }
+        | Instruction::QKernelZ { .. }
         | Instruction::QObserve { .. }
         | Instruction::QSample { .. }
         | Instruction::QLoad { .. }

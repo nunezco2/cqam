@@ -52,4 +52,6 @@ pub mod kernels {
     pub mod fourier;
     pub mod diffuse;
     pub mod grover;
+    pub mod rotate;
+    pub mod phase;
 }

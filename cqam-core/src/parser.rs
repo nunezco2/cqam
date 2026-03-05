@@ -265,6 +265,64 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             })?;
             Ok(Instruction::QKernel { dst, src, kernel, ctx0, ctx1 })
         }
+        "QKERNELF" => {
+            if ops.len() != 5 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QKERNELF requires 5 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELF: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELF: invalid src register '{}'", ops[1]),
+            })?;
+            let kernel = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELF: invalid kernel ID '{}'", ops[2]),
+            })?;
+            let fctx0 = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELF: invalid fctx0 register '{}'", ops[3]),
+            })?;
+            let fctx1 = parse_reg(ops[4]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELF: invalid fctx1 register '{}'", ops[4]),
+            })?;
+            Ok(Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 })
+        }
+        "QKERNELZ" => {
+            if ops.len() != 5 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QKERNELZ requires 5 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELZ: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELZ: invalid src register '{}'", ops[1]),
+            })?;
+            let kernel = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELZ: invalid kernel ID '{}'", ops[2]),
+            })?;
+            let zctx0 = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELZ: invalid zctx0 register '{}'", ops[3]),
+            })?;
+            let zctx1 = parse_reg(ops[4]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QKERNELZ: invalid zctx1 register '{}'", ops[4]),
+            })?;
+            Ok(Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 })
+        }
         "QOBSERVE" => parse_qobserve(&ops, "QOBSERVE", line_num),
         "QSAMPLE" => parse_qobserve(&ops, "QSAMPLE", line_num),
         "QLOAD" => {

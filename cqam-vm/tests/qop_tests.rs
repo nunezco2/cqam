@@ -964,3 +964,353 @@ fn test_qsample_mode_amp_out_of_range() {
     // Q[0] should still be alive (QSAMPLE is non-destructive)
     assert!(ctx.qregs[0].is_some(), "Q[0] should still be alive after failed QSAMPLE");
 }
+
+// =============================================================================
+// QKERNELF tests (Phase 3)
+// =============================================================================
+
+#[test]
+fn test_qkernelf_rotate() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Prepare uniform state
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    // Load theta = PI/4 into F[0], F[1] = 0.0
+    ctx.fregs.set(0, std::f64::consts::FRAC_PI_4).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QKernelF {
+        dst: 1,
+        src: 0,
+        kernel: kernel_id::ROTATE,
+        fctx0: 0,
+        fctx1: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert!(dm.is_valid(1e-8), "Output should be a valid density matrix");
+
+    // Diagonal probabilities should be preserved (diagonal unitary)
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-10,
+            "Rotate should preserve diagonal probs, got {}", p);
+    }
+}
+
+#[test]
+fn test_qkernelf_rotate_zero_angle() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    // theta = 0 -> identity
+    ctx.fregs.set(0, 0.0).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+
+    // Get input state for comparison
+    let input_probs = ctx.qregs[0].as_ref().unwrap().diagonal_probabilities();
+
+    execute_qop(&mut ctx, &Instruction::QKernelF {
+        dst: 1,
+        src: 0,
+        kernel: kernel_id::ROTATE,
+        fctx0: 0,
+        fctx1: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    let output_probs = dm.diagonal_probabilities();
+    for (i, (&pi, &po)) in input_probs.iter().zip(output_probs.iter()).enumerate() {
+        assert!((pi - po).abs() < 1e-10,
+            "Rotate(0) should be identity: p[{}] in={}, out={}", i, pi, po);
+    }
+}
+
+#[test]
+fn test_qkernelz_phase_shift() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    // Load complex amplitude (1.0, 0.5) into Z[0], Z[1] = (0,0)
+    ctx.zregs.set(0, (1.0, 0.5)).unwrap();
+    ctx.zregs.set(1, (0.0, 0.0)).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QKernelZ {
+        dst: 1,
+        src: 0,
+        kernel: kernel_id::PHASE_SHIFT,
+        zctx0: 0,
+        zctx1: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert!(dm.is_valid(1e-8), "Output should be a valid density matrix");
+
+    // Diagonal probabilities should be preserved (diagonal unitary)
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-10,
+            "PhaseShift should preserve diagonal probs, got {}", p);
+    }
+
+    // Purity should be preserved
+    assert!((dm.purity() - 1.0).abs() < 1e-10,
+        "PhaseShift should preserve purity, got {}", dm.purity());
+}
+
+#[test]
+fn test_qkernelf_existing_kernels() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Prepare uniform state
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    // Use QKERNELF with Init kernel (should work, ignoring float params)
+    ctx.fregs.set(0, 0.0).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QKernelF {
+        dst: 1,
+        src: 0,
+        kernel: kernel_id::INIT,
+        fctx0: 0,
+        fctx1: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert!(dm.is_valid(1e-8));
+
+    // Init on any state produces uniform superposition
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-10,
+            "Init kernel via QKERNELF should produce uniform, got {}", p);
+    }
+
+    // Also test Fourier kernel via QKERNELF
+    execute_qop(&mut ctx, &Instruction::QKernelF {
+        dst: 2,
+        src: 1,
+        kernel: kernel_id::FOURIER,
+        fctx0: 0,
+        fctx1: 1,
+    }).unwrap();
+
+    let dm2 = ctx.qregs[2].as_ref().unwrap();
+    assert!(dm2.is_valid(1e-8));
+    // QFT on uniform concentrates on state 0
+    let probs2 = dm2.diagonal_probabilities();
+    assert!(probs2[0] > 0.99,
+        "QFT of uniform via QKERNELF should concentrate on state 0, got p[0]={}", probs2[0]);
+}
+
+// =============================================================================
+// QKERNELF error cases (Phase 3)
+// =============================================================================
+
+#[test]
+fn test_qkernelf_on_empty_register_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.fregs.set(0, 0.0).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QKernelF {
+        dst: 1, src: 0, kernel: kernel_id::ROTATE, fctx0: 0, fctx1: 1,
+    });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Uninitialized register"),
+        "Expected UninitializedRegister error, got: {}", msg);
+}
+
+#[test]
+fn test_qkernelf_unknown_kernel_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+    ctx.fregs.set(0, 0.0).unwrap();
+    ctx.fregs.set(1, 0.0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QKernelF {
+        dst: 1, src: 0, kernel: 99, fctx0: 0, fctx1: 1,
+    });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Unknown kernel"),
+        "Expected UnknownKernel error, got: {}", msg);
+}
+
+// =============================================================================
+// QKERNELZ error cases (Phase 3)
+// =============================================================================
+
+#[test]
+fn test_qkernelz_on_empty_register_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.zregs.set(0, (0.0, 0.0)).unwrap();
+    ctx.zregs.set(1, (0.0, 0.0)).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QKernelZ {
+        dst: 1, src: 0, kernel: kernel_id::PHASE_SHIFT, zctx0: 0, zctx1: 1,
+    });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Uninitialized register"),
+        "Expected UninitializedRegister error, got: {}", msg);
+}
+
+#[test]
+fn test_qkernelz_unknown_kernel_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+    ctx.zregs.set(0, (0.0, 0.0)).unwrap();
+    ctx.zregs.set(1, (0.0, 0.0)).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QKernelZ {
+        dst: 1, src: 0, kernel: 99, zctx0: 0, zctx1: 1,
+    });
+    assert!(result.is_err());
+    let msg = format!("{}", result.unwrap_err());
+    assert!(msg.contains("Unknown kernel"),
+        "Expected UnknownKernel error, got: {}", msg);
+}
+
+// =============================================================================
+// End-to-end: QPREP -> QKERNELF(ROTATE) -> QOBSERVE -> HREDUCE(MEAN)
+// =============================================================================
+
+#[test]
+fn test_e2e_qkernelf_rotate_observe_reduce() {
+    use cqam_core::parser::parse_program;
+    use cqam_vm::fork::ForkManager;
+    use cqam_vm::executor::run_program;
+
+    // Pipeline: prepare uniform state, apply Rotate(0) which is identity,
+    // observe the distribution, then reduce to MEAN.
+    // Uniform(0,1,2,3) with p=0.25 each -> MEAN = 1.5
+    let source = r#"
+# Prepare uniform 2-qubit state
+QPREP Q0, 0
+# Load theta = 0 into F0 (identity rotation)
+FLDI F0, 0
+FLDI F1, 0
+# Apply QKERNELF with ROTATE kernel (kernel_id=5)
+QKERNELF Q1, Q0, 5, F0, F1
+# Observe Q1 -> H0 (full distribution)
+QOBSERVE H0, Q1
+# Reduce to mean
+HREDUCE H0, F2, 10
+HALT
+"#;
+
+    let program = parse_program(source).expect("Failed to parse QKERNELF pipeline");
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+
+    run_program(&mut ctx, &mut fm).expect("QKERNELF pipeline failed");
+
+    assert!(ctx.psw.trap_halt, "Program should have halted");
+
+    // Q1 was consumed by QOBSERVE
+    assert!(ctx.qregs[1].is_none(), "Q1 should be consumed after QOBSERVE");
+
+    // MEAN of uniform(0,1,2,3) = 1.5
+    let f2 = ctx.fregs.get(2).unwrap();
+    assert!((f2 - 1.5).abs() < 1e-10,
+        "Mean of uniform after identity Rotate should be 1.5, got F2={}", f2);
+}
+
+// =============================================================================
+// End-to-end: QPREP -> QKERNELZ(PHASE_SHIFT) -> QSAMPLE -> verify
+// =============================================================================
+
+#[test]
+fn test_e2e_qkernelz_phase_shift_sample() {
+    use cqam_core::parser::parse_program;
+    use cqam_vm::fork::ForkManager;
+    use cqam_vm::executor::run_program;
+
+    // Pipeline: prepare uniform state, apply PhaseShift with zero amplitude
+    // (which is identity), then sample the distribution.
+    // Diagonal probabilities should be 0.25 each.
+    let source = r#"
+# Prepare uniform 2-qubit state
+QPREP Q0, 0
+# Load amplitude = (0, 0) into Z0 (zero amplitude -> identity)
+ZLDI Z0, 0, 0
+ZLDI Z1, 0, 0
+# Apply QKERNELZ with PHASE_SHIFT kernel (kernel_id=6)
+QKERNELZ Q1, Q0, 6, Z0, Z1
+# Non-destructive sample Q1 -> H0
+QSAMPLE H0, Q1
+# Reduce to mean
+HREDUCE H0, F0, 10
+HALT
+"#;
+
+    let program = parse_program(source).expect("Failed to parse QKERNELZ pipeline");
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+
+    run_program(&mut ctx, &mut fm).expect("QKERNELZ pipeline failed");
+
+    assert!(ctx.psw.trap_halt, "Program should have halted");
+
+    // Q1 should still be live (QSAMPLE is non-destructive)
+    assert!(ctx.qregs[1].is_some(), "Q1 should be live after QSAMPLE");
+
+    // MEAN of uniform(0,1,2,3) = 1.5
+    let f0 = ctx.fregs.get(0).unwrap();
+    assert!((f0 - 1.5).abs() < 1e-10,
+        "Mean of uniform after identity PhaseShift should be 1.5, got F0={}", f0);
+
+    // Verify the distribution in H0
+    if let HybridValue::Dist(pairs) = ctx.hregs.get(0).unwrap() {
+        assert_eq!(pairs.len(), 4,
+            "Uniform 2-qubit distribution should have 4 entries, got {}", pairs.len());
+        for &(_, p) in pairs {
+            assert!((p - 0.25).abs() < 1e-10,
+                "Each probability should be ~0.25 after identity PhaseShift, got {}", p);
+        }
+    } else {
+        panic!("Expected HybridValue::Dist after QSAMPLE");
+    }
+}
+
+// =============================================================================
+// QKERNELZ with non-zero complex amplitude: verify diagonal preservation
+// =============================================================================
+
+#[test]
+fn test_qkernelz_phase_shift_nonzero_preserves_diag() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    // amplitude = (0.0, 2.0) -> |z| = 2.0, purely imaginary
+    ctx.zregs.set(0, (0.0, 2.0)).unwrap();
+    ctx.zregs.set(1, (0.0, 0.0)).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QKernelZ {
+        dst: 1,
+        src: 0,
+        kernel: kernel_id::PHASE_SHIFT,
+        zctx0: 0,
+        zctx1: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert!(dm.is_valid(1e-8), "Output should be a valid density matrix");
+
+    // Diagonal probabilities should be preserved (diagonal unitary)
+    let probs = dm.diagonal_probabilities();
+    for &p in &probs {
+        assert!((p - 0.25).abs() < 1e-10,
+            "PhaseShift with purely imaginary amplitude should preserve diagonal probs, got {}", p);
+    }
+
+    assert!((dm.purity() - 1.0).abs() < 1e-10,
+        "PhaseShift should preserve purity, got {}", dm.purity());
+}

@@ -387,6 +387,20 @@ impl QasmFormat for Instruction {
                     ]
                 }
             }
+            Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
+                let kname = kernel_name(*kernel);
+                vec![format!(
+                    "// QKernelF: q{} = {}(q{}, ctx=[F{}, F{}])",
+                    dst, kname, src, fctx0, fctx1
+                )]
+            }
+            Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
+                let kname = kernel_name(*kernel);
+                vec![format!(
+                    "// QKernelZ: q{} = {}(q{}, ctx=[Z{}, Z{}])",
+                    dst, kname, src, zctx0, zctx1
+                )]
+            }
             Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
                 match *mode {
                     0 => vec![format!("H{} = measure q{};", dst_h, src_q)],
@@ -649,6 +663,20 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.quantum_regs.insert(*src);
             used.int_regs.insert(*ctx0);
             used.int_regs.insert(*ctx1);
+            used.kernel_ids.insert(*kernel);
+        }
+        Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.float_regs.insert(*fctx0);
+            used.float_regs.insert(*fctx1);
+            used.kernel_ids.insert(*kernel);
+        }
+        Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.complex_regs.insert(*zctx0);
+            used.complex_regs.insert(*zctx1);
             used.kernel_ids.insert(*kernel);
         }
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {

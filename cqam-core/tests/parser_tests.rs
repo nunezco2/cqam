@@ -968,3 +968,117 @@ fn test_parse_jmp_to_label_with_digits() {
         Instruction::Jmp { target: "LOOP_42".into() }
     );
 }
+
+// ===========================================================================
+// QKERNELF / QKERNELZ (Phase 3)
+// ===========================================================================
+
+#[test]
+fn test_parse_qkernelf() {
+    assert_eq!(
+        parse_instruction("QKERNELF Q1, Q0, 5, F3, F4").unwrap(),
+        Instruction::QKernelF { dst: 1, src: 0, kernel: 5, fctx0: 3, fctx1: 4 }
+    );
+}
+
+#[test]
+fn test_parse_qkernelf_max_regs() {
+    assert_eq!(
+        parse_instruction("QKERNELF Q7, Q7, 31, F15, F15").unwrap(),
+        Instruction::QKernelF { dst: 7, src: 7, kernel: 31, fctx0: 15, fctx1: 15 }
+    );
+}
+
+#[test]
+fn test_parse_qkernelf_zero_values() {
+    assert_eq!(
+        parse_instruction("QKERNELF Q0, Q0, 0, F0, F0").unwrap(),
+        Instruction::QKernelF { dst: 0, src: 0, kernel: 0, fctx0: 0, fctx1: 0 }
+    );
+}
+
+#[test]
+fn test_parse_qkernelf_missing_operand() {
+    assert!(parse_instruction("QKERNELF Q1, Q0, 5, F3").is_err());
+}
+
+#[test]
+fn test_parse_qkernelf_too_many_operands() {
+    assert!(parse_instruction("QKERNELF Q1, Q0, 5, F3, F4, F5").is_err());
+}
+
+#[test]
+fn test_parse_qkernelf_invalid_register() {
+    // "99" is not a valid register token (no R/F/Z/Q/H prefix)
+    assert!(parse_instruction("QKERNELF Q1, Q0, 5, 99, F4").is_err());
+}
+
+#[test]
+fn test_parse_qkernelz() {
+    assert_eq!(
+        parse_instruction("QKERNELZ Q1, Q0, 6, Z2, Z3").unwrap(),
+        Instruction::QKernelZ { dst: 1, src: 0, kernel: 6, zctx0: 2, zctx1: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qkernelz_max_regs() {
+    assert_eq!(
+        parse_instruction("QKERNELZ Q7, Q7, 31, Z15, Z15").unwrap(),
+        Instruction::QKernelZ { dst: 7, src: 7, kernel: 31, zctx0: 15, zctx1: 15 }
+    );
+}
+
+#[test]
+fn test_parse_qkernelz_zero_values() {
+    assert_eq!(
+        parse_instruction("QKERNELZ Q0, Q0, 0, Z0, Z0").unwrap(),
+        Instruction::QKernelZ { dst: 0, src: 0, kernel: 0, zctx0: 0, zctx1: 0 }
+    );
+}
+
+#[test]
+fn test_parse_qkernelz_missing_operand() {
+    assert!(parse_instruction("QKERNELZ Q1, Q0, 6, Z2").is_err());
+}
+
+#[test]
+fn test_parse_qkernelz_too_many_operands() {
+    assert!(parse_instruction("QKERNELZ Q1, Q0, 6, Z2, Z3, Z4").is_err());
+}
+
+#[test]
+fn test_parse_qkernelz_invalid_register() {
+    // "abc" is not a valid register token
+    assert!(parse_instruction("QKERNELZ Q1, Q0, 6, abc, Z3").is_err());
+}
+
+#[test]
+fn test_parse_program_qkernelf_workflow() {
+    let source = "\
+QPREP Q0, 0
+FLDI F0, 1
+FLDI F1, 0
+QKERNELF Q1, Q0, 5, F0, F1
+QOBSERVE H0, Q1
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 6);
+    assert_eq!(program[3], Instruction::QKernelF { dst: 1, src: 0, kernel: 5, fctx0: 0, fctx1: 1 });
+}
+
+#[test]
+fn test_parse_program_qkernelz_workflow() {
+    let source = "\
+QPREP Q0, 0
+ZLDI Z0, 1, 2
+ZLDI Z1, 0, 0
+QKERNELZ Q1, Q0, 6, Z0, Z1
+QSAMPLE H0, Q1
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 6);
+    assert_eq!(program[3], Instruction::QKernelZ { dst: 1, src: 0, kernel: 6, zctx0: 0, zctx1: 1 });
+}

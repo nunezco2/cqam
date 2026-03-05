@@ -248,6 +248,18 @@ pub enum Instruction {
     /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
     QSample { dst_h: u8, src_q: u8, mode: u8, ctx0: u8, ctx1: u8 },
 
+    /// Apply quantum kernel with float context parameters from F-file.
+    /// Q[dst] = kernel(Q[src], F[fctx0], F[fctx1])
+    /// kernel: kernel ID (see kernel_id module)
+    /// fctx0, fctx1: float register indices providing classical context
+    QKernelF { dst: u8, src: u8, kernel: u8, fctx0: u8, fctx1: u8 },
+
+    /// Apply quantum kernel with complex context parameters from Z-file.
+    /// Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1])
+    /// kernel: kernel ID (see kernel_id module)
+    /// zctx0, zctx1: complex register indices providing classical context
+    QKernelZ { dst: u8, src: u8, kernel: u8, zctx0: u8, zctx1: u8 },
+
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
     /// Fork hybrid execution into parallel threads. Sets PSW fork flags.
@@ -329,6 +341,10 @@ pub mod kernel_id {
     pub const DIFFUSE: u8 = 3;
     /// Grover iteration (oracle + diffusion).
     pub const GROVER_ITER: u8 = 4;
+    /// Diagonal rotation kernel: U[k][k] = exp(i * theta * k).
+    pub const ROTATE: u8 = 5;
+    /// Phase shift kernel: U[k][k] = exp(i * |z| * k).
+    pub const PHASE_SHIFT: u8 = 6;
 }
 
 /// PSW flag IDs for HCExec.
@@ -423,6 +439,8 @@ pub fn kernel_name(id: u8) -> &'static str {
         kernel_id::FOURIER => "fourier",
         kernel_id::DIFFUSE => "diffuse",
         kernel_id::GROVER_ITER => "grover_iter",
+        kernel_id::ROTATE => "rotate",
+        kernel_id::PHASE_SHIFT => "phase_shift",
         _ => "unknown",
     }
 }

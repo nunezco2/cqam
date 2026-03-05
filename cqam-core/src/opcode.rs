@@ -97,6 +97,8 @@ pub mod op {
 
     // -- PLAN3 extension range (0x40-0x4F) ------------------------------------
     pub const QSAMPLE: u8 = 0x40;
+    pub const QKERNELF: u8 = 0x41;
+    pub const QKERNELZ: u8 = 0x42;
 
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
@@ -286,6 +288,12 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             ctx0,
             ctx1,
         } => encode_q(op::QKERNEL, *dst, *src, *kernel, *ctx0, *ctx1),
+
+        Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } =>
+            encode_q(op::QKERNELF, *dst, *src, *kernel, *fctx0, *fctx1),
+
+        Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } =>
+            encode_q(op::QKERNELZ, *dst, *src, *kernel, *zctx0, *zctx1),
 
         // -- QO-format (quantum observe, extended) --------------------------------
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } =>
@@ -566,6 +574,26 @@ pub fn decode_with_debug(
             })
         }
 
+        // -- Q-format (quantum kernel with float context) ---------------------
+        op::QKERNELF => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let kernel = extract_u5(word, 13);
+            let fctx0 = extract_reg4(word, 9);
+            let fctx1 = extract_reg4(word, 5);
+            Ok(Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 })
+        }
+
+        // -- Q-format (quantum kernel with complex context) -------------------
+        op::QKERNELZ => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let kernel = extract_u5(word, 13);
+            let zctx0 = extract_reg4(word, 9);
+            let zctx1 = extract_reg4(word, 5);
+            Ok(Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 })
+        }
+
         // -- QO-format (quantum observe, extended) --------------------------------
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
@@ -698,6 +726,8 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QLOAD => Some("QLOAD"),
         op::QSTORE => Some("QSTORE"),
         op::QSAMPLE => Some("QSAMPLE"),
+        op::QKERNELF => Some("QKERNELF"),
+        op::QKERNELZ => Some("QKERNELZ"),
         op::ILDX => Some("ILDX"),
         op::ISTRX => Some("ISTRX"),
         op::FLDX => Some("FLDX"),
