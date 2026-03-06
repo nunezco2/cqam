@@ -95,30 +95,30 @@ pub mod op {
     pub const ZLDX: u8 = 0x3D;
     pub const ZSTRX: u8 = 0x3E;
 
-    // -- PLAN3 extension range (0x40-0x4F) ------------------------------------
+    // -- Quantum sampling and kernel operations (0x40-0x44) -------------------
     pub const QSAMPLE: u8 = 0x40;
     pub const QKERNELF: u8 = 0x41;
     pub const QKERNELZ: u8 = 0x42;
     pub const QPREPR: u8 = 0x43;
     pub const QENCODE: u8 = 0x44;
 
-    // -- Phase 5 Revised: Masked register-level gate operations (0x45-0x47) ---
+    // -- Masked register-level gate operations (0x45-0x47) --------------------
     pub const QHADM: u8 = 0x45;
     pub const QFLIP: u8 = 0x46;
     pub const QPHASE: u8 = 0x47;
 
-    // -- Phase 5a: Qubit-level gate operations (0x48-0x4A) --------------------
+    // -- Qubit-level gate operations (0x48-0x4A) ------------------------------
     pub const QCNOT: u8 = 0x48;
     pub const QROT: u8 = 0x49;
     pub const QMEAS: u8 = 0x4A;
 
-    // -- Phase 5c: Extended quantum operations (0x4B-0x4E) ------------------
+    // -- Extended quantum operations (0x4B-0x4E) ------------------------------
     pub const QTENSOR: u8 = 0x4B;
     pub const QCUSTOM: u8 = 0x4C;
     pub const QCZ: u8 = 0x4D;
     pub const QSWAP: u8 = 0x4E;
 
-    // -- PLAN4 P2 extension range (0x4F-0x57) ---------------------------------
+    // -- Mixed-state, partial-trace, reset, and float math (0x4F-0x57) --------
     pub const QMIXED: u8 = 0x4F;
     pub const QPREPN: u8 = 0x51;
     pub const FSIN: u8 = 0x52;
@@ -808,7 +808,7 @@ pub fn decode_with_debug(
             Ok(Instruction::QSwap { dst, src, qubit_a_reg, qubit_b_reg })
         }
 
-        // -- P2: QMIXED decode --
+        // -- QMIXED: mixed-state preparation from classical memory --
         op::QMIXED => {
             let dst = extract_reg3(word, 21);
             let base_addr_reg = extract_reg4(word, 17);
@@ -816,7 +816,7 @@ pub fn decode_with_debug(
             Ok(Instruction::QMixed { dst, base_addr_reg, count_reg })
         }
 
-        // -- P2: QPREPN decode --
+        // -- QPREPN: variable qubit count state preparation --
         op::QPREPN => {
             let dst = extract_reg3(word, 21);
             let dist = extract_reg3(word, 18);
@@ -824,7 +824,7 @@ pub fn decode_with_debug(
             Ok(Instruction::QPrepN { dst, dist, qubit_count_reg })
         }
 
-        // -- P2: Trig functions decode --
+        // -- Transcendental float operations (FSIN, FCOS, FATAN2, FSQRT) --
         op::FSIN => {
             let dst = extract_reg4(word, 20);
             let src = extract_reg4(word, 16);
@@ -842,7 +842,7 @@ pub fn decode_with_debug(
             Ok(Instruction::FSqrt { dst, src })
         }
 
-        // -- P2: QPTRACE decode --
+        // -- QPTRACE: partial trace over subsystem B --
         op::QPTRACE => {
             let dst = extract_reg3(word, 21);
             let src = extract_reg3(word, 18);
@@ -850,7 +850,7 @@ pub fn decode_with_debug(
             Ok(Instruction::QPtrace { dst, src, num_qubits_a_reg })
         }
 
-        // -- P2: QRESET decode --
+        // -- QRESET: measure and conditionally flip a qubit to |0> --
         op::QRESET => {
             let dst = extract_reg3(word, 21);
             let src = extract_reg3(word, 18);

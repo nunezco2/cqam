@@ -388,7 +388,7 @@ pub enum Instruction {
     /// Q[dst] = reset_qubit(Q[src], qubit=R[qubit_reg])
     /// Semantics: measure the target qubit; if outcome is 1, apply X to flip it.
     /// The result is a state where the target qubit is guaranteed to be |0>.
-    /// Depends on P0.3 measure_qubit and existing apply_single_qubit_gate.
+    /// Implemented via `measure_qubit` followed by a conditional X gate.
     QReset { dst: u8, src: u8, qubit_reg: u8 },
 
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
@@ -502,7 +502,7 @@ pub mod flag_id {
 
 /// Observation mode IDs for QObserve/QSample.
 pub mod observe_mode {
-    /// Full diagonal distribution (default, Phase 1 behavior).
+    /// Full diagonal distribution (default mode; returns all diagonal probabilities).
     pub const DIST: u8 = 0;
     /// Probability of basis state at index R[ctx0].
     pub const PROB: u8 = 1;

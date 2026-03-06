@@ -535,7 +535,7 @@ fn roundtrip_qobserve_max() {
 }
 
 // =============================================================================
-// Round-trip tests: QO-format (quantum sample -- PLAN3 Phase 1)
+// Round-trip tests: QO-format (QSAMPLE)
 // =============================================================================
 
 #[test]
@@ -557,7 +557,7 @@ fn roundtrip_qsample_zero() {
 }
 
 // =============================================================================
-// Round-trip tests: QO-format with mode (PLAN3 Phase 2)
+// Round-trip tests: QO-format with mode (QOBSERVE mode dispatch)
 // =============================================================================
 
 #[test]
@@ -1337,7 +1337,7 @@ fn roundtrip_all_variants_comprehensive() {
 }
 
 // =============================================================================
-// Round-trip tests: Q-format (QKERNELF, QKERNELZ -- Phase 3)
+// Round-trip tests: Q-format (QKERNELF, QKERNELZ)
 // =============================================================================
 
 #[test]
@@ -1389,7 +1389,7 @@ fn roundtrip_qkernelz_zero_values() {
 }
 
 // =============================================================================
-// Round-trip tests: QR-format (QPrepR -- Phase 4)
+// Round-trip tests: QR-format (QPrepR)
 // =============================================================================
 
 #[test]
@@ -1416,7 +1416,7 @@ fn test_qprepr_mnemonic() {
 }
 
 // =============================================================================
-// Round-trip tests: QE-format (QEncode -- Phase 4)
+// Round-trip tests: QE-format (QEncode)
 // =============================================================================
 
 #[test]
@@ -1483,7 +1483,7 @@ fn error_qprepr_dist_reg_overflow() {
 }
 
 // =============================================================================
-// Phase 5 Revised: QHADM, QFLIP, QPHASE roundtrip tests
+// Round-trip tests: masked register-level gate operations (QHADM, QFLIP, QPHASE)
 // =============================================================================
 
 #[test]
@@ -1532,7 +1532,7 @@ fn mnemonic_masked_ops() {
 }
 
 // =============================================================================
-// Phase 5a: QCNOT, QROT, QMEAS roundtrip tests
+// Round-trip tests: qubit-level gate operations (QCNOT, QROT, QMEAS)
 // =============================================================================
 
 #[test]
@@ -1624,7 +1624,7 @@ fn error_qmeas_dst_overflow() {
 }
 
 // ===========================================================================
-// P1 round-trip tests: QTENSOR, QCUSTOM, QCZ, QSWAP
+// Round-trip tests: extended quantum operations (QTENSOR, QCUSTOM, QCZ, QSWAP)
 // ===========================================================================
 
 #[test]
@@ -1679,7 +1679,7 @@ fn error_qtensor_q_overflow() {
 }
 
 // =============================================================================
-// PLAN4 P2 opcode roundtrip tests
+// Round-trip tests: mixed-state, partial-trace, reset, and float math opcodes
 // =============================================================================
 
 #[test]

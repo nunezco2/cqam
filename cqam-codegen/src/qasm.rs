@@ -501,7 +501,7 @@ impl QasmFormat for Instruction {
                 )]
             }
 
-            // -- P2: New instructions QASM emission --------------------------
+            // -- QASM emission for mixed-state and partial-trace instructions --
 
             Instruction::QMixed { dst, base_addr_reg, count_reg } => {
                 vec![format!(
@@ -883,7 +883,7 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             }
         }
 
-        // -- P2: New instruction scan --
+        // -- Register-use scan for mixed-state and partial-trace instructions --
         Instruction::QMixed { dst, base_addr_reg, count_reg } => {
             used.quantum_regs.insert(*dst);
             used.int_regs.insert(*base_addr_reg);

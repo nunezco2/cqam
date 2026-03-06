@@ -5,7 +5,7 @@
 //!
 //! Each test constructs a full instruction sequence, executes it through the
 //! executor, and asserts on final classical register state. This validates that
-//! all PLAN3 extensions compose correctly in realistic programs.
+//! all quantum extensions compose correctly in realistic programs.
 //!
 //! File: cqam-vm/tests/dataflow_e2e_tests.rs
 
@@ -43,8 +43,7 @@ fn run_program(instrs: Vec<Instruction>) -> ExecutionContext {
 ///   ILDI R0, target  ->  QPREP Q0  ->  QKERNEL grover  ->  QOBSERVE H0 (DIST)
 ///   ->  HREDUCE mode -> R4
 ///
-/// This is the "classic Grover" pipeline that existed before PLAN3, but now
-/// uses the extended QOBSERVE with explicit mode=DIST.
+/// This is the classic Grover pipeline using QOBSERVE with explicit mode=DIST.
 ///
 /// Assertions:
 ///   - R4 (mode of distribution) should be the Grover target after sufficient iterations

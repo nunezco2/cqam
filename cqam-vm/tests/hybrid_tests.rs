@@ -654,7 +654,7 @@ fn test_sequential_fork_merge_pairs_with_nesting() {
 }
 
 // =============================================================================
-// HREDUCE CONJ_Z and NEGATE_Z tests (PLAN3 Phase 2)
+// HREDUCE CONJ_Z and NEGATE_Z tests
 // =============================================================================
 
 #[test]
@@ -722,7 +722,7 @@ fn test_hreduce_negate_z_type_mismatch() {
 }
 
 // =============================================================================
-// HREDUCE Dist fallback tests (PLAN3 Phase 2)
+// HREDUCE Dist fallback tests
 // =============================================================================
 
 #[test]
@@ -1152,7 +1152,7 @@ fn test_hfork_verify_fork_state_independence() {
 }
 
 // =============================================================================
-// P2.2: HREDUCE/EXPECT — expectation value reduction
+// HREDUCE/EXPECT — expectation value reduction
 // =============================================================================
 
 #[test]

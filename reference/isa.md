@@ -207,7 +207,8 @@ following formats.
 | 0x2D-0x2E | Interrupt handling (RETI, SETIV) |
 | 0x30-0x34 | Quantum operations (QPREP..QSTORE) |
 | 0x35-0x3E | Register-indirect memory + hybrid operations |
-| 0x40-0x47 | PLAN3 quantum extensions (QSAMPLE..QPHASE) |
+| 0x40-0x4E | Extended quantum operations (QSAMPLE..QSWAP) |
+| 0x4F-0x57 | Mixed-state, partial-trace, reset, and float math |
 
 ---
 

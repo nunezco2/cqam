@@ -405,7 +405,7 @@ HALT
 }
 
 // =============================================================================
-// QOBSERVE full-distribution tests (PLAN3 Phase 1)
+// QOBSERVE full-distribution tests
 // =============================================================================
 
 #[test]
@@ -440,7 +440,7 @@ fn test_qobserve_consumes_q_register() {
 }
 
 // =============================================================================
-// QSAMPLE tests (PLAN3 Phase 1)
+// QSAMPLE tests
 // =============================================================================
 
 #[test]
@@ -522,7 +522,7 @@ fn test_qsample_on_empty_register_returns_error() {
 }
 
 // =============================================================================
-// QSAMPLE does NOT set measured flag (PLAN3 Phase 1 edge case)
+// QSAMPLE does NOT set measured flag (edge case)
 // =============================================================================
 
 #[test]
@@ -600,7 +600,7 @@ fn test_qobserve_ghz_state_distribution_shape() {
 }
 
 // =============================================================================
-// Integration: QSAMPLE -> HREDUCE pipeline (PLAN3 Phase 1)
+// Integration: QSAMPLE -> HREDUCE pipeline
 // =============================================================================
 
 #[test]
@@ -657,7 +657,7 @@ HALT
 }
 
 // =============================================================================
-// QOBSERVE/QSAMPLE mode dispatch tests (PLAN3 Phase 2)
+// QOBSERVE/QSAMPLE mode dispatch tests
 // =============================================================================
 
 #[test]
@@ -794,7 +794,7 @@ fn test_qobserve_mode_amp_out_of_range() {
 }
 
 // =============================================================================
-// End-to-end pipeline tests (PLAN3 Phase 2)
+// End-to-end pipeline tests (QPREP -> QOBSERVE -> HREDUCE)
 // =============================================================================
 
 /// QPREP -> QOBSERVE(AMP) -> HREDUCE(CONJ_Z) -> verify Z register.
@@ -966,7 +966,7 @@ fn test_qsample_mode_amp_out_of_range() {
 }
 
 // =============================================================================
-// QKERNELF tests (Phase 3)
+// QKERNELF tests
 // =============================================================================
 
 #[test]
@@ -1108,7 +1108,7 @@ fn test_qkernelf_existing_kernels() {
 }
 
 // =============================================================================
-// QKERNELF error cases (Phase 3)
+// QKERNELF error cases
 // =============================================================================
 
 #[test]
@@ -1143,7 +1143,7 @@ fn test_qkernelf_unknown_kernel_returns_error() {
 }
 
 // =============================================================================
-// QKERNELZ error cases (Phase 3)
+// QKERNELZ error cases
 // =============================================================================
 
 #[test]
@@ -1316,7 +1316,7 @@ fn test_qkernelz_phase_shift_nonzero_preserves_diag() {
 }
 
 // =============================================================================
-// QPrepR tests (Phase 4)
+// QPrepR tests
 // =============================================================================
 
 #[test]
@@ -1366,7 +1366,7 @@ fn test_qprepr_invalid_dist() {
 }
 
 // =============================================================================
-// QEncode tests (Phase 4)
+// QEncode tests
 // =============================================================================
 
 #[test]
@@ -1491,7 +1491,7 @@ fn test_qencode_zero_norm() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QPrepR equivalence with QPrep
+// QPrepR equivalence with QPrep
 // =============================================================================
 
 /// QPrepR with each dist_id must produce the same density matrix as QPrep
@@ -1584,7 +1584,7 @@ fn test_qprepr_matches_qprep_ghz() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QPrepR edge cases
+// QPrepR edge cases
 // =============================================================================
 
 /// Negative register value wraps to large u8 -> UnknownDistribution error.
@@ -1618,7 +1618,7 @@ fn test_qprepr_large_value_wraps_modulo_256() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QEncode count=1 (single amplitude)
+// QEncode count=1 (single amplitude)
 // =============================================================================
 
 /// count=1 produces a 0-qubit 1x1 density matrix. This is a degenerate case
@@ -1641,7 +1641,7 @@ fn test_qencode_count_1_single_amplitude() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QEncode with negative R-file integers
+// QEncode with negative R-file integers
 // =============================================================================
 
 /// Negative integers from R-file are cast to f64, producing negative amplitudes.
@@ -1670,7 +1670,7 @@ fn test_qencode_r_file_negative_values() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QEncode from Z-file with complex amplitudes
+// QEncode from Z-file with complex amplitudes
 // =============================================================================
 
 /// Complex amplitudes from Z-file producing a known state.
@@ -1703,7 +1703,7 @@ fn test_qencode_z_file_complex_amplitudes() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QEncode count=8 (max useful with 16 regs)
+// QEncode count=8 (max useful with 16 regs)
 // =============================================================================
 
 /// count=8 with 3-qubit state from float registers.
@@ -1732,7 +1732,7 @@ fn test_qencode_count_8_from_floats() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QEncode src_base near register limit
+// QEncode src_base near register limit
 // =============================================================================
 
 /// src_base=14, count=2 should work (registers 14 and 15).
@@ -1765,7 +1765,7 @@ fn test_qencode_src_base_overflow() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: QEncode invalid file_sel at runtime
+// QEncode invalid file_sel at runtime
 // =============================================================================
 
 /// file_sel=3 should be caught by the parser, but if it reaches runtime
@@ -1783,8 +1783,7 @@ fn test_qencode_invalid_file_sel_runtime() {
 }
 
 // =============================================================================
-// Phase 4 additional coverage: End-to-end pipeline
-// QEncode -> QKERNEL -> QOBSERVE -> HREDUCE
+// End-to-end pipeline: QEncode -> QKERNEL -> QOBSERVE -> HREDUCE
 // =============================================================================
 
 /// Full pipeline: encode a known state from F-file, apply init kernel,
@@ -2098,7 +2097,7 @@ fn test_mask_bits_beyond_num_qubits_ignored() {
 }
 
 // =============================================================================
-// Phase 5 Revised: Additional coverage tests
+// Additional coverage: masked register-level gate operations
 // =============================================================================
 
 /// End-to-end pipeline: ILDI mask -> QPREP -> QHADM -> QOBSERVE -> HREDUCE
@@ -2623,7 +2622,7 @@ fn test_qmeas_bell_state_valid_post() {
 }
 
 // =============================================================================
-// P2.1: QMIXED — mixed state preparation
+// QMIXED — mixed state preparation
 // =============================================================================
 
 /// QMIXED loads a mixture of pure states from CMEM and produces a density matrix.
@@ -2681,7 +2680,7 @@ fn test_qmixed_maximally_mixed() {
 }
 
 // =============================================================================
-// P2.3: QPREPN — variable qubit count
+// QPREPN — variable qubit count
 // =============================================================================
 
 #[test]
@@ -2736,7 +2735,7 @@ fn test_qprepn_zero_count_error() {
 }
 
 // =============================================================================
-// P2.5: QPTRACE — partial trace
+// QPTRACE — partial trace
 // =============================================================================
 
 #[test]
@@ -2805,7 +2804,7 @@ fn test_qptrace_uninit_error() {
 }
 
 // =============================================================================
-// P2.6: QRESET — qubit reset
+// QRESET — qubit reset
 // =============================================================================
 
 #[test]

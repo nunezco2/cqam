@@ -232,7 +232,7 @@ fn format_instruction(instr: &Instruction) -> String {
             format!("QENCODE Q{}, {}{}, {}, {}", dst, file_prefix, src_base, count, file_sel)
         }
 
-        // P2 instructions
+        // Mixed-state, partial-trace, reset, and float math instructions
         Instruction::QMixed { dst, base_addr_reg, count_reg } => {
             format!("QMIXED Q{}, R{}, R{}", dst, base_addr_reg, count_reg)
         }

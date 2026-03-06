@@ -808,7 +808,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             }
         }
 
-        // -- P2.1: QMIXED --
+        // -- QMIXED: build a mixed quantum state from a weighted ensemble in CMEM --
         Instruction::QMixed { dst, base_addr_reg, count_reg } => {
             let base = ctx.iregs.get(*base_addr_reg)? as u16;
             let count = ctx.iregs.get(*count_reg)? as usize;
@@ -845,7 +845,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             Ok(())
         }
 
-        // -- P2.3: QPREPN --
+        // -- QPREPN: prepare a quantum register with a runtime-specified qubit count --
         Instruction::QPrepN { dst, dist, qubit_count_reg } => {
             let num_qubits = ctx.iregs.get(*qubit_count_reg)? as u8;
 
@@ -869,7 +869,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             Ok(())
         }
 
-        // -- P2.5: QPTRACE --
+        // -- QPTRACE: reduce a composite system to subsystem A via partial trace --
         Instruction::QPtrace { dst, src, num_qubits_a_reg } => {
             let num_qubits_a = ctx.iregs.get(*num_qubits_a_reg)? as u8;
 
@@ -904,7 +904,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             }
         }
 
-        // -- P2.6: QRESET --
+        // -- QRESET: measure a qubit and conditionally flip it back to |0> --
         Instruction::QReset { dst, src, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 

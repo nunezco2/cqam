@@ -398,7 +398,7 @@ pub fn execute_instruction(
         }
 
         // =====================================================================
-        // Trig / transcendental float operations (P2.4)
+        // Transcendental float operations (FSIN, FCOS, FATAN2, FSQRT)
         // =====================================================================
 
         Instruction::FSin { dst, src } => {

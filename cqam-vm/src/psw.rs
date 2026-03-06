@@ -74,7 +74,7 @@ impl ProgramStateWord {
     pub fn update_from_arithmetic(&mut self, value: i64) {
         self.zf = value == 0;
         self.nf = value < 0;
-        self.of = false; // TODO: real overflow detection
+        self.of = false; // overflow detection is not implemented; OF is always cleared on arithmetic updates
     }
 
     /// Update the predicate flag from a boolean result.

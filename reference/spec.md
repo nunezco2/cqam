@@ -188,7 +188,7 @@ field:
 
 | Mode | ID | Output Type | Semantics |
 |------|----|-------------|-----------|
-| DIST | 0 | Dist(Vec<(u16, f64)>) | Full diagonal probability distribution. Default and backward-compatible with Phase 1 behavior. |
+| DIST | 0 | Dist(Vec<(u16, f64)>) | Full diagonal probability distribution (default mode; returns all basis-state probabilities). |
 | PROB | 1 | Float(f64) | Probability of a single basis state at index R[ctx0]. Returns rho[k][k]. |
 | AMP  | 2 | Complex(f64, f64) | Density matrix element rho[row][col] where row=R[ctx0], col=R[ctx1]. |
 

@@ -849,7 +849,7 @@ fn test_imul_wrapping_overflow() {
 }
 
 // ===========================================================================
-// P2: Trig / float math
+// Transcendental float math (FSIN, FCOS, FATAN2, FSQRT)
 // ===========================================================================
 
 #[test]

@@ -586,7 +586,7 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             Ok(Instruction::QEncode { dst, src_base, count, file_sel })
         }
 
-        // -- P2: New quantum instructions -----------------------------------------
+        // -- Mixed-state, partial-trace, reset, and float math instructions -------
         "QMIXED" => {
             if ops.len() != 3 {
                 return Err(CqamError::ParseError {
