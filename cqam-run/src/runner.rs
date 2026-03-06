@@ -15,6 +15,7 @@
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
+use cqam_core::parser::ProgramMetadata;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
@@ -38,6 +39,20 @@ pub fn run_program_with_config(
     program: Vec<Instruction>,
     config: &SimConfig,
 ) -> Result<ExecutionContext, CqamError> {
+    run_program_with_config_and_metadata(program, config, &ProgramMetadata::default())
+}
+
+/// Run a complete CQAM program with configuration and program metadata.
+///
+/// Precedence for qubit count:
+///   1. CLI --qubits flag (stored in SimConfig::default_qubits if set)
+///   2. `#! qubits N` pragma (from ProgramMetadata)
+///   3. Default (2 qubits)
+pub fn run_program_with_config_and_metadata(
+    program: Vec<Instruction>,
+    config: &SimConfig,
+    metadata: &ProgramMetadata,
+) -> Result<ExecutionContext, CqamError> {
     let mut ctx = ExecutionContext::new(program);
     let mut fork_mgr = ForkManager::new();
     let max_cycles = config.max_cycles.unwrap_or(1000);
@@ -46,12 +61,18 @@ pub fn run_program_with_config(
 
     // Wire fidelity_threshold from SimConfig to QuantumFidelityThreshold
     if let Some(threshold) = config.fidelity_threshold {
-        ctx.config.min_superposition = threshold;
-        ctx.config.min_entanglement = threshold;
+        ctx.config.min_purity = threshold;
     }
+
+    // Apply qubit count with precedence: CLI > pragma > default
     if let Some(qubits) = config.default_qubits {
         ctx.config.default_qubits = qubits;
+    } else if let Some(pragma_qubits) = metadata.qubits {
+        ctx.config.default_qubits = pragma_qubits;
     }
+
+    // Wire density-matrix backend flag
+    ctx.config.force_density_matrix = config.force_density_matrix;
 
     while ctx.pc < ctx.program.len() {
         // Enforce max_cycles loop guard
@@ -92,8 +113,8 @@ pub fn run_program_with_config(
 /// use cqam_run::runner::run_program;
 ///
 /// let source = "ILDI R0, 7\nILDI R1, 3\nIADD R2, R0, R1\nHALT\n";
-/// let program = parse_program(source).unwrap();
-/// let ctx = run_program(program).unwrap();
+/// let parsed = parse_program(source).unwrap();
+/// let ctx = run_program(parsed.instructions).unwrap();
 ///
 /// // R2 should contain 7 + 3 = 10
 /// assert_eq!(ctx.iregs.get(2).unwrap(), 10);

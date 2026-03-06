@@ -5,7 +5,7 @@
 # superposition using O(sqrt(N)) Grover iterations where N = 2^16.
 # Optimal iteration count: floor(pi/4 * sqrt(65536)) = ~201 iterations.
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 

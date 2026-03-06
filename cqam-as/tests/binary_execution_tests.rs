@@ -16,13 +16,13 @@ fn roundtrip_parse(source: &str) -> Vec<Instruction> {
     write_cqb(&mut buf, &result, true).unwrap();
     let image = read_cqb(&mut Cursor::new(&buf)).unwrap();
     let text = disassemble(&image.code, image.debug_symbols.as_ref()).unwrap();
-    parse_program(&text).unwrap()
+    parse_program(&text).unwrap().instructions
 }
 
 #[test]
 fn test_binary_roundtrip_arithmetic() {
     let source = "ILDI R0, 42\nILDI R1, 8\nIADD R2, R0, R1\nHALT\n";
-    let original = parse_program(source).unwrap();
+    let original = parse_program(source).unwrap().instructions;
     let roundtripped = roundtrip_parse(source);
 
     assert_eq!(roundtripped.len(), original.len(),
@@ -43,7 +43,7 @@ QKERNEL Q1, Q0, 1, R0, R1
 QOBSERVE H0, Q1
 HALT
 ";
-    let original = parse_program(source).unwrap();
+    let original = parse_program(source).unwrap().instructions;
     let roundtripped = roundtrip_parse(source);
     assert_eq!(roundtripped.len(), original.len());
 
@@ -63,7 +63,7 @@ CALL START
 RET
 HALT
 ";
-    let original = parse_program(source).unwrap();
+    let original = parse_program(source).unwrap().instructions;
     let roundtripped = roundtrip_parse(source);
     assert_eq!(roundtripped.len(), original.len());
 

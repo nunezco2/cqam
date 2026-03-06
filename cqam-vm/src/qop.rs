@@ -1,13 +1,15 @@
 //! Quantum operation handlers for the CQAM virtual machine.
 //!
 //! Implements QPREP, QKERNEL, QOBSERVE, QLOAD, and QSTORE using the
-//! `DensityMatrix` simulation backend from `cqam-sim`.
+//! `QuantumRegister` simulation backend from `cqam-sim`, which dispatches
+//! to either Statevector (pure) or DensityMatrix (mixed) as appropriate.
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::{Instruction, dist_id, file_sel, kernel_id, observe_mode, rot_axis};
 use cqam_core::register::HybridValue;
 use cqam_sim::complex::{C64, ZERO, ONE};
 use cqam_sim::density_matrix::DensityMatrix;
+use cqam_sim::quantum_register::QuantumRegister;
 use cqam_sim::kernel::Kernel;
 use cqam_sim::kernels::init::Init;
 use cqam_sim::kernels::entangle::Entangle;
@@ -120,27 +122,22 @@ fn execute_masked_gate(
     gate_fn: fn() -> [C64; 4],
     _instr_name: &str,
 ) -> Result<(), CqamError> {
-    if let Some(ref dm) = ctx.qregs[src as usize] {
+    if let Some(ref qr) = ctx.qregs[src as usize] {
         let mask = ctx.iregs.get(mask_reg)? as u64;
-        let n = dm.num_qubits();
+        let n = qr.num_qubits();
         let gate = gate_fn();
 
-        let mut result = dm.clone();
+        let mut result = qr.clone();
         for qubit in 0..n {
             if (mask >> qubit) & 1 == 1 {
                 result.apply_single_qubit_gate(qubit, &gate);
             }
         }
 
-        let superposition = result.von_neumann_entropy();
         let purity = result.purity();
 
         ctx.qregs[dst as usize] = Some(result);
-        ctx.psw.update_from_qmeta(
-            superposition,
-            purity,
-            (ctx.config.min_superposition, ctx.config.min_entanglement),
-        );
+        ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
         Ok(())
     } else {
         Err(CqamError::UninitializedRegister {
@@ -158,16 +155,17 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
     match instr {
         Instruction::QPrep { dst, dist } => {
             let num_qubits = ctx.config.default_qubits;
-            let dm = match *dist {
-                dist_id::UNIFORM => DensityMatrix::new_uniform(num_qubits),
-                dist_id::ZERO => DensityMatrix::new_zero_state(num_qubits),
-                dist_id::BELL => DensityMatrix::new_bell(),
-                dist_id::GHZ => DensityMatrix::new_ghz(num_qubits),
+            let force_dm = ctx.config.force_density_matrix;
+            let qr = match *dist {
+                dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
+                dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
+                dist_id::BELL => QuantumRegister::new_bell(force_dm),
+                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm),
                 _ => {
                     return Err(CqamError::UnknownDistribution(*dist));
                 }
             };
-            ctx.qregs[*dst as usize] = Some(dm);
+            ctx.qregs[*dst as usize] = Some(qr);
             Ok(())
         }
 
@@ -175,7 +173,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let param0 = ctx.iregs.get(*ctx0)?;
             let param1 = ctx.iregs.get(*ctx1)?;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
                 let k: Box<dyn Kernel> = match *kernel {
                     kernel_id::INIT => Box::new(Init),
                     kernel_id::ENTANGLE => Box::new(Entangle),
@@ -208,18 +206,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                 };
 
-                let result = k.apply(dm);
+                let result = qr.apply_kernel(k.as_ref())?;
 
-                // Compute metrics from density matrix
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -234,7 +226,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let fparam1 = ctx.fregs.get(*fctx1)?;
             let _ = fparam1; // reserved for future use
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
                 let k: Box<dyn Kernel> = match *kernel {
                     kernel_id::INIT => Box::new(Init),
                     kernel_id::ENTANGLE => Box::new(Entangle),
@@ -254,16 +246,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                 };
 
-                let result = k.apply(dm);
-                let superposition = result.von_neumann_entropy();
+                let result = qr.apply_kernel(k.as_ref())?;
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -278,7 +265,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let zparam1 = ctx.zregs.get(*zctx1)?;
             let _ = zparam1; // reserved for future use
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
                 let k: Box<dyn Kernel> = match *kernel {
                     kernel_id::INIT => Box::new(Init),
                     kernel_id::ENTANGLE => Box::new(Entangle),
@@ -298,16 +285,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                 };
 
-                let result = k.apply(dm);
-                let superposition = result.von_neumann_entropy();
+                let result = qr.apply_kernel(k.as_ref())?;
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -318,10 +300,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if let Some(dm) = ctx.qregs[*src_q as usize].take() {
+            if let Some(qr) = ctx.qregs[*src_q as usize].take() {
                 let hval = match *mode {
                     observe_mode::DIST => {
-                        let probs = dm.diagonal_probabilities();
+                        let probs = qr.diagonal_probabilities();
                         let dist_pairs: Vec<(u16, f64)> = probs.iter().enumerate()
                             .filter(|(_, p)| **p >= 1e-15)
                             .map(|(k, p)| (k as u16, *p))
@@ -330,27 +312,27 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                     observe_mode::PROB => {
                         let index = ctx.iregs.get(*ctx0)? as usize;
-                        let dim = dm.dimension();
+                        let dim = qr.dimension();
                         if index >= dim {
                             return Err(CqamError::AddressOutOfRange {
                                 instruction: "QOBSERVE/PROB".to_string(),
                                 address: index as i64,
                             });
                         }
-                        let prob = dm.get(index, index).0;
-                        HybridValue::Float(prob)
+                        let prob = qr.get_element(index, index).0;
+                        HybridValue::Complex(prob, 0.0)
                     }
                     observe_mode::AMP => {
                         let row = ctx.iregs.get(*ctx0)? as usize;
                         let col = ctx.iregs.get(*ctx1)? as usize;
-                        let dim = dm.dimension();
+                        let dim = qr.dimension();
                         if row >= dim || col >= dim {
                             return Err(CqamError::AddressOutOfRange {
                                 instruction: "QOBSERVE/AMP".to_string(),
                                 address: row.max(col) as i64,
                             });
                         }
-                        let (re, im) = dm.get(row, col);
+                        let (re, im) = qr.get_element(row, col);
                         HybridValue::Complex(re, im)
                     }
                     _ => {
@@ -372,10 +354,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if let Some(ref dm) = ctx.qregs[*src_q as usize] {
+            if let Some(ref qr) = ctx.qregs[*src_q as usize] {
                 let hval = match *mode {
                     observe_mode::DIST => {
-                        let probs = dm.diagonal_probabilities();
+                        let probs = qr.diagonal_probabilities();
                         let dist_pairs: Vec<(u16, f64)> = probs.iter().enumerate()
                             .filter(|(_, p)| **p >= 1e-15)
                             .map(|(k, p)| (k as u16, *p))
@@ -384,27 +366,27 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                     observe_mode::PROB => {
                         let index = ctx.iregs.get(*ctx0)? as usize;
-                        let dim = dm.dimension();
+                        let dim = qr.dimension();
                         if index >= dim {
                             return Err(CqamError::AddressOutOfRange {
                                 instruction: "QSAMPLE/PROB".to_string(),
                                 address: index as i64,
                             });
                         }
-                        let prob = dm.get(index, index).0;
-                        HybridValue::Float(prob)
+                        let prob = qr.get_element(index, index).0;
+                        HybridValue::Complex(prob, 0.0)
                     }
                     observe_mode::AMP => {
                         let row = ctx.iregs.get(*ctx0)? as usize;
                         let col = ctx.iregs.get(*ctx1)? as usize;
-                        let dim = dm.dimension();
+                        let dim = qr.dimension();
                         if row >= dim || col >= dim {
                             return Err(CqamError::AddressOutOfRange {
                                 instruction: "QSAMPLE/AMP".to_string(),
                                 address: row.max(col) as i64,
                             });
                         }
-                        let (re, im) = dm.get(row, col);
+                        let (re, im) = qr.get_element(row, col);
                         HybridValue::Complex(re, im)
                     }
                     _ => {
@@ -425,8 +407,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QLoad { dst_q, addr } => {
-            if let Some(dm) = ctx.qmem.load(*addr) {
-                ctx.qregs[*dst_q as usize] = Some(dm.clone());
+            if let Some(qr) = ctx.qmem.load(*addr) {
+                ctx.qregs[*dst_q as usize] = Some(qr.clone());
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -437,8 +419,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QStore { src_q, addr } => {
-            if let Some(ref dm) = ctx.qregs[*src_q as usize] {
-                ctx.qmem.store(*addr, dm.clone());
+            if let Some(ref qr) = ctx.qregs[*src_q as usize] {
+                ctx.qmem.store(*addr, qr.clone());
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -451,16 +433,17 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QPrepR { dst, dist_reg } => {
             let dist_id_val = ctx.iregs.get(*dist_reg)? as u8;
             let num_qubits = ctx.config.default_qubits;
-            let dm = match dist_id_val {
-                dist_id::UNIFORM => DensityMatrix::new_uniform(num_qubits),
-                dist_id::ZERO => DensityMatrix::new_zero_state(num_qubits),
-                dist_id::BELL => DensityMatrix::new_bell(),
-                dist_id::GHZ => DensityMatrix::new_ghz(num_qubits),
+            let force_dm = ctx.config.force_density_matrix;
+            let qr = match dist_id_val {
+                dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
+                dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
+                dist_id::BELL => QuantumRegister::new_bell(force_dm),
+                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm),
                 _ => {
                     return Err(CqamError::UnknownDistribution(dist_id_val));
                 }
             };
-            ctx.qregs[*dst as usize] = Some(dm);
+            ctx.qregs[*dst as usize] = Some(qr);
             Ok(())
         }
 
@@ -490,7 +473,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 });
             }
 
-            // Build statevector from the selected register file
+            // Build amplitude vector from the selected register file
             let mut psi: Vec<(f64, f64)> = Vec::with_capacity(count_val);
             for i in 0..count_val {
                 let reg_idx = src_base + i as u8;
@@ -516,7 +499,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 psi.push(amplitude);
             }
 
-            // Validate statevector is not all-zero before constructing DM
+            // Validate statevector is not all-zero
             let norm_sq: f64 = psi.iter()
                 .map(|(re, im)| re * re + im * im)
                 .sum();
@@ -527,15 +510,15 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 });
             }
 
-            // Delegate to DensityMatrix::from_statevector (handles normalization)
-            let dm = DensityMatrix::from_statevector(&psi).map_err(|e| {
+            // Delegate to QuantumRegister::from_amplitudes (always Pure)
+            let qr = QuantumRegister::from_amplitudes(psi).map_err(|e| {
                 CqamError::TypeMismatch {
                     instruction: "QENCODE".to_string(),
                     detail: e,
                 }
             })?;
 
-            ctx.qregs[*dst as usize] = Some(dm);
+            ctx.qregs[*dst as usize] = Some(qr);
             Ok(())
         }
 
@@ -543,14 +526,14 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let ctrl = ctx.iregs.get(*ctrl_qubit_reg)? as u8;
             let tgt = ctx.iregs.get(*tgt_qubit_reg)? as u8;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
                 if ctrl == tgt {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QCNOT".to_string(),
                         detail: format!("ctrl ({}) == tgt ({})", ctrl, tgt),
                     });
                 }
-                if ctrl >= dm.num_qubits() || tgt >= dm.num_qubits() {
+                if ctrl >= qr.num_qubits() || tgt >= qr.num_qubits() {
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QCNOT".to_string(),
                         address: ctrl.max(tgt) as i64,
@@ -558,18 +541,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
 
                 let gate = cnot_gate();
-                let mut result = dm.clone();
+                let mut result = qr.clone();
                 result.apply_two_qubit_gate(ctrl, tgt, &gate);
 
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -583,8 +561,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
             let theta = ctx.fregs.get(*angle_freg)?;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
-                if qubit >= dm.num_qubits() {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
+                if qubit >= qr.num_qubits() {
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QROT".to_string(),
                         address: qubit as i64,
@@ -603,18 +581,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                 };
 
-                let mut result = dm.clone();
+                let mut result = qr.clone();
                 result.apply_single_qubit_gate(qubit, &gate);
 
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -627,26 +600,21 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QMeas { dst_r, src_q, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 
-            if let Some(ref dm) = ctx.qregs[*src_q as usize] {
-                if qubit >= dm.num_qubits() {
+            if let Some(ref qr) = ctx.qregs[*src_q as usize] {
+                if qubit >= qr.num_qubits() {
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QMEAS".to_string(),
                         address: qubit as i64,
                     });
                 }
 
-                let (outcome, post_dm) = dm.measure_qubit(qubit);
+                let (outcome, post_qr) = qr.measure_qubit(qubit);
 
                 ctx.iregs.set(*dst_r, outcome as i64)?;
-                ctx.qregs[*src_q as usize] = Some(post_dm);
+                ctx.qregs[*src_q as usize] = Some(post_qr);
 
-                let superposition = ctx.qregs[*src_q as usize].as_ref().unwrap().von_neumann_entropy();
                 let purity = ctx.qregs[*src_q as usize].as_ref().unwrap().purity();
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 ctx.psw.mark_measured();
                 Ok(())
             } else {
@@ -658,30 +626,25 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QTensor { dst, src0, src1 } => {
-            let dm0 = ctx.qregs[*src0 as usize].take().ok_or_else(|| {
+            let qr0 = ctx.qregs[*src0 as usize].take().ok_or_else(|| {
                 CqamError::UninitializedRegister {
                     file: "Q".to_string(),
                     index: *src0,
                 }
             })?;
-            let dm1 = ctx.qregs[*src1 as usize].take().ok_or_else(|| {
+            let qr1 = ctx.qregs[*src1 as usize].take().ok_or_else(|| {
                 CqamError::UninitializedRegister {
                     file: "Q".to_string(),
                     index: *src1,
                 }
             })?;
 
-            let result = dm0.tensor_product(&dm1);
+            let result = qr0.tensor_product(&qr1);
 
-            let superposition = result.von_neumann_entropy();
             let purity = result.purity();
 
             ctx.qregs[*dst as usize] = Some(result);
-            ctx.psw.update_from_qmeta(
-                superposition,
-                purity,
-                (ctx.config.min_superposition, ctx.config.min_entanglement),
-            );
+            ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
             Ok(())
         }
 
@@ -689,12 +652,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let base_addr = ctx.iregs.get(*base_addr_reg)? as u16;
             let dim_val = ctx.iregs.get(*dim_reg)? as usize;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
-                let dm_dim = dm.dimension();
-                if dim_val != dm_dim {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
+                let qr_dim = qr.dimension();
+                if dim_val != qr_dim {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QCUSTOM".to_string(),
-                        detail: format!("dim_reg={} but Q[src] dimension={}", dim_val, dm_dim),
+                        detail: format!("dim_reg={} but Q[src] dimension={}", dim_val, qr_dim),
                     });
                 }
 
@@ -707,18 +670,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     unitary.push((re, im));
                 }
 
-                let mut result = dm.clone();
+                let mut result = qr.clone();
                 result.apply_unitary(&unitary);
 
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -732,14 +690,14 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let ctrl = ctx.iregs.get(*ctrl_qubit_reg)? as u8;
             let tgt = ctx.iregs.get(*tgt_qubit_reg)? as u8;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
                 if ctrl == tgt {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QCZ".to_string(),
                         detail: format!("ctrl ({}) == tgt ({})", ctrl, tgt),
                     });
                 }
-                if ctrl >= dm.num_qubits() || tgt >= dm.num_qubits() {
+                if ctrl >= qr.num_qubits() || tgt >= qr.num_qubits() {
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QCZ".to_string(),
                         address: ctrl.max(tgt) as i64,
@@ -747,18 +705,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
 
                 let gate = cz_gate();
-                let mut result = dm.clone();
+                let mut result = qr.clone();
                 result.apply_two_qubit_gate(ctrl, tgt, &gate);
 
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -772,14 +725,14 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let qubit_a = ctx.iregs.get(*qubit_a_reg)? as u8;
             let qubit_b = ctx.iregs.get(*qubit_b_reg)? as u8;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
                 if qubit_a == qubit_b {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QSWAP".to_string(),
                         detail: format!("qubit_a ({}) == qubit_b ({})", qubit_a, qubit_b),
                     });
                 }
-                if qubit_a >= dm.num_qubits() || qubit_b >= dm.num_qubits() {
+                if qubit_a >= qr.num_qubits() || qubit_b >= qr.num_qubits() {
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QSWAP".to_string(),
                         address: qubit_a.max(qubit_b) as i64,
@@ -787,18 +740,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
 
                 let gate = swap_gate();
-                let mut result = dm.clone();
+                let mut result = qr.clone();
                 result.apply_two_qubit_gate(qubit_a, qubit_b, &gate);
 
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -841,31 +789,39 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             })?;
 
-            ctx.qregs[*dst as usize] = Some(dm);
+            ctx.qregs[*dst as usize] = Some(QuantumRegister::Mixed(dm));
             Ok(())
         }
 
         // -- QPREPN: prepare a quantum register with a runtime-specified qubit count --
         Instruction::QPrepN { dst, dist, qubit_count_reg } => {
             let num_qubits = ctx.iregs.get(*qubit_count_reg)? as u8;
+            let force_dm = ctx.config.force_density_matrix;
 
-            if num_qubits == 0 || num_qubits > cqam_sim::density_matrix::MAX_QUBITS {
+            // Validate against the appropriate max for the chosen backend
+            let max_qubits = if force_dm {
+                cqam_sim::density_matrix::MAX_QUBITS
+            } else {
+                cqam_sim::statevector::MAX_SV_QUBITS
+            };
+
+            if num_qubits == 0 || num_qubits > max_qubits {
                 return Err(CqamError::AddressOutOfRange {
                     instruction: "QPREPN".to_string(),
                     address: num_qubits as i64,
                 });
             }
 
-            let dm = match *dist {
-                dist_id::UNIFORM => DensityMatrix::new_uniform(num_qubits),
-                dist_id::ZERO => DensityMatrix::new_zero_state(num_qubits),
-                dist_id::BELL => DensityMatrix::new_bell(),
-                dist_id::GHZ => DensityMatrix::new_ghz(num_qubits),
+            let qr = match *dist {
+                dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
+                dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
+                dist_id::BELL => QuantumRegister::new_bell(force_dm),
+                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm),
                 _ => {
                     return Err(CqamError::UnknownDistribution(*dist));
                 }
             };
-            ctx.qregs[*dst as usize] = Some(dm);
+            ctx.qregs[*dst as usize] = Some(qr);
             Ok(())
         }
 
@@ -873,28 +829,23 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QPtrace { dst, src, num_qubits_a_reg } => {
             let num_qubits_a = ctx.iregs.get(*num_qubits_a_reg)? as u8;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
-                if num_qubits_a == 0 || num_qubits_a >= dm.num_qubits() {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
+                if num_qubits_a == 0 || num_qubits_a >= qr.num_qubits() {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QPTRACE".to_string(),
                         detail: format!(
                             "num_qubits_a must be 1..{}, got {}",
-                            dm.num_qubits(), num_qubits_a
+                            qr.num_qubits(), num_qubits_a
                         ),
                     });
                 }
 
-                let result = dm.partial_trace_b(num_qubits_a);
+                let result = qr.partial_trace_b(num_qubits_a);
 
-                let superposition = result.von_neumann_entropy();
                 let purity = result.purity();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -908,30 +859,25 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QReset { dst, src, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 
-            if let Some(ref dm) = ctx.qregs[*src as usize] {
-                if qubit >= dm.num_qubits() {
+            if let Some(ref qr) = ctx.qregs[*src as usize] {
+                if qubit >= qr.num_qubits() {
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QRESET".to_string(),
                         address: qubit as i64,
                     });
                 }
 
-                let (outcome, mut post_dm) = dm.measure_qubit(qubit);
+                let (outcome, mut post_qr) = qr.measure_qubit(qubit);
 
                 if outcome == 1 {
                     let x_gate = pauli_x();
-                    post_dm.apply_single_qubit_gate(qubit, &x_gate);
+                    post_qr.apply_single_qubit_gate(qubit, &x_gate);
                 }
 
-                let superposition = post_dm.von_neumann_entropy();
-                let purity = post_dm.purity();
+                let purity = post_qr.purity();
 
-                ctx.qregs[*dst as usize] = Some(post_dm);
-                ctx.psw.update_from_qmeta(
-                    superposition,
-                    purity,
-                    (ctx.config.min_superposition, ctx.config.min_entanglement),
-                );
+                ctx.qregs[*dst as usize] = Some(post_qr);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {

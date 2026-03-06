@@ -13,7 +13,7 @@
 #   - Via entangle kernel on zero state
 #   - Via QENCODE with explicit amplitudes
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 

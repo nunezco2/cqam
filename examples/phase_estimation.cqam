@@ -12,7 +12,7 @@
 #   3. Apply QFT to extract phase information
 #   4. Measure and reduce to get the estimated phase
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 

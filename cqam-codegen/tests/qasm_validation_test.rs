@@ -22,13 +22,13 @@ HALT
 ";
 
 fn emit_standalone(source: &str) -> String {
-    let program = parse_program(source).expect("test source should parse");
+    let program = parse_program(source).expect("test source should parse").instructions;
     let config = EmitConfig::default();
     emit_qasm_program(&program, &config)
 }
 
 fn emit_fragment(source: &str) -> String {
-    let program = parse_program(source).expect("test source should parse");
+    let program = parse_program(source).expect("test source should parse").instructions;
     let config = EmitConfig::fragment();
     emit_qasm_program(&program, &config)
 }

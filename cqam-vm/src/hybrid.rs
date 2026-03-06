@@ -64,6 +64,11 @@ pub fn execute_hybrid(
                         HybridValue::Float(x) => {
                             $ctx.iregs.set($dst, ($body)(x))?;
                         }
+                        HybridValue::Complex(re, _im) => {
+                            // Complex with im~=0.0 is treated as a real float
+                            // (e.g., from QSAMPLE/PROB which returns Complex(prob, 0.0))
+                            $ctx.iregs.set($dst, ($body)(re))?;
+                        }
                         HybridValue::Dist(ref entries) => {
                             let mean: f64 = entries.iter()
                                 .map(|(val, prob)| *val as f64 * prob)
@@ -73,7 +78,7 @@ pub fn execute_hybrid(
                         _ => {
                             return Err(CqamError::TypeMismatch {
                                 instruction: concat!("HREDUCE/", $name).to_string(),
-                                detail: format!("expected Float or Dist, got {:?}", $val),
+                                detail: format!("expected Float, Complex, or Dist, got {:?}", $val),
                             });
                         }
                     }

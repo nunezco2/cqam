@@ -212,20 +212,95 @@ fn test_purity_mixed_state() {
 
 #[test]
 fn test_entropy_pure() {
-    // Zero state: only p[0]=1, rest 0 -> entropy = 0
+    // Zero state: pure state -> true von Neumann entropy = 0
     let dm = DensityMatrix::new_zero_state(2);
-    assert!(dm.von_neumann_entropy().abs() < 1e-10, "Pure zero state entropy should be 0, got {}", dm.von_neumann_entropy());
+    assert!(dm.von_neumann_entropy().abs() < 1e-8,
+        "Pure zero state VNE should be 0, got {}", dm.von_neumann_entropy());
 }
 
 #[test]
 fn test_entropy_uniform_diag() {
-    // Uniform diagonal: all p_k = 1/4 -> S = 1.0 (normalized)
+    // Uniform pure state: diagonal entropy is 1.0 (spread measurement probs)
+    // but true von Neumann entropy is 0 (pure state).
+    // Test diagonal_entropy for backward-compatible behavior:
     let dm = DensityMatrix::new_uniform(2);
     assert!(
-        (dm.von_neumann_entropy() - 1.0).abs() < 1e-10,
+        (dm.diagonal_entropy() - 1.0).abs() < 1e-10,
         "Uniform pure state diagonal entropy should be 1.0, got {}",
+        dm.diagonal_entropy()
+    );
+    // True von Neumann entropy of any pure state is 0:
+    assert!(
+        dm.von_neumann_entropy().abs() < 1e-8,
+        "Uniform pure state true VNE should be 0, got {}",
         dm.von_neumann_entropy()
     );
+}
+
+// =============================================================================
+// Eigenvalue tests
+// =============================================================================
+
+#[test]
+fn test_eigenvalues_pure_state() {
+    let dm = DensityMatrix::new_zero_state(2);
+    let eigs = dm.eigenvalues();
+    assert_eq!(eigs.len(), 4);
+    assert!((eigs[0] - 1.0).abs() < 1e-10, "Leading eigenvalue should be 1.0, got {}", eigs[0]);
+    for &e in &eigs[1..] {
+        assert!(e.abs() < 1e-10, "Non-leading eigenvalue should be 0, got {}", e);
+    }
+}
+
+#[test]
+fn test_eigenvalues_maximally_mixed() {
+    let mut dm = DensityMatrix::new_zero_state(2);
+    for i in 0..4 {
+        for j in 0..4 {
+            dm.set(i, j, if i == j { (0.25, 0.0) } else { (0.0, 0.0) });
+        }
+    }
+    let eigs = dm.eigenvalues();
+    for &e in &eigs {
+        assert!((e - 0.25).abs() < 1e-10, "Eigenvalue should be 0.25, got {}", e);
+    }
+}
+
+#[test]
+fn test_eigenvalues_bell_state() {
+    let dm = DensityMatrix::new_bell();
+    let eigs = dm.eigenvalues();
+    assert!((eigs[0] - 1.0).abs() < 1e-10, "Bell leading eigenvalue = {}", eigs[0]);
+    for &e in &eigs[1..] {
+        assert!(e.abs() < 1e-10, "Bell non-leading eigenvalue = {}", e);
+    }
+}
+
+#[test]
+fn test_vne_maximally_mixed_is_one() {
+    let mut dm = DensityMatrix::new_zero_state(2);
+    for i in 0..4 {
+        for j in 0..4 {
+            dm.set(i, j, if i == j { (0.25, 0.0) } else { (0.0, 0.0) });
+        }
+    }
+    assert!(
+        (dm.von_neumann_entropy() - 1.0).abs() < 1e-8,
+        "Maximally mixed VNE should be 1.0, got {}", dm.von_neumann_entropy()
+    );
+}
+
+#[test]
+fn test_vne_all_pure_states_zero() {
+    for dm in &[
+        DensityMatrix::new_zero_state(2),
+        DensityMatrix::new_uniform(2),
+        DensityMatrix::new_bell(),
+        DensityMatrix::new_ghz(3),
+    ] {
+        assert!(dm.von_neumann_entropy().abs() < 1e-8,
+            "Pure state VNE should be 0, got {}", dm.von_neumann_entropy());
+    }
 }
 
 #[test]
@@ -288,7 +363,7 @@ fn test_qft_zero_produces_uniform() {
 
     let input = DensityMatrix::new_zero_state(2);
     let fourier = Fourier;
-    let output = fourier.apply(&input);
+    let output = fourier.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     for &p in &probs {
@@ -303,7 +378,7 @@ fn test_qft_uniform_produces_zero() {
 
     let input = DensityMatrix::new_uniform(2);
     let fourier = Fourier;
-    let output = fourier.apply(&input);
+    let output = fourier.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     assert!(probs[0] > 0.99, "QFT on uniform should give |0>, got p[0]={}", probs[0]);
@@ -320,7 +395,7 @@ fn test_grover_2q_target3_probability_one() {
 
     let input = DensityMatrix::new_uniform(2);
     let grover = GroverIter { target: 3, extra_targets: Vec::new() };
-    let output = grover.apply(&input);
+    let output = grover.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     assert!(
@@ -340,7 +415,7 @@ fn test_grover_3q_multi_iteration() {
 
     // For N=8, optimal is ~2 iterations
     for _ in 0..2 {
-        dm = grover.apply(&dm);
+        dm = grover.apply(&dm).unwrap();
     }
 
     let probs = dm.diagonal_probabilities();
@@ -480,20 +555,13 @@ fn test_entanglement_entropy_uniform_pure_state() {
     // rho_A = |+><+| = [[0.5, 0.5], [0.5, 0.5]], which is pure.
     // Since rho_A is pure, entanglement entropy should be 0.
     //
-    // However, the diagonal approximation in entanglement_entropy() will
-    // compute S from the diagonal elements [0.5, 0.5], giving S = 1.0.
-    // This is a known limitation: the method uses diagonal elements as
-    // eigenvalue proxies and does NOT perform eigendecomposition.
+    // With eigenvalue-based entropy, this is now correctly computed as 0.
     let uniform = DensityMatrix::new_uniform(2);
     let ee = uniform.entanglement_entropy(1);
 
-    // Document the actual behavior: diagonal approximation gives 1.0
-    // even though the true entanglement entropy is 0.0.
-    // This is acceptable because the CQAM kernels produce density matrices
-    // where the diagonal approximation is reasonable (GHZ, Bell states).
     assert!(
-        (ee - 1.0).abs() < 1e-10,
-        "Uniform state diagonal-approx entanglement entropy = {}, expected 1.0 (known limitation)", ee
+        ee.abs() < 1e-8,
+        "Product state (|+>|+>) entanglement entropy should be 0, got {}", ee
     );
 }
 

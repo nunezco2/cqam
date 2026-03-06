@@ -10,6 +10,31 @@ use crate::instruction::Instruction;
 /// Convenience type alias for parser results.
 pub type ParseResult = Result<Instruction, CqamError>;
 
+/// Metadata extracted from `#!` pragma directives in a CQAM source file.
+///
+/// Pragmas are processed during parsing but do not generate instructions.
+/// They provide configuration hints that the loader/runner can apply before
+/// execution.
+#[derive(Debug, Default, Clone)]
+pub struct ProgramMetadata {
+    /// Number of qubits requested by the program via `#! qubits N`.
+    ///
+    /// `None` means no pragma was found; use the default or CLI value.
+    pub qubits: Option<u8>,
+}
+
+/// Result of parsing a complete CQAM program.
+///
+/// Contains both the instruction stream and any pragma metadata.
+#[derive(Debug)]
+pub struct ParsedProgram {
+    /// The instruction stream (labels, ops, no Nops).
+    pub instructions: Vec<Instruction>,
+
+    /// Metadata from `#!` pragma directives.
+    pub metadata: ProgramMetadata,
+}
+
 // =============================================================================
 // Public API
 // =============================================================================
@@ -724,19 +749,70 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
 /// // Comments (# or //) and blank lines are ignored.
 /// let source = "ILDI R0, 3\nILDI R1, 4\nIADD R2, R0, R1\nHALT\n";
 ///
-/// let program = parse_program(source).unwrap();
-/// assert_eq!(program.len(), 4);
-/// assert!(matches!(program[2], Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }));
+/// let parsed = parse_program(source).unwrap();
+/// assert_eq!(parsed.instructions.len(), 4);
+/// assert!(matches!(parsed.instructions[2], Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }));
 /// ```
-pub fn parse_program(source: &str) -> Result<Vec<Instruction>, CqamError> {
+pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
     let mut instructions = Vec::new();
+    let mut metadata = ProgramMetadata::default();
+
     for (idx, line) in source.lines().enumerate() {
+        let trimmed = line.trim_start();
+        // Check for pragma directive before comment stripping
+        if let Some(stripped) = trimmed.strip_prefix("#!") {
+            let pragma_content = stripped.trim();
+            parse_pragma(pragma_content, idx + 1, &mut metadata)?;
+            continue;
+        }
+
         let instr = parse_instruction_at(line, idx + 1)?;
         if !matches!(instr, Instruction::Nop) {
             instructions.push(instr);
         }
     }
-    Ok(instructions)
+    Ok(ParsedProgram { instructions, metadata })
+}
+
+/// Parse a single pragma line (without the `#!` prefix).
+///
+/// Returns Ok(()) and updates metadata, or Err on malformed pragma.
+fn parse_pragma(
+    line: &str,
+    line_num: usize,
+    metadata: &mut ProgramMetadata,
+) -> Result<(), CqamError> {
+    let tokens: Vec<&str> = line.split_whitespace().collect();
+    if tokens.is_empty() {
+        // Empty pragma -- ignore
+        return Ok(());
+    }
+
+    match tokens[0] {
+        "qubits" => {
+            if tokens.len() < 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "#! qubits requires a number".to_string(),
+                });
+            }
+            let n: u8 = tokens[1].parse().map_err(|_| CqamError::ParseError {
+                line: line_num,
+                message: format!("#! qubits value must be a number, got '{}'", tokens[1]),
+            })?;
+            if n == 0 || n > 16 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("#! qubits must be 1..16, got {}", n),
+                });
+            }
+            metadata.qubits = Some(n);
+        }
+        _ => {
+            // Unknown pragma -- ignore for forward compatibility
+        }
+    }
+    Ok(())
 }
 
 // =============================================================================
@@ -746,7 +822,14 @@ pub fn parse_program(source: &str) -> Result<Vec<Instruction>, CqamError> {
 /// Strip comments from a line.
 ///
 /// Removes everything from the first `//` or `#` to end of line.
+/// Lines starting with `#!` are NOT stripped (they are pragmas, handled
+/// before this function is called).
 fn strip_comments(line: &str) -> &str {
+    // Guard: pragma lines are never stripped
+    if line.trim_start().starts_with("#!") {
+        return line;
+    }
+
     let double_slash_pos = line.find("//");
     let hash_pos = line.find('#');
 

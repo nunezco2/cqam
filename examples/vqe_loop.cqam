@@ -10,7 +10,7 @@
 # Uses the rotation kernel as the parameterized ansatz, with classical
 # gradient-free optimization (simple step-search).
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 

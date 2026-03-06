@@ -43,7 +43,7 @@
 //! use cqam_vm::executor::execute_instruction;
 //! use cqam_vm::fork::ForkManager;
 //!
-//! let program = parse_program("ILDI R0, 1\nHALT\n").unwrap();
+//! let program = parse_program("ILDI R0, 1\nHALT\n").unwrap().instructions;
 //! let mut ctx = ExecutionContext::new(program);
 //! let mut fork_mgr = ForkManager::new();
 //!

@@ -28,7 +28,7 @@
 //! use cqam_core::parser::parse_program;
 //! use cqam_codegen::qasm::{emit_qasm_program, EmitConfig};
 //!
-//! let program = parse_program("ILDI R0, 5\nHALT\n").unwrap();
+//! let program = parse_program("ILDI R0, 5\nHALT\n").unwrap().instructions;
 //! let qasm = emit_qasm_program(&program, &EmitConfig::default());
 //! assert!(qasm.contains("OPENQASM 3.0"));
 //! assert!(qasm.contains("R0 = 5;"));

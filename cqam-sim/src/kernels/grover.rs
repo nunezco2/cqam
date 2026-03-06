@@ -1,7 +1,9 @@
 //! Grover iteration kernel: one oracle phase-flip followed by diffusion.
 
-use crate::complex;
+use cqam_core::error::CqamError;
+use crate::complex::{self, C64, cx_add, cx_scale};
 use crate::density_matrix::DensityMatrix;
+use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 
 /// One Grover iteration kernel (kernel_id = 4).
@@ -44,17 +46,25 @@ impl GroverIter {
 }
 
 impl Kernel for GroverIter {
-    fn apply(&self, input: &DensityMatrix) -> DensityMatrix {
+    fn apply(&self, input: &DensityMatrix) -> Result<DensityMatrix, CqamError> {
         let dim = input.dimension();
         let n_f64 = dim as f64;
 
-        // Build target set for O(1) lookup
-        let target_set: std::collections::HashSet<usize> =
-            self.all_targets().iter().map(|&t| {
-                let t_usize = t as usize;
-                assert!(t_usize < dim, "Grover target {} exceeds dimension {}", t_usize, dim);
-                t_usize
-            }).collect();
+        // Validate and build target set for O(1) lookup
+        let mut target_set = std::collections::HashSet::new();
+        for &t in &self.all_targets() {
+            let t_usize = t as usize;
+            if t_usize >= dim {
+                return Err(CqamError::TypeMismatch {
+                    instruction: "QKERNEL/GROVER".to_string(),
+                    detail: format!(
+                        "Grover target {} exceeds dimension {}",
+                        t_usize, dim
+                    ),
+                });
+            }
+            target_set.insert(t_usize);
+        }
 
         // Compose G = D * O
         let mut g = vec![complex::ZERO; dim * dim];
@@ -68,6 +78,42 @@ impl Kernel for GroverIter {
 
         let mut result = input.clone();
         result.apply_unitary(&g);
-        result
+        Ok(result)
+    }
+
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+        let dim = input.dimension();
+        let n_f64 = dim as f64;
+
+        // Validate targets
+        let target_set: std::collections::HashSet<usize> =
+            self.all_targets().iter().map(|&t| {
+                let t_usize = t as usize;
+                if t_usize >= dim {
+                    panic!("Grover target {} exceeds dimension {}", t_usize, dim);
+                }
+                t_usize
+            }).collect();
+
+        // Step 1: Oracle - flip sign of target amplitudes (O(dim))
+        let mut amps: Vec<C64> = input.amplitudes().to_vec();
+        for &t in &target_set {
+            amps[t] = (-amps[t].0, -amps[t].1);
+        }
+
+        // Step 2: Diffusion - D|psi> = 2*mean - psi_k (O(dim))
+        let mut mean = complex::ZERO;
+        for amp in amps.iter().take(dim) {
+            mean = cx_add(mean, *amp);
+        }
+        mean = cx_scale(1.0 / n_f64, mean);
+
+        for amp in amps.iter_mut().take(dim) {
+            let two_mean = cx_scale(2.0, mean);
+            *amp = (two_mean.0 - amp.0, two_mean.1 - amp.1);
+        }
+
+        Ok(Statevector::from_amplitudes(amps)
+            .expect("GroverIter apply_sv produced invalid amplitudes"))
     }
 }

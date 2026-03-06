@@ -12,7 +12,7 @@ use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMem, QMem};
 use cqam_core::register::{IntRegFile, FloatRegFile, ComplexRegFile, HybridRegFile};
-use cqam_sim::density_matrix::DensityMatrix;
+use cqam_sim::quantum_register::QuantumRegister;
 use crate::isr::IsrTable;
 use crate::resource::ResourceTracker;
 use crate::psw::ProgramStateWord;
@@ -39,16 +39,16 @@ pub struct ExecutionContext {
     /// Hybrid register file: H0-H7 (8 x HybridValue).
     pub hregs: HybridRegFile,
 
-    /// Quantum register file: Q0-Q7 (8 x `Option<DensityMatrix>`).
+    /// Quantum register file: Q0-Q7 (8 x `Option<QuantumRegister>`).
     /// Separate from QMEM. These are the "live" quantum registers
     /// that QPREP, QKERNEL, and QOBSERVE operate on.
-    pub qregs: [Option<DensityMatrix>; 8],
+    pub qregs: [Option<QuantumRegister>; 8],
 
     /// Classical memory: 65536 cells of i64.
     pub cmem: CMem,
 
-    /// Quantum memory: 256 slots of DensityMatrix.
-    pub qmem: QMem<DensityMatrix>,
+    /// Quantum memory: 256 slots of QuantumRegister.
+    pub qmem: QMem<QuantumRegister>,
 
     /// Call stack for CALL/RET instructions.
     /// Each entry is the return address (PC value to resume at).

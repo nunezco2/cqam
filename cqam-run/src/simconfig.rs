@@ -51,6 +51,16 @@ pub struct SimConfig {
     /// A register with `n` qubits has a 2^n x 2^n density matrix.
     /// Default: `2` (4-state).
     pub default_qubits: Option<u8>,
+
+    /// Force use of the density-matrix backend for all quantum registers.
+    ///
+    /// When `true`, quantum registers always use the full 2^n x 2^n density
+    /// matrix representation, even when a statevector backend would be more
+    /// memory-efficient. Useful for debugging mixed-state behavior or when
+    /// decoherence modeling is required.
+    /// Default: `false`.
+    #[serde(default)]
+    pub force_density_matrix: bool,
 }
 
 impl Default for SimConfig {
@@ -60,6 +70,7 @@ impl Default for SimConfig {
             max_cycles: Some(1000),
             enable_interrupts: Some(true),
             default_qubits: None, // use VM default (2 qubits)
+            force_density_matrix: false,
         }
     }
 }

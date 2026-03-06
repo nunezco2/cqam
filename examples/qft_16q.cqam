@@ -8,7 +8,7 @@
 # Pipeline: Prepare -> Entangle -> QFT -> Sample (non-destructive) ->
 #           Phase-shift -> QFT again -> Observe -> Reduce
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 

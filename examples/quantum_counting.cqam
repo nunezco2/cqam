@@ -13,7 +13,7 @@
 #   4. Measure the QFT output to estimate the phase
 #   5. Classically compute M from the estimated phase
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 
@@ -81,8 +81,16 @@ ILDX R11, R10        # R11 = phase index from depth=1
 CVTIF F4, R11        # F4 = first phase index as float
 
 # Compute ratio of phase indices (indicates consistency)
+# Guard: if first phase index is zero, skip division (ratio = 0)
+FLDI F5, 0           # F5 = 0 (default ratio)
+FLDI F6, 0           # F6 = 0 for comparison
+FLT R12, F6, F4      # R12 = (0 < F4) ? 1 : 0
+JIF R12, do_ratio
+JMP store_results
+LABEL: do_ratio
 FDIV F5, F3, F4      # F5 = ratio (should scale with sqrt(M))
 
+LABEL: store_results
 # === Store final results ===
 ISTR R9, 0           # CMEM[0] = last phase index
 FSTR F1, 1           # CMEM[1] = phase index as float

@@ -21,8 +21,8 @@
 //! Parse a program from text:
 //! ```
 //! use cqam_core::parser::parse_program;
-//! let program = parse_program("ILDI R0, 42\nHALT\n").unwrap();
-//! assert_eq!(program.len(), 2);
+//! let parsed = parse_program("ILDI R0, 42\nHALT\n").unwrap();
+//! assert_eq!(parsed.instructions.len(), 2);
 //! ```
 //!
 //! Encode a single instruction to a 32-bit word:

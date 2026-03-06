@@ -430,11 +430,17 @@ impl DensityMatrix {
         self.data.iter().map(|z| cx_norm_sq(*z)).sum()
     }
 
-    /// Von Neumann entropy of the measurement outcome distribution,
-    /// normalized to [0, 1].
+    /// Shannon entropy of the diagonal probability distribution, normalized
+    /// to [0, 1].
     ///
-    /// S = -sum_k p_k * log2(p_k) / log2(dim)
-    pub fn von_neumann_entropy(&self) -> f64 {
+    /// S_diag = -sum_k p_k * log2(p_k) / log2(dim)
+    ///
+    /// This is NOT the von Neumann entropy. It measures the spread of
+    /// measurement probabilities, not the mixedness of the quantum state.
+    /// For diagnostic and backward-compatibility use.
+    ///
+    /// Previously named `von_neumann_entropy()`.
+    pub fn diagonal_entropy(&self) -> f64 {
         let dim = self.dimension();
         if dim <= 1 {
             return 0.0;
@@ -447,6 +453,45 @@ impl DensityMatrix {
         let max_entropy = (dim as f64).log2();
         if max_entropy > 0.0 {
             entropy / max_entropy
+        } else {
+            0.0
+        }
+    }
+
+    /// Compute the eigenvalues of the density matrix via Jacobi iteration.
+    ///
+    /// Returns eigenvalues sorted in descending order. All eigenvalues are
+    /// real (density matrices are Hermitian). Negative eigenvalues from
+    /// floating-point error are clamped to 0.
+    pub fn eigenvalues(&self) -> Vec<f64> {
+        let dim = self.dimension();
+        let mut matrix = self.data.clone();
+        jacobi_eigenvalues(&mut matrix, dim, 1e-12, 1000 * dim * dim)
+    }
+
+    /// True von Neumann entropy: S(rho) = -Tr(rho log rho).
+    ///
+    /// Computed as S = -sum_i (lambda_i * ln(lambda_i)) / ln(dim) where
+    /// lambda_i are the eigenvalues of the density matrix. Normalized by
+    /// ln(dim) so the result is in [0, 1].
+    ///
+    /// Properties:
+    /// - S = 0 for all pure states (rank-1 density matrices).
+    /// - S = 1 for the maximally mixed state (rho = I/dim).
+    /// - S is unitarily invariant.
+    pub fn von_neumann_entropy(&self) -> f64 {
+        let dim = self.dimension();
+        if dim <= 1 {
+            return 0.0;
+        }
+        let eigenvalues = self.eigenvalues();
+        let raw_entropy: f64 = eigenvalues.iter()
+            .filter(|&&lam| lam > 1e-15)
+            .map(|&lam| -lam * lam.ln())
+            .sum();
+        let max_entropy = (dim as f64).ln();
+        if max_entropy > 0.0 {
+            raw_entropy / max_entropy
         } else {
             0.0
         }
@@ -501,30 +546,23 @@ impl DensityMatrix {
 
     /// Entanglement entropy: S(rho_A) for bipartite system A|B.
     ///
-    /// Computes the von Neumann entropy of the reduced density matrix
-    /// obtained by tracing out subsystem B. The partition point is given
-    /// by `num_qubits_a` (number of qubits in subsystem A).
+    /// Computes the true von Neumann entropy of the reduced density matrix
+    /// obtained by tracing out subsystem B, using eigendecomposition.
     ///
     /// For a product state, entanglement entropy is 0.
     /// For a maximally entangled state of 2 qubits, it is 1.0 (in bits).
+    ///
+    /// The result is in bits (log base 2), NOT normalized by log2(dim_A).
     ///
     /// # Panics
     /// Panics if `num_qubits_a == 0` or `num_qubits_a >= self.num_qubits()`.
     pub fn entanglement_entropy(&self, num_qubits_a: u8) -> f64 {
         let rho_a = self.partial_trace_b(num_qubits_a);
+        let eigenvalues = rho_a.eigenvalues();
 
-        // Compute eigenvalues via the diagonal approximation:
-        // For density matrices produced by our kernel operations, the diagonal
-        // elements approximate the eigenvalues well. For exact results, a full
-        // eigendecomposition would be needed.
-        let dim_a = rho_a.dimension();
-        let probs: Vec<f64> = (0..dim_a)
-            .map(|k| rho_a.data[k * dim_a + k].0.max(0.0))
-            .collect();
-
-        let entropy: f64 = probs.iter()
-            .filter(|&&p| p > 1e-15)
-            .map(|&p| -p * p.log2())
+        let entropy: f64 = eigenvalues.iter()
+            .filter(|&&lam| lam > 1e-15)
+            .map(|&lam| -lam * lam.log2())
             .sum();
 
         entropy
@@ -817,4 +855,125 @@ impl QuantumState for DensityMatrix {
     fn purity(&self) -> f64 {
         DensityMatrix::purity(self)
     }
+}
+
+// =============================================================================
+// Jacobi eigenvalue decomposition for Hermitian matrices
+// =============================================================================
+
+/// Jacobi eigenvalue algorithm for complex Hermitian matrices.
+///
+/// Given a dim x dim Hermitian matrix (stored as flat Vec<C64> in row-major),
+/// computes all eigenvalues by iterative Jacobi rotations that zero out
+/// off-diagonal elements.
+///
+/// Returns eigenvalues sorted in descending order, with negative values
+/// (from floating-point error) clamped to 0.
+fn jacobi_eigenvalues(
+    matrix: &mut [C64],
+    dim: usize,
+    tolerance: f64,
+    max_sweeps: usize,
+) -> Vec<f64> {
+    if dim == 0 {
+        return Vec::new();
+    }
+    if dim == 1 {
+        return vec![matrix[0].0.max(0.0)];
+    }
+
+    for _sweep in 0..max_sweeps {
+        // Find the off-diagonal element with largest magnitude
+        let mut max_val = 0.0_f64;
+        let mut p = 0;
+        let mut q = 1;
+        for i in 0..dim {
+            for j in (i + 1)..dim {
+                let mag = cx_norm_sq(matrix[i * dim + j]);
+                if mag > max_val {
+                    max_val = mag;
+                    p = i;
+                    q = j;
+                }
+            }
+        }
+
+        // Check convergence
+        if max_val.sqrt() < tolerance {
+            break;
+        }
+
+        // Apply Jacobi rotation to zero out element (p, q).
+        // For Hermitian matrix: a_pq = conj(a_qp)
+        let app = matrix[p * dim + p].0; // real (diagonal)
+        let aqq = matrix[q * dim + q].0; // real (diagonal)
+        let apq = matrix[p * dim + q];   // complex off-diagonal
+
+        let apq_mag = cx_norm_sq(apq).sqrt();
+        if apq_mag < 1e-30 {
+            continue;
+        }
+
+        // Phase factor: apq = |apq| * e^{i*phi}
+        let phase = (apq.0 / apq_mag, apq.1 / apq_mag); // e^{i*phi}
+        let phase_conj = cx_conj(phase);                  // e^{-i*phi}
+
+        // Now compute the 2x2 real Jacobi rotation for the matrix
+        // [[app, |apq|], [|apq|, aqq]]
+        let tau = (aqq - app) / (2.0 * apq_mag);
+        let t = if tau.abs() < 1e-30 {
+            1.0 // tau ~ 0, so t = 1
+        } else {
+            let sign = if tau >= 0.0 { 1.0 } else { -1.0 };
+            sign / (tau.abs() + (1.0 + tau * tau).sqrt())
+        };
+
+        let c = 1.0 / (1.0 + t * t).sqrt(); // cos(theta)
+        let s = t * c;                        // sin(theta)
+
+        // The complex rotation is:
+        // G[p,p] = c,  G[p,q] = s * e^{i*phi},  G[q,p] = -s * e^{-i*phi},  G[q,q] = c
+        // After rotation: A' = G^H A G
+
+        // Update diagonal elements
+        matrix[p * dim + p] = (app - t * apq_mag, 0.0);
+        matrix[q * dim + q] = (aqq + t * apq_mag, 0.0);
+        // Zero out (p,q) and (q,p)
+        matrix[p * dim + q] = (0.0, 0.0);
+        matrix[q * dim + p] = (0.0, 0.0);
+
+        // Update the rest of rows/columns p and q
+        for r in 0..dim {
+            if r == p || r == q {
+                continue;
+            }
+
+            let arp = matrix[r * dim + p];
+            let arq = matrix[r * dim + q];
+
+            // a'[r][p] = c * a[r][p] - s * e^{-i*phi} * a[r][q]
+            let new_rp = cx_add(
+                cx_scale(c, arp),
+                cx_scale(-s, cx_mul(phase_conj, arq)),
+            );
+            // a'[r][q] = s * e^{i*phi} * a[r][p] + c * a[r][q]
+            let new_rq = cx_add(
+                cx_scale(s, cx_mul(phase, arp)),
+                cx_scale(c, arq),
+            );
+
+            matrix[r * dim + p] = new_rp;
+            matrix[r * dim + q] = new_rq;
+            // Hermitian: a[p][r] = conj(a[r][p]), a[q][r] = conj(a[r][q])
+            matrix[p * dim + r] = cx_conj(new_rp);
+            matrix[q * dim + r] = cx_conj(new_rq);
+        }
+    }
+
+    // Extract diagonal as eigenvalues, clamp negative, sort descending
+    let mut eigenvalues: Vec<f64> = (0..dim)
+        .map(|i| matrix[i * dim + i].0.max(0.0))
+        .collect();
+    eigenvalues.sort_by(|a, b| b.partial_cmp(a).unwrap());
+    eigenvalues
 }

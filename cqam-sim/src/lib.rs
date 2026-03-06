@@ -38,12 +38,14 @@
 //! // Create a 2-qubit uniform superposition and apply QFT
 //! let state = DensityMatrix::new_uniform(2);
 //! let qft = Fourier;
-//! let evolved = qft.apply(&state);
+//! let evolved = qft.apply(&state).unwrap();
 //! assert!((evolved.purity() - 1.0).abs() < 1e-9);
 //! ```
 
 pub mod complex;
 pub mod density_matrix;
+pub mod statevector;
+pub mod quantum_register;
 pub mod qdist;
 pub mod kernel;
 pub mod kernels {

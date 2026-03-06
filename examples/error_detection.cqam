@@ -12,6 +12,8 @@
 # error injection and correction — it applies Pauli-X to specific
 # qubits identified by the syndrome. No register-level kernel can
 # target individual qubits for error correction.
+#
+#! qubits 3
 
 # --- Setup ---
 ILDI R0, 0           # R0 = ctx / state |0>

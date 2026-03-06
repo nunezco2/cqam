@@ -135,6 +135,7 @@ fn test_max_cycles_enforcement() {
         max_cycles: Some(10),
         enable_interrupts: Some(false),
         default_qubits: None,
+        force_density_matrix: false,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -160,6 +161,7 @@ fn test_max_cycles_allows_short_programs() {
         max_cycles: Some(100),
         enable_interrupts: Some(false),
         default_qubits: None,
+        force_density_matrix: false,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -240,6 +242,7 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         max_cycles: Some(100),
         enable_interrupts: Some(false),
         default_qubits: None,
+        force_density_matrix: false,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -288,12 +291,12 @@ fn test_fidelity_threshold_wiring() {
         max_cycles: Some(100),
         enable_interrupts: Some(true),
         default_qubits: None,
+        force_density_matrix: false,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
 
-    assert!((ctx.config.min_superposition - 0.85).abs() < f64::EPSILON);
-    assert!((ctx.config.min_entanglement - 0.85).abs() < f64::EPSILON);
+    assert!((ctx.config.min_purity - 0.85).abs() < f64::EPSILON);
 }
 
 #[test]
@@ -364,4 +367,58 @@ fn test_imod_by_zero_with_handler_resumes() {
     let ctx = run_program(program).unwrap();
     assert_eq!(ctx.iregs.get(15).unwrap(), 99, "Handler should have run");
     assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should resume after handler");
+}
+
+// --- Pragma qubits integration tests ---
+
+#[test]
+fn test_pragma_qubits_applied() {
+    use cqam_core::parser::parse_program;
+    use cqam_run::runner::run_program_with_config_and_metadata;
+
+    let source = "#! qubits 4\nQPREP Q0, 0\nHALT\n";
+    let parsed = parse_program(source).unwrap();
+
+    let config = SimConfig {
+        fidelity_threshold: None,
+        max_cycles: Some(100),
+        enable_interrupts: Some(true),
+        default_qubits: None, // no CLI override
+        force_density_matrix: false,
+    };
+
+    let ctx = run_program_with_config_and_metadata(
+        parsed.instructions, &config, &parsed.metadata,
+    ).unwrap();
+
+    assert!(ctx.psw.trap_halt, "Program should halt");
+    let dm = ctx.qregs[0].as_ref().expect("Q0 should be prepared");
+    assert_eq!(dm.num_qubits(), 4, "Pragma should set 4 qubits");
+    assert_eq!(dm.dimension(), 16, "4 qubits => dimension 16");
+}
+
+#[test]
+fn test_cli_overrides_pragma() {
+    use cqam_core::parser::parse_program;
+    use cqam_run::runner::run_program_with_config_and_metadata;
+
+    let source = "#! qubits 4\nQPREP Q0, 0\nHALT\n";
+    let parsed = parse_program(source).unwrap();
+
+    let config = SimConfig {
+        fidelity_threshold: None,
+        max_cycles: Some(100),
+        enable_interrupts: Some(true),
+        default_qubits: Some(3), // CLI override: 3 qubits
+        force_density_matrix: false,
+    };
+
+    let ctx = run_program_with_config_and_metadata(
+        parsed.instructions, &config, &parsed.metadata,
+    ).unwrap();
+
+    assert!(ctx.psw.trap_halt, "Program should halt");
+    let dm = ctx.qregs[0].as_ref().expect("Q0 should be prepared");
+    assert_eq!(dm.num_qubits(), 3, "CLI should override pragma: 3 qubits");
+    assert_eq!(dm.dimension(), 8, "3 qubits => dimension 8");
 }

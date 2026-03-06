@@ -10,7 +10,7 @@ fn grover_probability(num_qubits: u8, target: u16, iterations: usize) -> f64 {
     let mut rho = DensityMatrix::new_uniform(num_qubits);
     let kernel = GroverIter { target, extra_targets: Vec::new() };
     for _ in 0..iterations {
-        rho = kernel.apply(&rho);
+        rho = kernel.apply(&rho).unwrap();
     }
     rho.diagonal_probabilities()[target as usize]
 }
@@ -47,7 +47,7 @@ fn test_grover_preserves_trace_after_iterations() {
     let mut rho = DensityMatrix::new_uniform(3);
     let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
-        rho = kernel.apply(&rho);
+        rho = kernel.apply(&rho).unwrap();
     }
     let trace = rho.trace();
     assert!(
@@ -65,7 +65,7 @@ fn test_grover_preserves_purity_after_iterations() {
     let mut rho = DensityMatrix::new_uniform(3);
     let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
-        rho = kernel.apply(&rho);
+        rho = kernel.apply(&rho).unwrap();
     }
     let purity = rho.purity();
     assert!(
@@ -113,7 +113,7 @@ fn test_grover_3q_probabilities_sum_to_one() {
     let mut rho = DensityMatrix::new_uniform(3);
     let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
-        rho = kernel.apply(&rho);
+        rho = kernel.apply(&rho).unwrap();
     }
     let probs = rho.diagonal_probabilities();
     let sum: f64 = probs.iter().sum();
@@ -130,7 +130,7 @@ fn test_grover_non_target_states_equal() {
     let mut rho = DensityMatrix::new_uniform(3);
     let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
-        rho = kernel.apply(&rho);
+        rho = kernel.apply(&rho).unwrap();
     }
     let probs = rho.diagonal_probabilities();
     let non_target: Vec<f64> = probs.iter().enumerate()

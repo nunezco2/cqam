@@ -25,13 +25,14 @@ fn test_config() -> SimConfig {
         max_cycles: Some(5000),
         enable_interrupts: Some(true),
         default_qubits: Some(2),
+        force_density_matrix: false,
     }
 }
 
 #[test]
 fn test_e2e_qrng() {
-    let program = load_program(&example_path("qrng.cqam")).unwrap();
-    let ctx = run_program_with_config(program, &test_config()).unwrap();
+    let parsed = load_program(&example_path("qrng.cqam")).unwrap();
+    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // F5 = empirical mean (should be finite)
@@ -43,8 +44,8 @@ fn test_e2e_qrng() {
 
 #[test]
 fn test_e2e_qaoa() {
-    let program = load_program(&example_path("qaoa.cqam")).unwrap();
-    let ctx = run_program_with_config(program, &test_config()).unwrap();
+    let parsed = load_program(&example_path("qaoa.cqam")).unwrap();
+    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // F7 = expected cost (mean), should be finite
@@ -57,8 +58,8 @@ fn test_e2e_qaoa() {
 
 #[test]
 fn test_e2e_phase_estimation() {
-    let program = load_program(&example_path("phase_estimation.cqam")).unwrap();
-    let ctx = run_program_with_config(program, &test_config()).unwrap();
+    let parsed = load_program(&example_path("phase_estimation.cqam")).unwrap();
+    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // F4 = mean phase index, should be finite
@@ -68,8 +69,8 @@ fn test_e2e_phase_estimation() {
 
 #[test]
 fn test_e2e_vqe_loop() {
-    let program = load_program(&example_path("vqe_loop.cqam")).unwrap();
-    let ctx = run_program_with_config(program, &test_config()).unwrap();
+    let parsed = load_program(&example_path("vqe_loop.cqam")).unwrap();
+    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // R2 = iteration count (should be > 0)

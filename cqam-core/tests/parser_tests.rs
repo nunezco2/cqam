@@ -457,7 +457,7 @@ ISTRX R0, R1
 ILDX R2, R1
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
     assert_eq!(program[2], Instruction::IStrx { src: 0, addr_reg: 1 });
     assert_eq!(program[3], Instruction::ILdx { dst: 2, addr_reg: 1 });
@@ -744,7 +744,7 @@ ILDI R2, 8
 IADD R3, R1, R2
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 4);
     assert_eq!(program[0], Instruction::ILdi { dst: 1, imm: 42 });
     assert_eq!(program[1], Instruction::ILdi { dst: 2, imm: 8 });
@@ -761,7 +761,7 @@ fn test_parse_program_filters_nops() {
 ILDI R1, 10
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     for instr in &program {
         assert!(!matches!(instr, Instruction::Nop));
     }
@@ -788,7 +788,7 @@ LABEL: LOOP
 IADD R0, R0, R1
 JMP LOOP
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 6);
     assert_eq!(program[0], Instruction::Label("START".into()));
     assert_eq!(program[1], Instruction::ILdi { dst: 0, imm: 1 });
@@ -807,7 +807,7 @@ QOBSERVE H0, Q1
 HREDUCE H0, R2, 12
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
     assert_eq!(program[0], Instruction::QPrep { dst: 0, dist: 0 });
     assert_eq!(program[1], Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 });
@@ -818,7 +818,7 @@ HALT
 
 #[test]
 fn test_parse_program_empty_source() {
-    let program = parse_program("").unwrap();
+    let program = parse_program("").unwrap().instructions;
     assert!(program.is_empty());
 }
 
@@ -829,7 +829,7 @@ fn test_parse_program_only_comments() {
 // comment 2
 # comment 3
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert!(program.is_empty());
 }
 
@@ -908,7 +908,7 @@ ILDI R0, 1
 ILDI R1, 2
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 3);
     assert_eq!(program[0], Instruction::ILdi { dst: 0, imm: 1 });
     assert_eq!(program[1], Instruction::ILdi { dst: 1, imm: 2 });
@@ -1063,7 +1063,7 @@ QKERNELF Q1, Q0, 5, F0, F1
 QOBSERVE H0, Q1
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 6);
     assert_eq!(program[3], Instruction::QKernelF { dst: 1, src: 0, kernel: 5, fctx0: 0, fctx1: 1 });
 }
@@ -1078,7 +1078,7 @@ QKERNELZ Q1, Q0, 6, Z0, Z1
 QSAMPLE H0, Q1
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 6);
     assert_eq!(program[3], Instruction::QKernelZ { dst: 1, src: 0, kernel: 6, zctx0: 0, zctx1: 1 });
 }
@@ -1165,7 +1165,7 @@ QPREPR Q0, R0
 QOBSERVE H0, Q0
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 4);
     assert_eq!(program[1], Instruction::QPrepR { dst: 0, dist_reg: 0 });
 }
@@ -1179,7 +1179,7 @@ QENCODE Q0, F0, 2, 1
 QOBSERVE H0, Q0
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
     assert_eq!(program[2], Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: 1 });
 }
@@ -1250,7 +1250,7 @@ QHADM Q0, Q0, R0
 QOBSERVE H0, Q0
 HALT
 ";
-    let program = parse_program(source).unwrap();
+    let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
     assert_eq!(program[2], Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 });
     assert_eq!(program[3], Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 });
@@ -1280,7 +1280,7 @@ fn test_parse_all_example_files() {
                 path.display(),
                 result.unwrap_err()
             );
-            let instrs = result.unwrap();
+            let instrs = result.unwrap().instructions;
             assert!(
                 !instrs.is_empty(),
                 "{} parsed to zero instructions",
@@ -1535,4 +1535,63 @@ fn test_parse_fsin_error() {
 #[test]
 fn test_parse_fatan2_error() {
     assert!(parse_instruction("FATAN2 F0, F1").is_err());
+}
+
+// ===========================================================================
+// Pragma directive tests (#! qubits N)
+// ===========================================================================
+
+#[test]
+fn test_parse_qubits_pragma() {
+    let parsed = parse_program("#! qubits 4\nILDI R0, 1\nHALT\n").unwrap();
+    assert_eq!(parsed.metadata.qubits, Some(4));
+    assert_eq!(parsed.instructions.len(), 2);
+    assert_eq!(parsed.instructions[0], Instruction::ILdi { dst: 0, imm: 1 });
+    assert_eq!(parsed.instructions[1], Instruction::Halt);
+}
+
+#[test]
+fn test_parse_qubits_pragma_16() {
+    let parsed = parse_program("#! qubits 16\nHALT\n").unwrap();
+    assert_eq!(parsed.metadata.qubits, Some(16));
+    assert_eq!(parsed.instructions.len(), 1);
+}
+
+#[test]
+fn test_parse_no_pragma() {
+    let parsed = parse_program("HALT\n").unwrap();
+    assert_eq!(parsed.metadata.qubits, None);
+}
+
+#[test]
+fn test_parse_invalid_pragma_value() {
+    let result = parse_program("#! qubits abc\nHALT\n");
+    assert!(result.is_err(), "Invalid pragma value should produce an error");
+}
+
+#[test]
+fn test_parse_qubits_out_of_range_zero() {
+    let result = parse_program("#! qubits 0\nHALT\n");
+    assert!(result.is_err(), "qubits = 0 should be out of range");
+}
+
+#[test]
+fn test_parse_qubits_out_of_range_32() {
+    let result = parse_program("#! qubits 32\nHALT\n");
+    assert!(result.is_err(), "qubits = 32 should be out of range");
+}
+
+#[test]
+fn test_pragma_not_stripped_as_comment() {
+    let parsed = parse_program("#! qubits 8\n# this is a comment\nHALT\n").unwrap();
+    assert_eq!(parsed.metadata.qubits, Some(8));
+    assert_eq!(parsed.instructions.len(), 1);
+    assert_eq!(parsed.instructions[0], Instruction::Halt);
+}
+
+#[test]
+fn test_unknown_pragma_ignored() {
+    let parsed = parse_program("#! noise_model depolarizing\nHALT\n").unwrap();
+    assert_eq!(parsed.metadata.qubits, None);
+    assert_eq!(parsed.instructions.len(), 1);
 }

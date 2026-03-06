@@ -12,7 +12,7 @@
 # which is inherently a per-qubit gate operation (QPHASE with mask).
 # All other steps use register-level operations.
 #
-# Requires: default_qubits >= 8
+#! qubits 8
 
 # --- Classical setup: define the secret string ---
 ILDI R0, 0           # R0 = unused ctx

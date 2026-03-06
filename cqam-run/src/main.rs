@@ -13,6 +13,7 @@
 //!   --config <path>         Path to TOML simulator config
 //!   --qubits <n>            Default qubits per quantum register (overrides config)
 //!   --max-cycles <n>        Maximum instruction cycles (overrides config)
+//!   --density-matrix        Force density-matrix backend (no statevector)
 //!   --print-final-state     Dump all non-zero registers and memory after execution
 //!   --psw                   Print the Program State Word
 //!   --resources             Print cumulative resource usage counters
@@ -23,7 +24,7 @@
 
 use std::process;
 use cqam_run::loader::load_program;
-use cqam_run::runner::run_program_with_config;
+use cqam_run::runner::run_program_with_config_and_metadata;
 use cqam_run::report::print_report;
 use cqam_run::simconfig::SimConfig;
 
@@ -40,6 +41,7 @@ fn print_help() {
     eprintln!("  --print-final-state   Dump all non-zero registers and memory");
     eprintln!("  --psw                 Print the Program State Word");
     eprintln!("  --resources           Print cumulative resource usage counters");
+    eprintln!("  --density-matrix      Force density-matrix backend (no statevector)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -50,6 +52,7 @@ struct CliArgs {
     config_path: Option<String>,
     qubits: Option<u8>,
     max_cycles: Option<usize>,
+    density_matrix: bool,
     print_state: bool,
     print_psw: bool,
     print_resources: bool,
@@ -73,6 +76,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut config_path: Option<String> = None;
     let mut qubits: Option<u8> = None;
     let mut max_cycles: Option<usize> = None;
+    let mut density_matrix = false;
     let mut print_state = false;
     let mut print_psw = false;
     let mut print_resources = false;
@@ -104,6 +108,7 @@ fn parse_args() -> Result<CliArgs, String> {
                     .map_err(|_| "--max-cycles must be a positive integer")?;
                 max_cycles = Some(n);
             }
+            "--density-matrix" => density_matrix = true,
             "--print-final-state" => print_state = true,
             "--psw" => print_psw = true,
             "--resources" => print_resources = true,
@@ -131,6 +136,7 @@ fn parse_args() -> Result<CliArgs, String> {
         config_path,
         qubits,
         max_cycles,
+        density_matrix,
         print_state,
         print_psw,
         print_resources,
@@ -169,12 +175,15 @@ fn main() {
     if let Some(n) = cli.max_cycles {
         config.max_cycles = Some(n);
     }
+    if cli.density_matrix {
+        config.force_density_matrix = true;
+    }
 
     if cli.verbose {
         eprintln!("Config: {:?}", config);
     }
 
-    let program = match load_program(&cli.input) {
+    let parsed = match load_program(&cli.input) {
         Ok(p) => p,
         Err(e) => {
             eprintln!("Error: {}", e);
@@ -183,10 +192,10 @@ fn main() {
     };
 
     if cli.verbose {
-        eprintln!("Loaded {} instructions from {}", program.len(), cli.input);
+        eprintln!("Loaded {} instructions from {}", parsed.instructions.len(), cli.input);
     }
 
-    let ctx = match run_program_with_config(program, &config) {
+    let ctx = match run_program_with_config_and_metadata(parsed.instructions, &config, &parsed.metadata) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Runtime error: {}", e);

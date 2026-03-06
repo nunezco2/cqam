@@ -924,7 +924,7 @@ HREDUCE H0, R1, 0
 HALT
 "#;
 
-    let program = parse_program(source).expect("Failed to parse");
+    let program = parse_program(source).expect("Failed to parse").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
     run_program(&mut ctx, &mut fm).expect("Program failed");
@@ -954,7 +954,7 @@ HREDUCE H0, Z2, 14
 HALT
 "#;
 
-    let program = parse_program(source).expect("Failed to parse");
+    let program = parse_program(source).expect("Failed to parse").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
     run_program(&mut ctx, &mut fm).expect("Program failed");

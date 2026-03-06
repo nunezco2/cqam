@@ -20,7 +20,7 @@ use cqam_sim::kernel::Kernel;
 fn test_init_returns_uniform() {
     let init = Init;
     let input = DensityMatrix::new_zero_state(2);
-    let output = init.apply(&input);
+    let output = init.apply(&input).unwrap();
 
     // All diagonal entries should be 0.25
     let probs = output.diagonal_probabilities();
@@ -39,7 +39,7 @@ fn test_fourier_zero_to_uniform() {
     // QFT on |0><0| should produce uniform superposition
     let input = DensityMatrix::new_zero_state(2);
     let fourier = Fourier;
-    let output = fourier.apply(&input);
+    let output = fourier.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     for &p in &probs {
@@ -56,7 +56,7 @@ fn test_fourier_uniform_to_zero() {
     // QFT on uniform pure state should produce |0><0|
     let input = DensityMatrix::new_uniform(2);
     let fourier = Fourier;
-    let output = fourier.apply(&input);
+    let output = fourier.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     assert!(
@@ -70,7 +70,7 @@ fn test_fourier_uniform_to_zero() {
 fn test_fourier_preserves_purity() {
     let input = DensityMatrix::new_zero_state(2);
     let fourier = Fourier;
-    let output = fourier.apply(&input);
+    let output = fourier.apply(&input).unwrap();
 
     assert!(
         (output.purity() - 1.0).abs() < 1e-10,
@@ -83,7 +83,7 @@ fn test_fourier_preserves_purity() {
 fn test_fourier_preserves_trace() {
     let input = DensityMatrix::new_zero_state(2);
     let fourier = Fourier;
-    let output = fourier.apply(&input);
+    let output = fourier.apply(&input).unwrap();
 
     let tr = output.trace();
     assert!(
@@ -102,7 +102,7 @@ fn test_diffuse_on_uniform_is_identity() {
     // Diffusion on uniform superposition should keep it unchanged
     let input = DensityMatrix::new_uniform(2);
     let diffuse = Diffuse;
-    let output = diffuse.apply(&input);
+    let output = diffuse.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     for &p in &probs {
@@ -118,7 +118,7 @@ fn test_diffuse_on_uniform_is_identity() {
 fn test_diffuse_preserves_purity() {
     let input = DensityMatrix::new_zero_state(2);
     let diffuse = Diffuse;
-    let output = diffuse.apply(&input);
+    let output = diffuse.apply(&input).unwrap();
 
     assert!(
         (output.purity() - 1.0).abs() < 1e-10,
@@ -136,7 +136,7 @@ fn test_grover_2q_target3_exact() {
     // Key verification: 1 iteration on N=4, target=3 -> probability 1.0
     let input = DensityMatrix::new_uniform(2);
     let grover = GroverIter { target: 3, extra_targets: Vec::new() };
-    let output = grover.apply(&input);
+    let output = grover.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     assert!(
@@ -150,7 +150,7 @@ fn test_grover_2q_target3_exact() {
 fn test_grover_amplifies_target() {
     let input = DensityMatrix::new_uniform(2);
     let grover = GroverIter { target: 2, extra_targets: Vec::new() };
-    let output = grover.apply(&input);
+    let output = grover.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     assert!(
@@ -164,7 +164,7 @@ fn test_grover_amplifies_target() {
 fn test_grover_preserves_normalization() {
     let input = DensityMatrix::new_uniform(2);
     let grover = GroverIter { target: 1, extra_targets: Vec::new() };
-    let output = grover.apply(&input);
+    let output = grover.apply(&input).unwrap();
 
     let tr = output.trace();
     assert!(
@@ -181,7 +181,7 @@ fn test_grover_4q_3_iterations() {
     let grover = GroverIter { target: 7, extra_targets: Vec::new() };
 
     for _ in 0..3 {
-        dm = grover.apply(&dm);
+        dm = grover.apply(&dm).unwrap();
     }
 
     let probs = dm.diagonal_probabilities();
@@ -212,7 +212,7 @@ fn test_entangle_creates_bell() {
     let input = DensityMatrix::from_statevector(&psi).unwrap();
 
     let entangle = Entangle;
-    let output = entangle.apply(&input);
+    let output = entangle.apply(&input).unwrap();
 
     // Should produce Bell state: rho[0][0] = rho[0][3] = rho[3][0] = rho[3][3] = 0.5
     assert!(
@@ -246,7 +246,7 @@ fn test_rotate_kernel_identity() {
     // theta=0 -> U=I, so output should equal input
     let input = DensityMatrix::new_uniform(2);
     let rotate = Rotate { theta: 0.0 };
-    let output = rotate.apply(&input);
+    let output = rotate.apply(&input).unwrap();
 
     let probs_in = input.diagonal_probabilities();
     let probs_out = output.diagonal_probabilities();
@@ -268,7 +268,7 @@ fn test_rotate_kernel_pi() {
     // theta=PI -> phases flip; diagonal probabilities preserved (diagonal unitary)
     let input = DensityMatrix::new_uniform(2);
     let rotate = Rotate { theta: std::f64::consts::PI };
-    let output = rotate.apply(&input);
+    let output = rotate.apply(&input).unwrap();
 
     let probs_in = input.diagonal_probabilities();
     let probs_out = output.diagonal_probabilities();
@@ -289,7 +289,7 @@ fn test_rotate_kernel_pi() {
 fn test_rotate_kernel_preserves_trace() {
     let input = DensityMatrix::new_zero_state(2);
     let rotate = Rotate { theta: 1.234 };
-    let output = rotate.apply(&input);
+    let output = rotate.apply(&input).unwrap();
 
     let tr = output.trace();
     assert!(
@@ -308,7 +308,7 @@ fn test_phase_shift_kernel_zero() {
     // amplitude=(0,0) -> |z|=0 -> U=I
     let input = DensityMatrix::new_uniform(2);
     let ps = PhaseShift { amplitude: (0.0, 0.0) };
-    let output = ps.apply(&input);
+    let output = ps.apply(&input).unwrap();
 
     let probs_in = input.diagonal_probabilities();
     let probs_out = output.diagonal_probabilities();
@@ -328,8 +328,8 @@ fn test_phase_shift_kernel_real() {
     let ps = PhaseShift { amplitude: (1.0, 0.0) };
     let rotate = Rotate { theta: 1.0 };
 
-    let output_ps = ps.apply(&input);
-    let output_rot = rotate.apply(&input);
+    let output_ps = ps.apply(&input).unwrap();
+    let output_rot = rotate.apply(&input).unwrap();
 
     let dim = input.dimension();
     for i in 0..dim {
@@ -350,7 +350,7 @@ fn test_phase_shift_kernel_preserves_unitarity() {
     // Purity should be preserved for any amplitude
     let input = DensityMatrix::new_uniform(2);
     let ps = PhaseShift { amplitude: (0.7, 0.3) };
-    let output = ps.apply(&input);
+    let output = ps.apply(&input).unwrap();
 
     assert!(
         (output.purity() - 1.0).abs() < 1e-10,
@@ -371,8 +371,8 @@ fn test_rotate_kernel_negative_theta() {
     let rotate_pos = Rotate { theta: 1.5 };
     let rotate_neg = Rotate { theta: -1.5 };
 
-    let out_pos = rotate_pos.apply(&input);
-    let out_neg = rotate_neg.apply(&input);
+    let out_pos = rotate_pos.apply(&input).unwrap();
+    let out_neg = rotate_neg.apply(&input).unwrap();
 
     // Both should preserve diagonal probabilities identically
     let probs_pos = out_pos.diagonal_probabilities();
@@ -410,7 +410,7 @@ fn test_rotate_preserves_zero_state_diagonal() {
     // rho'[0][0] = |U[0][0]|^2 * 1.0 = 1.0 (since |exp(i*0)|^2 = 1).
     let input = DensityMatrix::new_zero_state(2);
     let rotate = Rotate { theta: 2.718 }; // arbitrary angle
-    let output = rotate.apply(&input);
+    let output = rotate.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     assert!(
@@ -437,8 +437,8 @@ fn test_rotate_large_theta_wraps() {
     let rotate_small = Rotate { theta };
     let rotate_large = Rotate { theta: theta + 2.0 * std::f64::consts::PI * 100.0 };
 
-    let out_small = rotate_small.apply(&input);
-    let out_large = rotate_large.apply(&input);
+    let out_small = rotate_small.apply(&input).unwrap();
+    let out_large = rotate_large.apply(&input).unwrap();
 
     // Note: for the diagonal, both agree exactly. For off-diagonal, the phases
     // are exp(i*(theta_large - theta_small)*k) for different k, which should be
@@ -470,8 +470,8 @@ fn test_phase_shift_purely_imaginary() {
     let ps = PhaseShift { amplitude: (0.0, 3.0) };
     let rotate = Rotate { theta: 3.0 };
 
-    let out_ps = ps.apply(&input);
-    let out_rot = rotate.apply(&input);
+    let out_ps = ps.apply(&input).unwrap();
+    let out_rot = rotate.apply(&input).unwrap();
 
     let dim = input.dimension();
     for i in 0..dim {
@@ -501,7 +501,7 @@ fn test_phase_shift_purely_imaginary() {
 fn test_phase_shift_preserves_trace() {
     let input = DensityMatrix::new_zero_state(2);
     let ps = PhaseShift { amplitude: (2.0, -1.5) };
-    let output = ps.apply(&input);
+    let output = ps.apply(&input).unwrap();
 
     let tr = output.trace();
     assert!(
@@ -521,8 +521,8 @@ fn test_fourier_inv_is_inverse_of_fourier() {
     let fwd = Fourier;
     let inv = FourierInv;
 
-    let after_fwd = fwd.apply(&input);
-    let roundtrip = inv.apply(&after_fwd);
+    let after_fwd = fwd.apply(&input).unwrap();
+    let roundtrip = inv.apply(&after_fwd).unwrap();
 
     let dim = input.dimension();
     for i in 0..dim {
@@ -542,7 +542,7 @@ fn test_fourier_inv_is_inverse_of_fourier() {
 fn test_fourier_inv_preserves_trace() {
     let input = DensityMatrix::new_zero_state(3);
     let inv = FourierInv;
-    let output = inv.apply(&input);
+    let output = inv.apply(&input).unwrap();
 
     let tr = output.trace();
     assert!(
@@ -555,7 +555,7 @@ fn test_fourier_inv_preserves_trace() {
 fn test_fourier_inv_preserves_purity() {
     let input = DensityMatrix::new_uniform(2);
     let inv = FourierInv;
-    let output = inv.apply(&input);
+    let output = inv.apply(&input).unwrap();
 
     assert!(
         (output.purity() - 1.0).abs() < 1e-10,
@@ -632,8 +632,8 @@ fn test_grover_multi_target_backward_compat() {
     let g1 = GroverIter::single(3);
     let g2 = GroverIter { target: 3, extra_targets: Vec::new() };
 
-    let out1 = g1.apply(&input);
-    let out2 = g2.apply(&input);
+    let out1 = g1.apply(&input).unwrap();
+    let out2 = g2.apply(&input).unwrap();
 
     let dim = input.dimension();
     for i in 0..dim {
@@ -655,7 +655,7 @@ fn test_grover_multi_target_two_targets() {
     // targets should have equal and higher probability than non-targets
     let input = DensityMatrix::new_uniform(4);
     let g = GroverIter::multi(vec![1, 2]);
-    let output = g.apply(&input);
+    let output = g.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
     // Both targets should have equal prob
@@ -676,7 +676,7 @@ fn test_grover_multi_target_two_targets() {
 fn test_grover_multi_target_preserves_trace() {
     let input = DensityMatrix::new_uniform(3);
     let g = GroverIter::multi(vec![0, 3, 7]);
-    let output = g.apply(&input);
+    let output = g.apply(&input).unwrap();
 
     let tr = output.trace();
     assert!(

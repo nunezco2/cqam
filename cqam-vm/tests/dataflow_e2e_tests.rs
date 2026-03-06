@@ -179,7 +179,7 @@ fn test_e2e_complex_kernel_phase_shift_to_z_file() {
 ///   - After first QSAMPLE, Q0 is still Some
 ///   - After second QSAMPLE, Q0 is still Some
 ///   - H0 is Dist with Bell-state probabilities
-///   - H1 is Float (probability of state R0)
+///   - H1 is Complex(probability, 0.0) of state R0
 ///   - After QOBSERVE, Q0 is None
 ///   - PSW.DF only set after QOBSERVE, not after QSAMPLE
 #[test]
@@ -219,8 +219,8 @@ fn test_e2e_qsample_nondestructive_then_observe() {
 
     // Q0 still alive
     assert!(ctx.qregs[0].is_some());
-    // H1 should be Float
-    assert!(matches!(ctx.hregs.get(1).unwrap(), HybridValue::Float(_)));
+    // H1 should be Complex (probability with im=0.0)
+    assert!(matches!(ctx.hregs.get(1).unwrap(), HybridValue::Complex(_, _)));
 
     // Now QOBSERVE to consume
     let qobs = Instruction::QObserve { dst_h: 2, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 };
@@ -255,11 +255,12 @@ fn test_e2e_qobserve_prob_mode() {
 
     let ctx = run_program(instrs);
 
-    // H0 should be Float(1.0) -- probability of |0> in the zero state
-    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
-        assert!((p - 1.0).abs() < 1e-10);
+    // H0 should be Complex(1.0, 0.0) -- probability of |0> in the zero state
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
+        assert!((re - 1.0).abs() < 1e-10);
+        assert!((im).abs() < 1e-10);
     } else {
-        panic!("Expected Float variant in H0");
+        panic!("Expected Complex variant in H0");
     }
     // Q0 is None (destructive)
     assert!(ctx.qregs[0].is_none());
@@ -615,7 +616,7 @@ fn test_e2e_conj_z_and_negate_z_reductions() {
 ///   1. QPREP Q0, UNIFORM
 ///   2. QKERNELF Q0, Q0, ROTATE, F_theta (apply rotation)
 ///   3. QSAMPLE H0, Q0, PROB, R_target (check probability of target)
-///   4. HREDUCE H0, F1, REAL (extract probability as float -- it's already Float)
+///   4. HREDUCE H0, F1, REAL (extract probability as float from Complex(prob, 0.0))
 ///   5. Verify F1 contains a valid probability in [0, 1]
 ///
 /// This tests the pattern of "peek at quantum state, use result classically"
@@ -638,8 +639,7 @@ fn test_e2e_qsample_feedback_loop() {
         Instruction::QKernelF { dst: 0, src: 0, kernel: kernel_id::ROTATE, fctx0: 0, fctx1: 1 },
         // Non-destructive sample: get probability of state 0
         Instruction::QSample { dst_h: 0, src_q: 0, mode: observe_mode::PROB, ctx0: 0, ctx1: 0 },
-        // H0 is Float (probability). Use REAL to extract (Float -> F via the complex path won't work;
-        // but ROUND will give us an int. Let's check the value directly.)
+        // H0 is Complex(probability, 0.0). HREDUCE/REAL can extract the probability.
         Instruction::Halt,
     ];
 
@@ -648,11 +648,12 @@ fn test_e2e_qsample_feedback_loop() {
     // Q0 should still be alive after QSAMPLE
     assert!(ctx.qregs[0].is_some());
 
-    // H0 should be Float with value in [0, 1]
-    if let HybridValue::Float(prob) = ctx.hregs.get(0).unwrap() {
-        assert!(*prob >= 0.0 && *prob <= 1.0, "prob={}, expected [0,1]", prob);
+    // H0 should be Complex(prob, 0.0) with value in [0, 1]
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
+        assert!(*re >= 0.0 && *re <= 1.0, "prob={}, expected [0,1]", re);
+        assert!(im.abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
     } else {
-        panic!("Expected Float variant in H0");
+        panic!("Expected Complex variant in H0");
     }
 
     // Now apply another kernel to Q0 (proving it's still alive)

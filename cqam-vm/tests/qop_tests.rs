@@ -199,10 +199,11 @@ fn test_qkernel_updates_psw_with_real_metrics() {
 
     // After applying init kernel (uniform output), quantum flags should be set
     assert!(ctx.psw.qf, "Quantum active flag should be set");
-    // Uniform state has von Neumann entropy > 0 (all probs equal)
-    assert!(ctx.psw.sf, "Superposition flag should be set for uniform distribution");
-    // Purity of pure state = 1.0 > 0, so ef should be set
-    assert!(ctx.psw.ef, "Entanglement flag should be set (purity > 0)");
+    // After C-2: sf indicates mixed state (purity < 1.0), not superposition.
+    // Init kernel produces a pure uniform state (purity=1.0), so sf=false.
+    assert!(!ctx.psw.sf, "sf should be false for pure uniform state");
+    // After C-2: ef is always false (placeholder until M-1/M-2)
+    assert!(!ctx.psw.ef, "ef should be false (placeholder)");
 }
 
 // =============================================================================
@@ -373,7 +374,7 @@ HREDUCE H0, F0, 10
 HALT
 "#;
 
-    let program = parse_program(source).expect("Failed to parse bell_state program");
+    let program = parse_program(source).expect("Failed to parse bell_state program").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
 
@@ -624,7 +625,7 @@ HREDUCE H0, F1, 13
 HALT
 "#;
 
-    let program = parse_program(source).expect("Failed to parse QSAMPLE pipeline program");
+    let program = parse_program(source).expect("Failed to parse QSAMPLE pipeline program").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
 
@@ -677,11 +678,12 @@ fn test_qobserve_mode_prob() {
     // Should be destructive
     assert!(ctx.qregs[0].is_none(), "Q[0] should be consumed after QOBSERVE/PROB");
 
-    // H[0] should hold Float(1.0) -- probability of |0> in zero state
-    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
-        assert!((p - 1.0).abs() < 1e-10, "p(|0>) in zero state should be 1.0, got {}", p);
+    // H[0] should hold Complex(1.0, 0.0) -- probability of |0> in zero state
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
+        assert!((re - 1.0).abs() < 1e-10, "p(|0>) in zero state should be 1.0, got {}", re);
+        assert!((im).abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
     } else {
-        panic!("Expected HybridValue::Float after QOBSERVE/PROB");
+        panic!("Expected HybridValue::Complex after QOBSERVE/PROB");
     }
 }
 
@@ -729,11 +731,12 @@ fn test_qsample_mode_prob() {
     // Should be non-destructive
     assert!(ctx.qregs[0].is_some(), "Q[0] should still be live after QSAMPLE/PROB");
 
-    // H[0] should hold Float(0.25) -- probability of |2> in uniform state
-    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
-        assert!((p - 0.25).abs() < 1e-10, "p(|2>) in uniform state should be 0.25, got {}", p);
+    // H[0] should hold Complex(0.25, 0.0) -- probability of |2> in uniform state
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
+        assert!((re - 0.25).abs() < 1e-10, "p(|2>) in uniform state should be 0.25, got {}", re);
+        assert!((im).abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
     } else {
-        panic!("Expected HybridValue::Float after QSAMPLE/PROB");
+        panic!("Expected HybridValue::Complex after QSAMPLE/PROB");
     }
 }
 
@@ -862,7 +865,7 @@ fn test_e2e_observe_prob_then_round() {
     // ctx0 = R0 = 2 (query probability of basis state 2)
     ctx.iregs.set(0, 2).unwrap();
 
-    // QOBSERVE in PROB mode: H[0] = Float(0.25)
+    // QOBSERVE in PROB mode: H[0] = Complex(0.25, 0.0)
     execute_qop(&mut ctx, &Instruction::QObserve {
         dst_h: 0, src_q: 0, mode: observe_mode::PROB, ctx0: 0, ctx1: 0,
     }).unwrap();
@@ -870,10 +873,11 @@ fn test_e2e_observe_prob_then_round() {
     // Q[0] consumed
     assert!(ctx.qregs[0].is_none());
 
-    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
-        assert!((p - 0.25).abs() < 1e-10, "prob should be 0.25, got {}", p);
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
+        assert!((re - 0.25).abs() < 1e-10, "prob should be 0.25, got {}", re);
+        assert!((im).abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
     } else {
-        panic!("Expected HybridValue::Float after QOBSERVE/PROB");
+        panic!("Expected HybridValue::Complex after QOBSERVE/PROB");
     }
 
     // HREDUCE with ROUND: R[3] = round(0.25) = 0
@@ -1205,7 +1209,7 @@ HREDUCE H0, F2, 10
 HALT
 "#;
 
-    let program = parse_program(source).expect("Failed to parse QKERNELF pipeline");
+    let program = parse_program(source).expect("Failed to parse QKERNELF pipeline").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
 
@@ -1250,7 +1254,7 @@ HREDUCE H0, F0, 10
 HALT
 "#;
 
-    let program = parse_program(source).expect("Failed to parse QKERNELZ pipeline");
+    let program = parse_program(source).expect("Failed to parse QKERNELZ pipeline").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
 
@@ -1850,7 +1854,9 @@ fn test_qhadm_all_qubits() {
     for (i, &p) in probs.iter().enumerate() {
         assert!((p - 0.25).abs() < 1e-8, "P({}) should be 0.25, got {}", i, p);
     }
-    assert!(ctx.psw.sf, "PSW superposition flag should be set after Hadamard");
+    // After C-2: sf now indicates mixed state (purity < 1.0), not superposition.
+    // A pure superposition state has purity = 1.0, so sf = false.
+    assert!(!ctx.psw.sf, "PSW sf should be false for a pure superposition state");
 }
 
 #[test]
@@ -2868,4 +2874,231 @@ fn test_qreset_uninit_error() {
         dst: 0, src: 0, qubit_reg: 0,
     });
     assert!(result.is_err(), "QRESET on uninitialized Q should fail");
+}
+
+// =============================================================================
+// QuantumRegister integration tests: Pure/Mixed variants
+// =============================================================================
+
+use cqam_sim::quantum_register::QuantumRegister;
+
+#[test]
+fn test_qprep_default_uses_statevector() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    // Default: force_density_matrix = false
+    assert!(!ctx.config.force_density_matrix);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "Default QPREP should produce Pure(Statevector)");
+    assert_eq!(qr.num_qubits(), 2);
+    assert!((qr.purity() - 1.0).abs() < 1e-12);
+}
+
+#[test]
+fn test_qprep_force_dm_uses_density_matrix() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.force_density_matrix = true;
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Mixed(_)),
+        "QPREP with force_density_matrix should produce Mixed(DensityMatrix)");
+    assert_eq!(qr.num_qubits(), 2);
+}
+
+#[test]
+fn test_qprep_zero_state_variant() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)));
+    assert!((qr.get(0, 0).0 - 1.0).abs() < 1e-10);
+}
+
+#[test]
+fn test_qprep_bell_variant() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)));
+    assert!((qr.get(0, 0).0 - 0.5).abs() < 1e-10);
+    assert!((qr.get(0, 3).0 - 0.5).abs() < 1e-10);
+}
+
+#[test]
+fn test_qkernel_preserves_pure_with_sv_fast_path() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+    assert!(matches!(ctx.qregs[0].as_ref().unwrap(), QuantumRegister::Pure(_)));
+
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
+    execute_qop(&mut ctx, &Instruction::QKernel {
+        dst: 1, src: 0, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 1,
+    }).unwrap();
+
+    let qr = ctx.qregs[1].as_ref().unwrap();
+    // If the kernel supports apply_sv, result should stay Pure
+    // (all built-in kernels support apply_sv)
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "Kernel result should be Pure when SV fast path is available");
+}
+
+#[test]
+fn test_qmixed_produces_mixed_variant() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Set up a simple mixture in CMEM: 2 states, each 1 qubit (dim=2)
+    // State 1: weight=0.5, |0> = (1,0)
+    // State 2: weight=0.5, |1> = (0,0, 1,0)
+    let mut addr = 0u16;
+    // State 1
+    ctx.cmem.store(addr, f64::to_bits(0.5) as i64); addr += 1; // weight
+    ctx.cmem.store(addr, 2); addr += 1; // dim
+    ctx.cmem.store(addr, f64::to_bits(1.0) as i64); addr += 1; // re
+    ctx.cmem.store(addr, f64::to_bits(0.0) as i64); addr += 1; // im
+    ctx.cmem.store(addr, f64::to_bits(0.0) as i64); addr += 1; // re
+    ctx.cmem.store(addr, f64::to_bits(0.0) as i64); addr += 1; // im
+    // State 2
+    ctx.cmem.store(addr, f64::to_bits(0.5) as i64); addr += 1; // weight
+    ctx.cmem.store(addr, 2); addr += 1; // dim
+    ctx.cmem.store(addr, f64::to_bits(0.0) as i64); addr += 1; // re
+    ctx.cmem.store(addr, f64::to_bits(0.0) as i64); addr += 1; // im
+    ctx.cmem.store(addr, f64::to_bits(1.0) as i64); addr += 1; // re
+    ctx.cmem.store(addr, f64::to_bits(0.0) as i64);           // im
+
+    ctx.iregs.set(0, 0).unwrap(); // base_addr
+    ctx.iregs.set(1, 2).unwrap(); // count
+
+    execute_qop(&mut ctx, &Instruction::QMixed { dst: 0, base_addr_reg: 0, count_reg: 1 }).unwrap();
+
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Mixed(_)),
+        "QMIXED should always produce Mixed variant");
+    // Maximally mixed 1-qubit state: purity = 0.5
+    assert!((qr.purity() - 0.5).abs() < 1e-10,
+        "Equal mixture of |0> and |1> should have purity 0.5, got {}", qr.purity());
+}
+
+#[test]
+fn test_qptrace_auto_promotes_to_mixed() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Create a 2-qubit Bell state (Pure)
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+    assert!(matches!(ctx.qregs[0].as_ref().unwrap(), QuantumRegister::Pure(_)));
+
+    // Partial trace over qubit B -> should produce Mixed
+    ctx.iregs.set(0, 1).unwrap(); // num_qubits_a = 1
+    execute_qop(&mut ctx, &Instruction::QPtrace { dst: 1, src: 0, num_qubits_a_reg: 0 }).unwrap();
+
+    let qr = ctx.qregs[1].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Mixed(_)),
+        "QPTRACE should always produce Mixed variant (partial trace of Bell state)");
+    assert_eq!(qr.num_qubits(), 1);
+    // Partial trace of Bell state gives maximally mixed 1-qubit state
+    assert!((qr.purity() - 0.5).abs() < 1e-10,
+        "Partial trace of Bell state should give purity 0.5, got {}", qr.purity());
+}
+
+#[test]
+fn test_qstore_qload_preserves_variant() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Store a Pure register
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM }).unwrap();
+    assert!(matches!(ctx.qregs[0].as_ref().unwrap(), QuantumRegister::Pure(_)));
+
+    execute_qop(&mut ctx, &Instruction::QStore { src_q: 0, addr: 42 }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QLoad { dst_q: 1, addr: 42 }).unwrap();
+
+    let qr = ctx.qregs[1].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "Pure register should remain Pure after QSTORE/QLOAD roundtrip");
+}
+
+#[test]
+fn test_qencode_produces_pure() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Encode 2 amplitudes (3, 4) from integer registers
+    ctx.iregs.set(0, 3).unwrap();
+    ctx.iregs.set(1, 4).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QEncode {
+        dst: 0, src_base: 0, count: 2, file_sel: 0, // R_FILE
+    }).unwrap();
+
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "QENCODE should always produce Pure variant");
+    assert_eq!(qr.num_qubits(), 1);
+}
+
+#[test]
+fn test_qprepn_uses_force_dm_flag() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.force_density_matrix = true;
+
+    ctx.iregs.set(0, 3).unwrap(); // 3 qubits
+    execute_qop(&mut ctx, &Instruction::QPrepN { dst: 0, dist: dist_id::ZERO, qubit_count_reg: 0 }).unwrap();
+
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Mixed(_)),
+        "QPREPN with force_density_matrix should produce Mixed variant");
+    assert_eq!(qr.num_qubits(), 3);
+}
+
+#[test]
+fn test_gate_operations_preserve_pure_variant() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    assert!(matches!(ctx.qregs[0].as_ref().unwrap(), QuantumRegister::Pure(_)));
+
+    // Apply Hadamard via masked gate
+    ctx.iregs.set(0, 0b11).unwrap(); // mask: both qubits
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 1, src: 0, mask_reg: 0 }).unwrap();
+
+    let qr = ctx.qregs[1].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "Gate operations on Pure should stay Pure");
+}
+
+#[test]
+fn test_qmeas_preserves_pure_variant() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    assert!(matches!(ctx.qregs[0].as_ref().unwrap(), QuantumRegister::Pure(_)));
+
+    ctx.iregs.set(0, 0).unwrap(); // measure qubit 0
+    execute_qop(&mut ctx, &Instruction::QMeas { dst_r: 1, src_q: 0, qubit_reg: 0 }).unwrap();
+
+    let qr = ctx.qregs[0].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "Measurement of Pure should stay Pure");
+}
+
+#[test]
+fn test_qtensor_pure_pure_stays_pure() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    ctx.config.default_qubits = 1;
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 1, dist: dist_id::ZERO }).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QTensor { dst: 2, src0: 0, src1: 1 }).unwrap();
+
+    let qr = ctx.qregs[2].as_ref().unwrap();
+    assert!(matches!(qr, QuantumRegister::Pure(_)),
+        "Tensor of Pure x Pure should be Pure");
+    assert_eq!(qr.num_qubits(), 2);
 }

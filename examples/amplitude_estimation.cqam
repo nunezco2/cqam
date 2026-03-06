@@ -9,7 +9,7 @@
 # This is a key subroutine in quantum counting, Monte Carlo estimation,
 # and many quantum machine learning algorithms.
 #
-# Requires: default_qubits = 16
+#! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 

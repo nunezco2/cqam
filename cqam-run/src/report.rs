@@ -59,10 +59,12 @@ pub fn print_report(
         // -- Quantum registers (Q0-Q7) --
         println!("\n=== Quantum Registers (active) ===");
         for i in 0..8usize {
-            if let Some(ref dm) = ctx.qregs[i] {
-                let probs = dm.diagonal_probabilities();
-                println!("  Q{} = DensityMatrix({} qubits, purity={:.4})",
-                    i, dm.num_qubits(), dm.purity());
+            if let Some(ref qr) = ctx.qregs[i] {
+                let probs = qr.diagonal_probabilities();
+                let purity = qr.purity();
+                let kind = if (purity - 1.0).abs() < 1e-12 { "pure" } else { "mixed" };
+                println!("  Q{} = QuantumRegister({}, {} qubits, purity={:.4})",
+                    i, kind, qr.num_qubits(), purity);
                 // Print non-zero diagonal probabilities
                 for (k, &p) in probs.iter().enumerate() {
                     if p > 1e-10 {
@@ -81,9 +83,11 @@ pub fn print_report(
         // -- Quantum memory (occupied slots) --
         println!("\n=== Quantum Memory (occupied slots) ===");
         for addr in 0..=255u8 {
-            if let Some(dm) = ctx.qmem.load(addr) {
-                println!("  QMEM[{:3}] = DensityMatrix({} qubits, purity={:.4})",
-                    addr, dm.num_qubits(), dm.purity());
+            if let Some(qr) = ctx.qmem.load(addr) {
+                let purity = qr.purity();
+                let kind = if (purity - 1.0).abs() < 1e-12 { "pure" } else { "mixed" };
+                println!("  QMEM[{:3}] = QuantumRegister({}, {} qubits, purity={:.4})",
+                    addr, kind, qr.num_qubits(), purity);
             }
         }
     }

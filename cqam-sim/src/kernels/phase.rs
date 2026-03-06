@@ -8,8 +8,10 @@
 //! - When z = (theta, 0.0), this is equivalent to Rotate{theta}.
 //! - Preserves diagonal probabilities.
 
-use crate::complex::{self, cx_exp_i, cx_norm};
+use cqam_core::error::CqamError;
+use crate::complex::{self, cx_exp_i, cx_mul, cx_norm};
 use crate::density_matrix::DensityMatrix;
+use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 
 /// Phase shift kernel parameterized by a complex amplitude.
@@ -28,7 +30,7 @@ impl Kernel for PhaseShift {
     /// Computes angle = cx_norm(self.amplitude), then constructs U as a
     /// dim x dim diagonal matrix with U[k][k] = cx_exp_i(angle * k),
     /// and delegates to DensityMatrix::apply_unitary.
-    fn apply(&self, input: &DensityMatrix) -> DensityMatrix {
+    fn apply(&self, input: &DensityMatrix) -> Result<DensityMatrix, CqamError> {
         let rate = cx_norm(self.amplitude);
         let dim = input.dimension();
         let mut unitary = vec![complex::ZERO; dim * dim];
@@ -37,6 +39,19 @@ impl Kernel for PhaseShift {
         }
         let mut result = input.clone();
         result.apply_unitary(&unitary);
-        result
+        Ok(result)
+    }
+
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+        // Diagonal unitary: just multiply each amplitude by exp(i*|z|*k).
+        // O(2^n) with no matrix allocation.
+        let rate = cx_norm(self.amplitude);
+        let amps = input.amplitudes();
+        let result_amps: Vec<_> = amps.iter().enumerate().map(|(k, &amp)| {
+            let phase = cx_exp_i(rate * (k as f64));
+            cx_mul(phase, amp)
+        }).collect();
+        Ok(Statevector::from_amplitudes(result_amps)
+            .expect("PhaseShift apply_sv produced invalid amplitudes"))
     }
 }

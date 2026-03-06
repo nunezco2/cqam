@@ -89,7 +89,7 @@ fn main() {
     };
 
     let program = match parse_program(&input) {
-        Ok(p) => p,
+        Ok(p) => p.instructions,
         Err(e) => {
             eprintln!("Parse error: {}", e);
             process::exit(1);

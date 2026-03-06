@@ -194,8 +194,8 @@ pub fn assemble_source_with_options(
     source: &str,
     options: &AssemblyOptions,
 ) -> Result<AssemblyResult, CqamError> {
-    let instructions = parser::parse_program(source)?;
-    assemble_with_options(&instructions, options)
+    let parsed = parser::parse_program(source)?;
+    assemble_with_options(&parsed.instructions, options)
 }
 
 /// Assemble a sequence of parsed instructions into binary.
