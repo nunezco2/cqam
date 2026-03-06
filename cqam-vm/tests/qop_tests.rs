@@ -1832,3 +1832,492 @@ fn test_qencode_observe_reduce_pipeline() {
         other => panic!("Expected Dist after QOBSERVE, got {:?}", other),
     }
 }
+
+// =============================================================================
+// QHadM / QFlip / QPhase masked gate tests
+// =============================================================================
+
+#[test]
+fn test_qhadm_all_qubits() {
+    // QPREP |00> -> mask=0b11 -> QHADM -> uniform over 4 states
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b11).unwrap(); // mask both qubits
+
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    for (i, &p) in probs.iter().enumerate() {
+        assert!((p - 0.25).abs() < 1e-8, "P({}) should be 0.25, got {}", i, p);
+    }
+    assert!(ctx.psw.sf, "PSW superposition flag should be set after Hadamard");
+}
+
+#[test]
+fn test_qhadm_single_qubit() {
+    // QPREP |00> -> mask=0b01 (qubit 0 only) -> QHADM
+    // P(00)=0.5, P(01)=0, P(10)=0.5, P(11)=0
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 0.5).abs() < 1e-8, "P(00) should be 0.5, got {}", probs[0]);
+    assert!(probs[1].abs() < 1e-8, "P(01) should be 0, got {}", probs[1]);
+    assert!((probs[2] - 0.5).abs() < 1e-8, "P(10) should be 0.5, got {}", probs[2]);
+    assert!(probs[3].abs() < 1e-8, "P(11) should be 0, got {}", probs[3]);
+}
+
+#[test]
+fn test_qhadm_empty_mask() {
+    // mask=0 -> no-op, state unchanged
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-8, "P(00) should be 1.0 with empty mask");
+}
+
+#[test]
+fn test_qhadm_involution() {
+    // H*H = I: apply twice, state should return to original
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b11).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-8, "P(00) should be 1.0 after H*H");
+}
+
+#[test]
+fn test_qhadm_different_src_dst() {
+    // src != dst: src unchanged, dst gets result
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 1, src: 0, mask_reg: 0 }).unwrap();
+
+    // Q0 unchanged
+    let dm0 = ctx.qregs[0].as_ref().unwrap();
+    let probs0 = dm0.diagonal_probabilities();
+    assert!((probs0[0] - 1.0).abs() < 1e-8, "Q0 should remain |00>");
+
+    // Q1 has Hadamard on qubit 0
+    let dm1 = ctx.qregs[1].as_ref().unwrap();
+    let probs1 = dm1.diagonal_probabilities();
+    assert!((probs1[0] - 0.5).abs() < 1e-8, "Q1 P(00) should be 0.5");
+    assert!((probs1[2] - 0.5).abs() < 1e-8, "Q1 P(10) should be 0.5");
+}
+
+#[test]
+fn test_qflip_all_qubits() {
+    // QPREP |00> -> mask=0b11 -> QFLIP -> |11>
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b11).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[3] - 1.0).abs() < 1e-8, "P(11) should be 1.0 after flipping both qubits");
+}
+
+#[test]
+fn test_qflip_single_qubit() {
+    // QPREP |00> -> mask=0b10 -> QFLIP -> |01>
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b10).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[1] - 1.0).abs() < 1e-8, "P(01) should be 1.0 after flipping qubit 1");
+}
+
+#[test]
+fn test_qflip_involution() {
+    // X*X = I: apply twice, state returns to original
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b11).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-8, "P(00) should be 1.0 after X*X");
+}
+
+#[test]
+fn test_qflip_empty_mask() {
+    // mask=0 -> no-op
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-8, "P(00) should be 1.0 with empty mask");
+}
+
+#[test]
+fn test_qphase_on_superposition() {
+    // Prepare |+> via QHADM, then QPHASE -> |->
+    // Diagonal probabilities unchanged but off-diagonal signs flip
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap(); // qubit 0
+
+    // Apply H to get |+>
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Apply Z to get |->
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Diagonal probabilities should still be 50/50
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 0.5).abs() < 1e-8, "P(00) should be 0.5");
+    assert!((probs[2] - 0.5).abs() < 1e-8, "P(10) should be 0.5");
+
+    // Applying H again should give |1> (|-> = H|1>)
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+    let dm2 = ctx.qregs[0].as_ref().unwrap();
+    let probs2 = dm2.diagonal_probabilities();
+    assert!((probs2[2] - 1.0).abs() < 1e-8, "After H|-> should get |10>, P(10)=1.0");
+}
+
+#[test]
+fn test_qphase_on_computational_basis() {
+    // Z on |0> -> |0> (unchanged diagonal probabilities)
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-8, "P(00) should be 1.0 after Z on |0>");
+}
+
+#[test]
+fn test_qphase_involution() {
+    // Z*Z = I
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap();
+
+    // Put in superposition first to make it interesting
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Save state before QPHASE
+    let probs_before: Vec<f64> = ctx.qregs[0].as_ref().unwrap()
+        .diagonal_probabilities().to_vec();
+
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let probs_after = ctx.qregs[0].as_ref().unwrap().diagonal_probabilities();
+    for i in 0..probs_before.len() {
+        assert!((probs_before[i] - probs_after[i]).abs() < 1e-8,
+            "Z*Z should be identity, state {} differs", i);
+    }
+}
+
+#[test]
+fn test_hadm_then_flip_then_phase() {
+    // Compose all three: QHADM creates superposition, QFLIP flips, QPHASE flips phase
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap();
+
+    // H|0> = |+>
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+    // X|+> = |+> (X and H commute in prob space, X|+> = |+>)
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+    // Z|+> = |->
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Still 50/50 in computational basis
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 0.5).abs() < 1e-8, "Should still be 50/50");
+    assert!((probs[2] - 0.5).abs() < 1e-8, "Should still be 50/50");
+}
+
+#[test]
+fn test_masked_gate_on_empty_register_returns_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 0b01).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 });
+    assert!(result.is_err(), "QHADM on empty register should error");
+
+    let result = execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 });
+    assert!(result.is_err(), "QFLIP on empty register should error");
+
+    let result = execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 });
+    assert!(result.is_err(), "QPHASE on empty register should error");
+}
+
+#[test]
+fn test_mask_bits_beyond_num_qubits_ignored() {
+    // Set mask with bits beyond num_qubits (2). Extra bits should be ignored.
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0xFF).unwrap(); // all bits set, but only 2 qubits
+
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Should be same as mask=0b11 (uniform distribution)
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    for (i, &p) in probs.iter().enumerate() {
+        assert!((p - 0.25).abs() < 1e-8, "P({}) should be 0.25, got {}", i, p);
+    }
+}
+
+// =============================================================================
+// Phase 5 Revised: Additional coverage tests
+// =============================================================================
+
+/// End-to-end pipeline: ILDI mask -> QPREP -> QHADM -> QOBSERVE -> HREDUCE
+#[test]
+fn test_end_to_end_masked_hadamard_observe_reduce_pipeline() {
+    use cqam_vm::executor::execute_instruction;
+    use cqam_vm::fork::ForkManager;
+
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fork_mgr = ForkManager::new();
+
+    // Step 1: ILDI R0, 0b11 (mask for 2 qubits)
+    execute_instruction(
+        &mut ctx,
+        &Instruction::ILdi { dst: 0, imm: 0b11 },
+        &mut fork_mgr,
+    ).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 0b11);
+
+    // Step 2: QPREP Q0 as |00>
+    execute_instruction(
+        &mut ctx,
+        &Instruction::QPrep { dst: 0, dist: dist_id::ZERO },
+        &mut fork_mgr,
+    ).unwrap();
+
+    // Step 3: QHADM Q0, Q0, R0 -> uniform superposition
+    execute_instruction(
+        &mut ctx,
+        &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 },
+        &mut fork_mgr,
+    ).unwrap();
+
+    // Step 4: QOBSERVE H0, Q0 -> distribution
+    execute_instruction(
+        &mut ctx,
+        &Instruction::QObserve {
+            dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0,
+        },
+        &mut fork_mgr,
+    ).unwrap();
+
+    // Verify we got a distribution in H0
+    match ctx.hregs.get(0).unwrap() {
+        HybridValue::Dist(pairs) => {
+            assert!(!pairs.is_empty(), "Distribution should have entries");
+            let total: f64 = pairs.iter().map(|(_, p)| p).sum();
+            assert!((total - 1.0).abs() < 1e-6, "Distribution should sum to 1.0, got {}", total);
+            // All 4 states should have equal probability
+            assert_eq!(pairs.len(), 4, "Uniform dist should have 4 entries");
+            for (k, p) in pairs {
+                assert!((p - 0.25).abs() < 1e-6,
+                    "P({}) should be 0.25, got {}", k, p);
+            }
+        }
+        other => panic!("Expected Dist after QOBSERVE, got {:?}", other),
+    }
+
+    // Step 5: HREDUCE H0 -> F0 (mean of distribution)
+    execute_instruction(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MEAN },
+        &mut fork_mgr,
+    ).unwrap();
+
+    // Mean of uniform {0,1,2,3} with equal probs should be 1.5
+    let mean_val = ctx.fregs.get(0).unwrap();
+    assert!((mean_val - 1.5).abs() < 1e-6,
+        "Mean of uniform distribution over {{0,1,2,3}} should be 1.5, got {}", mean_val);
+}
+
+/// QFLIP on 3-qubit zero state with selective mask produces expected basis state.
+#[test]
+fn test_qflip_3_qubit_selective_mask() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.default_qubits = 3;
+
+    // QPREP |000>
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 3);
+    assert_eq!(dm.dimension(), 8);
+
+    // mask = 0b101 -> flip qubit 0 and qubit 2 -> |101>
+    ctx.iregs.set(0, 0b101).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // |101> in big-endian is basis state 5
+    assert!((probs[5] - 1.0).abs() < 1e-8,
+        "P(101) should be 1.0, got {}", probs[5]);
+    // All other states zero
+    for (i, &p) in probs.iter().enumerate() {
+        if i != 5 {
+            assert!(p.abs() < 1e-8, "P({:03b}) should be 0, got {}", i, p);
+        }
+    }
+}
+
+/// QFLIP all qubits on 3-qubit zero state produces |111> = basis 7.
+#[test]
+fn test_qflip_3_qubit_all_flipped() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.default_qubits = 3;
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // mask = 0b111 -> flip all 3 qubits
+    ctx.iregs.set(0, 0b111).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[7] - 1.0).abs() < 1e-8,
+        "P(111) should be 1.0 after flipping all 3 qubits, got {}", probs[7]);
+}
+
+/// QPHASE on |1> state: diagonal unchanged (Z|1> = -|1>, but prob = |-1|^2 = 1).
+#[test]
+fn test_qphase_on_one_state_diagonal_unchanged() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.default_qubits = 3;
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    // Flip all qubits to get |111>
+    ctx.iregs.set(0, 0b111).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let probs_before = ctx.qregs[0].as_ref().unwrap().diagonal_probabilities();
+
+    // Apply QPHASE to all qubits
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let probs_after = ctx.qregs[0].as_ref().unwrap().diagonal_probabilities();
+    for i in 0..probs_before.len() {
+        assert!((probs_before[i] - probs_after[i]).abs() < 1e-8,
+            "QPHASE should not change diagonal probabilities on computational basis state |111>, index {}", i);
+    }
+}
+
+/// Full pipeline: QHADM -> QFLIP -> QPHASE -> QOBSERVE on 3-qubit register.
+#[test]
+fn test_combined_hadm_flip_phase_observe_3_qubit() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.default_qubits = 3;
+
+    // QPREP |000>
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // QHADM on qubit 0 only: mask = 0b001
+    ctx.iregs.set(0, 0b001).unwrap();
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // QFLIP on qubit 1 only: mask = 0b010
+    ctx.iregs.set(1, 0b010).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 1 }).unwrap();
+
+    // QPHASE on qubit 2 only: mask = 0b100
+    ctx.iregs.set(2, 0b100).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPhase { dst: 0, src: 0, mask_reg: 2 }).unwrap();
+
+    // QOBSERVE
+    execute_qop(&mut ctx, &Instruction::QObserve {
+        dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0,
+    }).unwrap();
+
+    match ctx.hregs.get(0).unwrap() {
+        HybridValue::Dist(pairs) => {
+            let total: f64 = pairs.iter().map(|(_, p)| p).sum();
+            assert!((total - 1.0).abs() < 1e-6, "Distribution should sum to 1.0");
+            // Qubit 0 is in superposition, qubit 1 is flipped, qubit 2 has Z (no prob change)
+            // State: (|0>+|1>)/sqrt(2) x |1> x |0>
+            // = (|010> + |110>)/sqrt(2) = basis states 2 and 6 with P=0.5 each
+            // But Z on qubit 2 (which is in |0>) doesn't change probabilities.
+            assert_eq!(pairs.len(), 2, "Should have exactly 2 non-zero states");
+        }
+        other => panic!("Expected Dist, got {:?}", other),
+    }
+}
+
+/// Mask bits beyond num_qubits are ignored: 3-qubit register with mask=0xFF.
+#[test]
+fn test_mask_bits_beyond_num_qubits_ignored_3_qubit() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.default_qubits = 3;
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // mask = 0xFF has 8 bits set, but only 3 qubits exist
+    ctx.iregs.set(0, 0xFF).unwrap();
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // Should be uniform over 8 states (same as mask=0b111)
+    for (i, &p) in probs.iter().enumerate() {
+        assert!((p - 0.125).abs() < 1e-8,
+            "P({:03b}) should be 0.125 (3-qubit uniform), got {}", i, p);
+    }
+}
+
+/// QHADM involution on 3-qubit register with selective mask.
+#[test]
+fn test_qhadm_involution_3_qubit() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.config.default_qubits = 3;
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // Apply H to qubits 0 and 2 (mask = 0b101)
+    ctx.iregs.set(0, 0b101).unwrap();
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Apply H again with same mask -> should return to |000>
+    execute_qop(&mut ctx, &Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-8,
+        "H*H should return to |000>, P(000) = {}", probs[0]);
+}

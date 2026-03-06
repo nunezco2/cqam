@@ -274,6 +274,27 @@ pub enum Instruction {
     /// file_sel: register file selector (0=R, 1=F, 2=Z; see file_sel module)
     QEncode { dst: u8, src_base: u8, count: u8, file_sel: u8 },
 
+    /// Apply Hadamard gate to each qubit selected by a classical bitmask.
+    ///
+    /// For each bit i of R[mask_reg] that is 1, apply H to qubit i of Q[src].
+    /// Store the result in Q[dst]. Bits beyond num_qubits are ignored.
+    ///
+    /// This is a register-level operation: the mask provides classical control
+    /// over which qubits enter superposition.
+    QHadM { dst: u8, src: u8, mask_reg: u8 },
+
+    /// Apply Pauli-X (bit flip) to each qubit selected by a classical bitmask.
+    ///
+    /// For each bit i of R[mask_reg] that is 1, apply X to qubit i of Q[src].
+    /// Store the result in Q[dst]. Bits beyond num_qubits are ignored.
+    QFlip { dst: u8, src: u8, mask_reg: u8 },
+
+    /// Apply Pauli-Z (phase flip) to each qubit selected by a classical bitmask.
+    ///
+    /// For each bit i of R[mask_reg] that is 1, apply Z to qubit i of Q[src].
+    /// Store the result in Q[dst]. Bits beyond num_qubits are ignored.
+    QPhase { dst: u8, src: u8, mask_reg: u8 },
+
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
     /// Fork hybrid execution into parallel threads. Sets PSW fork flags.

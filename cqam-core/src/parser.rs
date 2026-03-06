@@ -377,6 +377,24 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             })?;
             Ok(Instruction::QPrepR { dst, dist_reg })
         }
+        "QHADM" => parse_qqr(
+            &ops,
+            |dst, src, mask_reg| Instruction::QHadM { dst, src, mask_reg },
+            "QHADM",
+            line_num,
+        ),
+        "QFLIP" => parse_qqr(
+            &ops,
+            |dst, src, mask_reg| Instruction::QFlip { dst, src, mask_reg },
+            "QFLIP",
+            line_num,
+        ),
+        "QPHASE" => parse_qqr(
+            &ops,
+            |dst, src, mask_reg| Instruction::QPhase { dst, src, mask_reg },
+            "QPHASE",
+            line_num,
+        ),
         "QENCODE" => {
             if ops.len() != 4 {
                 return Err(CqamError::ParseError {
@@ -696,6 +714,32 @@ where
         message: format!("{}: invalid value '{}'", name, ops[2]),
     })?;
     Ok(build(dst, src, val))
+}
+
+/// Helper: parse a masked quantum instruction (Q-reg dst, Q-reg src, R-reg mask).
+fn parse_qqr<F>(ops: &[&str], build: F, name: &str, line_num: usize) -> ParseResult
+where
+    F: FnOnce(u8, u8, u8) -> Instruction,
+{
+    if ops.len() != 3 {
+        return Err(CqamError::ParseError {
+            line: line_num,
+            message: format!("{} requires 3 operands, got {}", name, ops.len()),
+        });
+    }
+    let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+        line: line_num,
+        message: format!("{}: invalid Q-register '{}'", name, ops[0]),
+    })?;
+    let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+        line: line_num,
+        message: format!("{}: invalid Q-register '{}'", name, ops[1]),
+    })?;
+    let mask_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+        line: line_num,
+        message: format!("{}: invalid R-register '{}'", name, ops[2]),
+    })?;
+    Ok(build(dst, src, mask_reg))
 }
 
 /// Helper: parse reg, i16 instruction (e.g. ILDI, FLDI).

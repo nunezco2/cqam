@@ -1123,7 +1123,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2F_u8, 0x3F, 0x45, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2F_u8, 0x3F, 0x49, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,
@@ -1479,4 +1479,53 @@ fn error_qprepr_dist_reg_overflow() {
     let labels = HashMap::new();
     let instr = Instruction::QPrepR { dst: 0, dist_reg: 16 };
     assert!(encode(&instr, &labels).is_err());
+}
+
+// =============================================================================
+// Phase 5 Revised: QHADM, QFLIP, QPHASE roundtrip tests
+// =============================================================================
+
+#[test]
+fn roundtrip_qhadm() {
+    let instr = Instruction::QHadM { dst: 3, src: 2, mask_reg: 7 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qflip() {
+    let instr = Instruction::QFlip { dst: 0, src: 1, mask_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qphase() {
+    let instr = Instruction::QPhase { dst: 7, src: 7, mask_reg: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qhadm_boundary_values() {
+    let instr = Instruction::QHadM { dst: 7, src: 7, mask_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn error_qhadm_dst_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QHadM { dst: 8, src: 0, mask_reg: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qhadm_mask_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QHadM { dst: 0, src: 0, mask_reg: 16 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn mnemonic_masked_ops() {
+    assert_eq!(mnemonic(op::QHADM), Some("QHADM"));
+    assert_eq!(mnemonic(op::QFLIP), Some("QFLIP"));
+    assert_eq!(mnemonic(op::QPHASE), Some("QPHASE"));
 }

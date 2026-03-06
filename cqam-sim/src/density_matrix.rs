@@ -10,7 +10,7 @@ use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
 
 /// Maximum number of qubits supported by the full density matrix.
-pub const MAX_QUBITS: u8 = 12;
+pub const MAX_QUBITS: u8 = 16;
 
 /// A density matrix representing an n-qubit quantum state.
 ///
@@ -428,6 +428,68 @@ impl DensityMatrix {
 
         true
     }
+}
+
+// =============================================================================
+// Qubit-Level Gate Application
+// =============================================================================
+
+impl DensityMatrix {
+    /// Apply a single-qubit gate to a specific qubit in the register.
+    ///
+    /// Performs the transformation rho' = U * rho * U^dagger where U is the
+    /// full-register unitary constructed by embedding the 2x2 gate at the
+    /// target qubit position via Kronecker product.
+    ///
+    /// # Panics
+    /// Panics if `target >= self.num_qubits`.
+    pub fn apply_single_qubit_gate(&mut self, target: u8, gate: &[C64; 4]) {
+        let n = self.num_qubits as usize;
+        let dim = self.dimension();
+        assert!(
+            (target as usize) < n,
+            "target qubit {} out of range for {}-qubit system",
+            target,
+            n
+        );
+
+        let bit = n - 1 - target as usize;
+        let mask = 1usize << bit;
+
+        let [g00, g01, g10, g11] = *gate;
+
+        // Step 1: Apply gate to rows (temp = G * rho)
+        let mut temp = self.data.clone();
+        for i0 in 0..dim {
+            if i0 & mask != 0 {
+                continue;
+            }
+            let i1 = i0 | mask;
+            for j in 0..dim {
+                let r0 = self.data[i0 * dim + j];
+                let r1 = self.data[i1 * dim + j];
+                temp[i0 * dim + j] = cx_add(cx_mul(g00, r0), cx_mul(g01, r1));
+                temp[i1 * dim + j] = cx_add(cx_mul(g10, r0), cx_mul(g11, r1));
+            }
+        }
+
+        // Step 2: Apply gate^dagger to columns (result = temp * G^dagger)
+        for j0 in 0..dim {
+            if j0 & mask != 0 {
+                continue;
+            }
+            let j1 = j0 | mask;
+            for i in 0..dim {
+                let c0 = temp[i * dim + j0];
+                let c1 = temp[i * dim + j1];
+                self.data[i * dim + j0] =
+                    cx_add(cx_mul(c0, cx_conj(g00)), cx_mul(c1, cx_conj(g01)));
+                self.data[i * dim + j1] =
+                    cx_add(cx_mul(c0, cx_conj(g10)), cx_mul(c1, cx_conj(g11)));
+            }
+        }
+    }
+
 }
 
 // =============================================================================

@@ -6,6 +6,7 @@
 use cqam_core::error::CqamError;
 use cqam_core::instruction::{Instruction, dist_id, file_sel, kernel_id, observe_mode};
 use cqam_core::register::HybridValue;
+use cqam_sim::complex::{C64, ZERO, ONE};
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernel::Kernel;
 use cqam_sim::kernels::init::Init;
@@ -16,6 +17,73 @@ use cqam_sim::kernels::grover::GroverIter;
 use cqam_sim::kernels::rotate::Rotate;
 use cqam_sim::kernels::phase::PhaseShift;
 use crate::context::ExecutionContext;
+
+// =============================================================================
+// Gate matrices for masked register-level operations
+// =============================================================================
+
+/// Hadamard gate: (1/sqrt(2)) * [[1,1],[1,-1]]
+fn hadamard() -> [C64; 4] {
+    let h = std::f64::consts::FRAC_1_SQRT_2;
+    [(h, 0.0), (h, 0.0), (h, 0.0), (-h, 0.0)]
+}
+
+/// Pauli-X (bit flip): [[0,1],[1,0]]
+fn pauli_x() -> [C64; 4] {
+    [ZERO, ONE, ONE, ZERO]
+}
+
+/// Pauli-Z (phase flip): [[1,0],[0,-1]]
+fn pauli_z() -> [C64; 4] {
+    [ONE, ZERO, ZERO, (-1.0, 0.0)]
+}
+
+// =============================================================================
+// Masked gate execution
+// =============================================================================
+
+/// Execute a masked single-qubit gate across selected qubits.
+///
+/// Reads the bitmask from R[mask_reg], iterates over qubits 0..num_qubits,
+/// and applies the given gate to each qubit where the corresponding mask bit
+/// is set.
+fn execute_masked_gate(
+    ctx: &mut ExecutionContext,
+    dst: u8,
+    src: u8,
+    mask_reg: u8,
+    gate_fn: fn() -> [C64; 4],
+    _instr_name: &str,
+) -> Result<(), CqamError> {
+    if let Some(ref dm) = ctx.qregs[src as usize] {
+        let mask = ctx.iregs.get(mask_reg)? as u64;
+        let n = dm.num_qubits();
+        let gate = gate_fn();
+
+        let mut result = dm.clone();
+        for qubit in 0..n {
+            if (mask >> qubit) & 1 == 1 {
+                result.apply_single_qubit_gate(qubit, &gate);
+            }
+        }
+
+        let superposition = result.von_neumann_entropy();
+        let purity = result.purity();
+
+        ctx.qregs[dst as usize] = Some(result);
+        ctx.psw.update_from_qmeta(
+            superposition,
+            purity,
+            (ctx.config.min_superposition, ctx.config.min_entanglement),
+        );
+        Ok(())
+    } else {
+        Err(CqamError::UninitializedRegister {
+            file: "Q".to_string(),
+            index: src,
+        })
+    }
+}
 
 /// Execute a quantum instruction.
 ///
@@ -312,6 +380,18 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             };
             ctx.qregs[*dst as usize] = Some(dm);
             Ok(())
+        }
+
+        Instruction::QHadM { dst, src, mask_reg } => {
+            execute_masked_gate(ctx, *dst, *src, *mask_reg, hadamard, "QHADM")
+        }
+
+        Instruction::QFlip { dst, src, mask_reg } => {
+            execute_masked_gate(ctx, *dst, *src, *mask_reg, pauli_x, "QFLIP")
+        }
+
+        Instruction::QPhase { dst, src, mask_reg } => {
+            execute_masked_gate(ctx, *dst, *src, *mask_reg, pauli_z, "QPHASE")
         }
 
         Instruction::QEncode { dst, src_base, count, file_sel: fs } => {

@@ -102,6 +102,11 @@ pub mod op {
     pub const QPREPR: u8 = 0x43;
     pub const QENCODE: u8 = 0x44;
 
+    // -- Phase 5 Revised: Masked register-level gate operations (0x45-0x48) ---
+    pub const QHADM: u8 = 0x45;
+    pub const QFLIP: u8 = 0x46;
+    pub const QPHASE: u8 = 0x47;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;
@@ -299,6 +304,14 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } =>
             encode_q(op::QKERNELZ, *dst, *src, *kernel, *zctx0, *zctx1),
+
+        // -- QMK-format (masked gate operations) ----------------------------------
+        Instruction::QHadM { dst, src, mask_reg } =>
+            encode_qmk(op::QHADM, *dst, *src, *mask_reg),
+        Instruction::QFlip { dst, src, mask_reg } =>
+            encode_qmk(op::QFLIP, *dst, *src, *mask_reg),
+        Instruction::QPhase { dst, src, mask_reg } =>
+            encode_qmk(op::QPHASE, *dst, *src, *mask_reg),
 
         // -- QR-format (quantum prepare from register) ----------------------------
         Instruction::QPrepR { dst, dist_reg } =>
@@ -623,6 +636,26 @@ pub fn decode_with_debug(
             Ok(Instruction::QEncode { dst, src_base, count, file_sel })
         }
 
+        // -- QMK-format (masked gate operations) ----------------------------------
+        op::QHADM => {
+            let dst_q = extract_reg3(word, 21);
+            let src_q = extract_reg3(word, 18);
+            let mask_reg = extract_reg4(word, 10);
+            Ok(Instruction::QHadM { dst: dst_q, src: src_q, mask_reg })
+        }
+        op::QFLIP => {
+            let dst_q = extract_reg3(word, 21);
+            let src_q = extract_reg3(word, 18);
+            let mask_reg = extract_reg4(word, 10);
+            Ok(Instruction::QFlip { dst: dst_q, src: src_q, mask_reg })
+        }
+        op::QPHASE => {
+            let dst_q = extract_reg3(word, 21);
+            let src_q = extract_reg3(word, 18);
+            let mask_reg = extract_reg4(word, 10);
+            Ok(Instruction::QPhase { dst: dst_q, src: src_q, mask_reg })
+        }
+
         // -- QO-format (quantum observe, extended) --------------------------------
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
@@ -759,6 +792,9 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QKERNELZ => Some("QKERNELZ"),
         op::QPREPR => Some("QPREPR"),
         op::QENCODE => Some("QENCODE"),
+        op::QHADM => Some("QHADM"),
+        op::QFLIP => Some("QFLIP"),
+        op::QPHASE => Some("QPHASE"),
         op::ILDX => Some("ILDX"),
         op::ISTRX => Some("ISTRX"),
         op::FLDX => Some("FLDX"),
@@ -941,6 +977,17 @@ fn encode_qe(opcode: u8, dst_q: u8, src_base: u8, count: u8, file_sel: u8) -> Re
         | ((src_base as u32) << 16)
         | ((count as u32) << 12)
         | ((file_sel as u32) << 10))
+}
+
+/// Encode a QMK-format word: [opcode:8][dst_q:3][src_q:3][_:4][mask_reg:4][_:10]
+fn encode_qmk(opcode: u8, dst_q: u8, src_q: u8, mask_reg: u8) -> Result<u32, CqamError> {
+    validate_reg3(dst_q, "dst_q")?;
+    validate_reg3(src_q, "src_q")?;
+    validate_reg4(mask_reg, "mask_reg")?;
+    Ok(((opcode as u32) << 24)
+        | ((dst_q as u32) << 21)
+        | ((src_q as u32) << 18)
+        | ((mask_reg as u32) << 10))
 }
 
 /// Encode a QS-format word: [opcode:8][qreg:3][_:5][addr:8][_:8]

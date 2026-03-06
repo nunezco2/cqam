@@ -410,7 +410,10 @@ pub fn execute_instruction(
         | Instruction::QObserve { .. }
         | Instruction::QSample { .. }
         | Instruction::QLoad { .. }
-        | Instruction::QStore { .. } => {
+        | Instruction::QStore { .. }
+        | Instruction::QHadM { .. }
+        | Instruction::QFlip { .. }
+        | Instruction::QPhase { .. } => {
             execute_qop(ctx, instr)?;
         }
 

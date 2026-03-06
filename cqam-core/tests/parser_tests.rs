@@ -1183,3 +1183,75 @@ HALT
     assert_eq!(program.len(), 5);
     assert_eq!(program[2], Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: 1 });
 }
+
+// =============================================================================
+// Phase 5: QHADM, QFLIP, QPHASE parse tests
+// =============================================================================
+
+#[test]
+fn test_parse_qhadm() {
+    let instr = parse_instruction("QHADM Q0, Q0, R0").unwrap();
+    assert_eq!(instr, Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 });
+}
+
+#[test]
+fn test_parse_qhadm_typical() {
+    let instr = parse_instruction("QHADM Q1, Q2, R5").unwrap();
+    assert_eq!(instr, Instruction::QHadM { dst: 1, src: 2, mask_reg: 5 });
+}
+
+#[test]
+fn test_parse_qhadm_wrong_operand_count() {
+    assert!(parse_instruction("QHADM Q0, Q0").is_err());
+    assert!(parse_instruction("QHADM Q0, Q0, R0, R1").is_err());
+}
+
+#[test]
+fn test_parse_qflip() {
+    let instr = parse_instruction("QFLIP Q0, Q0, R0").unwrap();
+    assert_eq!(instr, Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 });
+}
+
+#[test]
+fn test_parse_qflip_typical() {
+    let instr = parse_instruction("QFLIP Q3, Q1, R7").unwrap();
+    assert_eq!(instr, Instruction::QFlip { dst: 3, src: 1, mask_reg: 7 });
+}
+
+#[test]
+fn test_parse_qflip_wrong_operand_count() {
+    assert!(parse_instruction("QFLIP Q0, Q0").is_err());
+}
+
+#[test]
+fn test_parse_qphase() {
+    let instr = parse_instruction("QPHASE Q0, Q0, R0").unwrap();
+    assert_eq!(instr, Instruction::QPhase { dst: 0, src: 0, mask_reg: 0 });
+}
+
+#[test]
+fn test_parse_qphase_typical() {
+    let instr = parse_instruction("QPHASE Q2, Q0, R3").unwrap();
+    assert_eq!(instr, Instruction::QPhase { dst: 2, src: 0, mask_reg: 3 });
+}
+
+#[test]
+fn test_parse_qphase_wrong_operand_count() {
+    assert!(parse_instruction("QPHASE Q0, Q0").is_err());
+    assert!(parse_instruction("QPHASE Q0, Q0, R0, R1").is_err());
+}
+
+#[test]
+fn test_parse_program_masked_workflow() {
+    let source = "\
+QPREP Q0, 1
+ILDI R0, 3
+QHADM Q0, Q0, R0
+QOBSERVE H0, Q0
+HALT
+";
+    let program = parse_program(source).unwrap();
+    assert_eq!(program.len(), 5);
+    assert_eq!(program[2], Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 });
+    assert_eq!(program[3], Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 });
+}

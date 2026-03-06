@@ -423,6 +423,24 @@ impl QasmFormat for Instruction {
             Instruction::QStore { src_q, addr } => {
                 vec![format!("// QSTORE q{} to QMEM[{}] [no QASM equivalent]", src_q, addr)]
             }
+            Instruction::QHadM { dst, src: _, mask_reg } => {
+                vec![format!(
+                    "// QHADM Q{} mask=R{}: h on qubits where R{} bits are set",
+                    dst, mask_reg, mask_reg
+                )]
+            }
+            Instruction::QFlip { dst, src: _, mask_reg } => {
+                vec![format!(
+                    "// QFLIP Q{} mask=R{}: x on qubits where R{} bits are set",
+                    dst, mask_reg, mask_reg
+                )]
+            }
+            Instruction::QPhase { dst, src: _, mask_reg } => {
+                vec![format!(
+                    "// QPHASE Q{} mask=R{}: z on qubits where R{} bits are set",
+                    dst, mask_reg, mask_reg
+                )]
+            }
             Instruction::QPrepR { dst, dist_reg } => {
                 vec![format!("// @cqam.qprepr Q{} = prep(R[{}]);", dst, dist_reg)]
             }
@@ -708,6 +726,12 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::QStore { src_q, .. } => {
             used.quantum_regs.insert(*src_q);
             used.uses_qmem = true;
+        }
+        Instruction::QHadM { dst, src, .. }
+        | Instruction::QFlip { dst, src, .. }
+        | Instruction::QPhase { dst, src, .. } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
         }
         Instruction::QPrepR { dst, dist_reg } => {
             used.quantum_regs.insert(*dst);

@@ -192,6 +192,15 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::QLoad { dst_q, addr } => format!("QLOAD Q{}, {}", dst_q, addr),
         Instruction::QStore { src_q, addr } => format!("QSTORE Q{}, {}", src_q, addr),
         Instruction::QPrepR { dst, dist_reg } => format!("QPREPR Q{}, R{}", dst, dist_reg),
+        Instruction::QHadM { dst, src, mask_reg } => {
+            format!("QHADM Q{}, Q{}, R{}", dst, src, mask_reg)
+        }
+        Instruction::QFlip { dst, src, mask_reg } => {
+            format!("QFLIP Q{}, Q{}, R{}", dst, src, mask_reg)
+        }
+        Instruction::QPhase { dst, src, mask_reg } => {
+            format!("QPHASE Q{}, Q{}, R{}", dst, src, mask_reg)
+        }
         Instruction::QEncode { dst, src_base, count, file_sel } => {
             let file_prefix = match file_sel {
                 0 => "R",

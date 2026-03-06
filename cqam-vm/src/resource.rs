@@ -243,6 +243,33 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Masked Hadamard: 2 cycles, creates/destroys superposition
+        Instruction::QHadM { .. } => ResourceDelta {
+            time: 2,
+            space: 1,
+            superposition: 0.5,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
+        // Masked bit flip: 1 cycle, classical-like operation
+        Instruction::QFlip { .. } => ResourceDelta {
+            time: 1,
+            space: 1,
+            superposition: 0.0,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
+        // Masked phase flip: 1 cycle, modest superposition impact
+        Instruction::QPhase { .. } => ResourceDelta {
+            time: 1,
+            space: 1,
+            superposition: 0.2,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
         // Quantum load/store: 1 cycle
         Instruction::QLoad { .. }
         | Instruction::QStore { .. } => ResourceDelta {
