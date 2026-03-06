@@ -163,7 +163,7 @@ cargo run --bin cqam-run -- <file.cqam> [OPTIONS]
 Example:
 
 ```bash
-cargo run --bin cqam-run -- examples/grover.cqam --print-final-state --resources
+cargo run --bin cqam-run -- examples/qrng.cqam --print-final-state --resources
 ```
 
 ### cqam-as: Assemble or disassemble
@@ -183,7 +183,7 @@ symbol section for label restoration during disassembly.
 Example:
 
 ```bash
-cargo run --bin cqam-as -- --assemble examples/arithmetic.cqam -o out.cqb --debug
+cargo run --bin cqam-as -- --assemble examples/qrng.cqam -o out.cqb --debug
 cargo run --bin cqam-as -- --disassemble out.cqb
 ```
 
@@ -204,8 +204,8 @@ cargo run --bin cqam2qasm -- <file.cqam> [OPTIONS]
 Example:
 
 ```bash
-cargo run --bin cqam2qasm -- examples/grover.cqam -o grover.qasm --expand
-cargo run --bin cqam2qasm -- examples/quantum_observe.cqam --fragment
+cargo run --bin cqam2qasm -- examples/qrng.cqam -o qrng.qasm --expand
+cargo run --bin cqam2qasm -- examples/swap_test.cqam --fragment
 ```
 
 ## Example Programs
@@ -237,7 +237,7 @@ classical, quantum, and hybrid computations:
 Run any example:
 
 ```bash
-cargo run --bin cqam-run -- examples/bell_state.cqam --print-final-state
+cargo run --bin cqam-run -- examples/qrng.cqam --print-final-state
 cargo run --bin cqam-run -- examples/vqe_loop.cqam --resources --verbose
 ```
 
