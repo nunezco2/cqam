@@ -209,10 +209,7 @@ classical, quantum, and hybrid computations:
 
 | File | Description |
 |------|-------------|
-| `arithmetic.cqam` | Integer and floating-point arithmetic, memory load/store, type conversion |
-| `quantum_observe.cqam` | Full quantum pipeline: state preparation, kernel application, measurement, hybrid reduction |
 | `hybrid_fork.cqam` | Parallel execution with HFORK/HMERGE and conditional branching via HCEXEC |
-| `grover.cqam` | Multi-iteration Grover search with classical loop control and measurement extraction |
 | `grover_16q.cqam` | Grover search on a 16-qubit register |
 | `bell_state.cqam` | Bell state preparation, measurement, and mode/mean extraction |
 | `ghz_verify.cqam` | GHZ state preparation and fidelity verification |
