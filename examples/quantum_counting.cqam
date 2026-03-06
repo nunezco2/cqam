@@ -18,84 +18,84 @@
 # All operations are register-level — no gate-level ops required.
 
 # --- Setup ---
-ILDI R0, 5           # R0 = target state for oracle (search for state 5)
-ILDI R1, 0           # R1 = unused ctx1
-ILDI R2, 4           # R2 = number of different Grover depths to test
-ILDI R3, 1           # R3 = constant 1
-ILDI R4, 0           # R4 = depth counter
-ILDI R5, 1           # R5 = current iteration count (starts at 1)
+    ILDI R0, 5           # R0 = target state for oracle (search for state 5)
+    ILDI R1, 0           # R1 = unused ctx1
+    ILDI R2, 4           # R2 = number of different Grover depths to test
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = depth counter
+    ILDI R5, 1           # R5 = current iteration count (starts at 1)
 
 # --- Phase estimates storage base address ---
-ILDI R6, 200         # R6 = base address for storing phase estimates
+    ILDI R6, 200         # R6 = base address for storing phase estimates
 
 # === Counting loop: try different Grover depths ===
 LABEL: count_loop
 
 # --- Prepare fresh uniform state ---
-QPREP Q0, 0
+    QPREP Q0, 0
 
 # --- Apply R5 Grover iterations ---
-ILDI R7, 0           # R7 = inner iteration counter
+    ILDI R7, 0           # R7 = inner iteration counter
 LABEL: grover_count_inner
-QKERNEL Q0, Q0, 4, R0, R1   # Grover iteration
-IADD R7, R7, R3
-ILT R8, R7, R5      # R8 = (R7 < R5)
-JIF R8, grover_count_inner
+    QKERNEL Q0, Q0, 4, R0, R1   # Grover iteration
+    IADD R7, R7, R3
+    ILT R8, R7, R5      # R8 = (R7 < R5)
+    JIF R8, grover_count_inner
 
 # --- Store Grover-amplified state ---
-QSTORE Q0, 0
+    QSTORE Q0, 0
 
 # --- Apply QFT to extract phase ---
-QKERNEL Q1, Q0, 2, R1, R1   # Q1 = QFT(Grover^k state)
+    QKERNEL Q1, Q0, 2, R1, R1   # Q1 = QFT(Grover^k state)
 
 # --- Measure the QFT output ---
-QOBSERVE H0, Q1      # Full distribution
-HREDUCE H0, R9, 12   # R9 = argmax (peak frequency bin)
-HREDUCE H0, F0, 10   # F0 = mean frequency
+    QOBSERVE H0, Q1      # Full distribution
+    HREDUCE H0, R9, 12   # R9 = argmax (peak frequency bin)
+    HREDUCE H0, F0, 10   # F0 = mean frequency
 
 # --- Store phase estimate ---
-ISTRX R9, R6         # CMEM[R6] = phase index for this depth
-IADD R6, R6, R3      # Advance storage pointer
-FSTR F0, 300         # Store mean (fixed address, overwritten each iteration)
+    ISTRX R9, R6         # CMEM[R6] = phase index for this depth
+    IADD R6, R6, R3      # Advance storage pointer
+    FSTR F0, 300         # Store mean (fixed address, overwritten each iteration)
 
 # --- Double the Grover depth for next trial ---
-IADD R5, R5, R5      # R5 *= 2
+    IADD R5, R5, R5      # R5 *= 2
 
 # --- Advance outer loop ---
-IADD R4, R4, R3
-ISUB R2, R2, R3
-JIF R2, count_loop
+    IADD R4, R4, R3
+    ISUB R2, R2, R3
+    JIF R2, count_loop
 
 # === Classical post-processing ===
 # Estimate M from the measured phase indices
 # theta = 2*pi * argmax / N, M = N * sin^2(theta/2)
 # We approximate using the last measured phase
 
-CVTIF F1, R9         # F1 = last phase index as float
-FLDI F2, 6           # F2 ~ 2*pi (approximation)
-FMUL F3, F1, F2     # F3 = argmax * 2*pi
+    CVTIF F1, R9         # F1 = last phase index as float
+    FLDI F2, 6           # F2 ~ 2*pi (approximation)
+    FMUL F3, F1, F2     # F3 = argmax * 2*pi
 
 # Load stored phase index from first trial
-ILDI R10, 200
-ILDX R11, R10        # R11 = phase index from depth=1
-CVTIF F4, R11        # F4 = first phase index as float
+    ILDI R10, 200
+    ILDX R11, R10        # R11 = phase index from depth=1
+    CVTIF F4, R11        # F4 = first phase index as float
 
 # Compute ratio of phase indices (indicates consistency)
 # Guard: if first phase index is zero, skip division (ratio = 0)
-FLDI F5, 0           # F5 = 0 (default ratio)
-FLDI F6, 0           # F6 = 0 for comparison
-FLT R12, F6, F4      # R12 = (0 < F4) ? 1 : 0
-JIF R12, do_ratio
-JMP store_results
+    FLDI F5, 0           # F5 = 0 (default ratio)
+    FLDI F6, 0           # F6 = 0 for comparison
+    FLT R12, F6, F4      # R12 = (0 < F4) ? 1 : 0
+    JIF R12, do_ratio
+    JMP store_results
 LABEL: do_ratio
-FDIV F5, F3, F4      # F5 = ratio (should scale with sqrt(M))
+    FDIV F5, F3, F4      # F5 = ratio (should scale with sqrt(M))
 
 LABEL: store_results
 # === Store final results ===
-ISTR R9, 0           # CMEM[0] = last phase index
-FSTR F1, 1           # CMEM[1] = phase index as float
-FSTR F5, 2           # CMEM[2] = phase ratio
-ISTR R0, 3           # CMEM[3] = target state
-ISTR R5, 4           # CMEM[4] = final Grover depth used
+    ISTR R9, 0           # CMEM[0] = last phase index
+    FSTR F1, 1           # CMEM[1] = phase index as float
+    FSTR F5, 2           # CMEM[2] = phase ratio
+    ISTR R0, 3           # CMEM[3] = target state
+    ISTR R5, 4           # CMEM[4] = final Grover depth used
 
-HALT
+    HALT

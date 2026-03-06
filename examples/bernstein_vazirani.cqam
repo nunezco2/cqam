@@ -15,13 +15,13 @@
 #! qubits 8
 
 # --- Classical setup: define the secret string ---
-ILDI R0, 0           # R0 = unused ctx
-ILDI R1, 42          # R1 = secret string s = 42 (binary: 00101010)
+    ILDI R0, 0           # R0 = unused ctx
+    ILDI R1, 42          # R1 = secret string s = 42 (binary: 00101010)
 
 # ===============================================
 # Step 1: Prepare uniform superposition directly
 # ===============================================
-QPREP Q0, 0          # Q0 = uniform superposition (register-level)
+    QPREP Q0, 0          # Q0 = uniform superposition (register-level)
 
 # ===============================================
 # Step 2: Oracle — phase-kick qubits in the secret string
@@ -29,29 +29,29 @@ QPREP Q0, 0          # Q0 = uniform superposition (register-level)
 # QPHASE applies Pauli-Z to each qubit whose bit is set in R1.
 # This is the one gate-level operation required: no kernel can
 # encode an arbitrary secret-string-specific oracle.
-QPHASE Q0, Q0, R1    # Apply Z to qubits set in s=42 (bits 1,3,5)
+    QPHASE Q0, Q0, R1    # Apply Z to qubits set in s=42 (bits 1,3,5)
 
 # ===============================================
 # Step 3: Decode — transform phase information back to amplitudes
 # ===============================================
 # Use the Fourier kernel (register-level) to decode the
 # phase-encoded secret string into the computational basis.
-QKERNEL Q1, Q0, 2, R0, R0  # Q1 = QFT(oracle(uniform))
+    QKERNEL Q1, Q0, 2, R0, R0  # Q1 = QFT(oracle(uniform))
 
 # ===============================================
 # Step 4: Measure to recover the secret string
 # ===============================================
-QOBSERVE H0, Q1      # Destructive measurement
-HREDUCE H0, R6, 11   # R6 = mode (most probable state = recovered s)
-HREDUCE H0, R7, 12   # R7 = argmax
+    QOBSERVE H0, Q1      # Destructive measurement
+    HREDUCE H0, R6, 11   # R6 = mode (most probable state = recovered s)
+    HREDUCE H0, R7, 12   # R7 = argmax
 
 # --- Verify recovery ---
-IEQ R8, R6, R1       # R8 = (recovered == secret) ? 1 : 0
-IXOR R9, R6, R1      # R9 = XOR of recovered and secret (should be 0)
+    IEQ R8, R6, R1       # R8 = (recovered == secret) ? 1 : 0
+    IXOR R9, R6, R1      # R9 = XOR of recovered and secret (should be 0)
 
 # --- Store results ---
-ISTR R1, 0           # CMEM[0] = secret string
-ISTR R6, 1           # CMEM[1] = recovered string
-ISTR R8, 2           # CMEM[2] = success flag
+    ISTR R1, 0           # CMEM[0] = secret string
+    ISTR R6, 1           # CMEM[1] = recovered string
+    ISTR R8, 2           # CMEM[2] = success flag
 
-HALT
+    HALT

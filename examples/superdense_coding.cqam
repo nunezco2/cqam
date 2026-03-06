@@ -18,68 +18,68 @@
 # within an entangled register.
 
 # --- Setup ---
-ILDI R0, 0           # R0 = ctx
-ILDI R1, 1           # R1 = mask for qubit 0
+    ILDI R0, 0           # R0 = ctx
+    ILDI R1, 1           # R1 = mask for qubit 0
 
 # ===============================================
 # Message 00: Identity (no operation)
 # ===============================================
-QPREP Q0, 2          # Shared Bell pair (register-level)
+    QPREP Q0, 2          # Shared Bell pair (register-level)
 # Alice does nothing (identity encoding)
-NOP
+    NOP
 # Bob decodes with Fourier kernel (register-level)
-QKERNEL Q0, Q0, 2, R0, R0
-QOBSERVE H0, Q0
-HREDUCE H0, R3, 11   # R3 = decoded message for 00
+    QKERNEL Q0, Q0, 2, R0, R0
+    QOBSERVE H0, Q0
+    HREDUCE H0, R3, 11   # R3 = decoded message for 00
 
 # ===============================================
 # Message 01: Bit-flip (X)
 # ===============================================
-QPREP Q1, 2          # Fresh Bell pair (register-level)
+    QPREP Q1, 2          # Fresh Bell pair (register-level)
 # Alice applies X to encode bit 1 (gate-level, required)
-QFLIP Q1, Q1, R1
+    QFLIP Q1, Q1, R1
 # Bob decodes with Fourier kernel (register-level)
-QKERNEL Q1, Q1, 2, R0, R0
-QOBSERVE H1, Q1
-HREDUCE H1, R4, 11   # R4 = decoded message for 01
+    QKERNEL Q1, Q1, 2, R0, R0
+    QOBSERVE H1, Q1
+    HREDUCE H1, R4, 11   # R4 = decoded message for 01
 
 # ===============================================
 # Message 10: Phase-flip (Z)
 # ===============================================
-QPREP Q2, 2          # Fresh Bell pair (register-level)
+    QPREP Q2, 2          # Fresh Bell pair (register-level)
 # Alice applies Z to encode phase info (gate-level, required)
-QPHASE Q2, Q2, R1
+    QPHASE Q2, Q2, R1
 # Bob decodes with Fourier kernel (register-level)
-QKERNEL Q2, Q2, 2, R0, R0
-QOBSERVE H2, Q2
-HREDUCE H2, R5, 11   # R5 = decoded message for 10
+    QKERNEL Q2, Q2, 2, R0, R0
+    QOBSERVE H2, Q2
+    HREDUCE H2, R5, 11   # R5 = decoded message for 10
 
 # ===============================================
 # Message 11: XZ (bit-flip + phase-flip)
 # ===============================================
-QPREP Q3, 2          # Fresh Bell pair (register-level)
+    QPREP Q3, 2          # Fresh Bell pair (register-level)
 # Alice applies both X and Z (gate-level, required)
-QFLIP Q3, Q3, R1
-QPHASE Q3, Q3, R1
+    QFLIP Q3, Q3, R1
+    QPHASE Q3, Q3, R1
 # Bob decodes with Fourier kernel (register-level)
-QKERNEL Q3, Q3, 2, R0, R0
-QOBSERVE H3, Q3
-HREDUCE H3, R6, 11   # R6 = decoded message for 11
+    QKERNEL Q3, Q3, 2, R0, R0
+    QOBSERVE H3, Q3
+    HREDUCE H3, R6, 11   # R6 = decoded message for 11
 
 # ===============================================
 # Verify all messages decoded correctly
 # ===============================================
-ILDI R7, 0
-IEQ R8, R3, R7       # Message 00: should decode to something specific
-ILDI R7, 1
-IEQ R9, R4, R7       # Message 01: expected decode
+    ILDI R7, 0
+    IEQ R8, R3, R7       # Message 00: should decode to something specific
+    ILDI R7, 1
+    IEQ R9, R4, R7       # Message 01: expected decode
 
 # --- Store all decoded messages ---
-ISTR R3, 0           # CMEM[0] = decoded 00
-ISTR R4, 1           # CMEM[1] = decoded 01
-ISTR R5, 2           # CMEM[2] = decoded 10
-ISTR R6, 3           # CMEM[3] = decoded 11
-ISTR R8, 4           # CMEM[4] = verification flag for msg 00
-ISTR R9, 5           # CMEM[5] = verification flag for msg 01
+    ISTR R3, 0           # CMEM[0] = decoded 00
+    ISTR R4, 1           # CMEM[1] = decoded 01
+    ISTR R5, 2           # CMEM[2] = decoded 10
+    ISTR R6, 3           # CMEM[3] = decoded 11
+    ISTR R8, 4           # CMEM[4] = verification flag for msg 00
+    ISTR R9, 5           # CMEM[5] = verification flag for msg 01
 
-HALT
+    HALT

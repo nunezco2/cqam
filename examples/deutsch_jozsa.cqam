@@ -18,70 +18,70 @@
 # function definition, which no register-level kernel can express.
 
 # --- Setup ---
-ILDI R0, 0           # R0 = unused ctx
-ILDI R1, 0           # R1 = basis state |0> index
+    ILDI R0, 0           # R0 = unused ctx
+    ILDI R1, 0           # R1 = basis state |0> index
 
 # ===============================================
 # Test 1: CONSTANT function (f(x) = 0 for all x)
 # ===============================================
 
 # Step 1: Prepare uniform superposition directly
-QPREP Q0, 0          # Q0 = uniform superposition (register-level)
+    QPREP Q0, 0          # Q0 = uniform superposition (register-level)
 
 # Step 2: Oracle for constant function — identity (no operation)
-NOP
+    NOP
 
 # Step 3: QFT to decode (register-level)
-QKERNEL Q0, Q0, 2, R0, R0   # Fourier transform decodes phase info
+    QKERNEL Q0, Q0, 2, R0, R0   # Fourier transform decodes phase info
 
 # Step 4: Check P(|0>)
-QSAMPLE H0, Q0, 1, R1, R1   # H0 = P(|0>) — should be ~1.0 for constant
-HREDUCE H0, F0, 8            # F0 = P(|0>) as real value
+    QSAMPLE H0, Q0, 1, R1, R1   # H0 = P(|0>) — should be ~1.0 for constant
+    HREDUCE H0, F0, 8            # F0 = P(|0>) as real value
 
 # Consume Q0
-QOBSERVE H1, Q0
+    QOBSERVE H1, Q0
 
 # ===============================================
 # Test 2: BALANCED function (f(x) = x_0, parity of first bit)
 # ===============================================
 
 # Step 1: Prepare uniform superposition directly
-QPREP Q1, 0          # Q1 = uniform superposition (register-level)
+    QPREP Q1, 0          # Q1 = uniform superposition (register-level)
 
 # Step 2: Oracle for balanced function — Z on qubit 0 (LSB)
 # QPHASE is required here: the oracle applies (-1)^f(x) where f(x) = x_0,
 # which demands per-qubit phase control that no kernel can express.
-ILDI R2, 1           # R2 = mask 0b01 (qubit 0 only)
-QPHASE Q1, Q1, R2   # Z on qubit 0 -> balanced oracle
+    ILDI R2, 1           # R2 = mask 0b01 (qubit 0 only)
+    QPHASE Q1, Q1, R2   # Z on qubit 0 -> balanced oracle
 
 # Step 3: QFT to decode (register-level)
-QKERNEL Q1, Q1, 2, R0, R0   # Fourier transform
+    QKERNEL Q1, Q1, 2, R0, R0   # Fourier transform
 
 # Step 4: Check P(|0>)
-QSAMPLE H2, Q1, 1, R1, R1   # H2 = P(|0>) — should be ~0.0 for balanced
-HREDUCE H2, F1, 8            # F1 = P(|0>) for balanced case
+    QSAMPLE H2, Q1, 1, R1, R1   # H2 = P(|0>) — should be ~0.0 for balanced
+    HREDUCE H2, F1, 8            # F1 = P(|0>) for balanced case
 
 # Full distribution measurement
-QOBSERVE H3, Q1
-HREDUCE H3, R3, 11           # R3 = mode of balanced result (should NOT be 0)
+    QOBSERVE H3, Q1
+    HREDUCE H3, R3, 11           # R3 = mode of balanced result (should NOT be 0)
 
 # ===============================================
 # Classical post-processing: decide constant vs balanced
 # ===============================================
 
 # Threshold: if P(|0>) > 0, classify as constant
-FLDI F2, 0           # F2 = 0.0 threshold
+    FLDI F2, 0           # F2 = 0.0 threshold
 
 # For constant test:
-FGT R4, F0, F2       # R4 = (P_constant(|0>) > 0) ? 1 : 0  -> 1 (constant)
+    FGT R4, F0, F2       # R4 = (P_constant(|0>) > 0) ? 1 : 0  -> 1 (constant)
 
 # For balanced test:
-FGT R5, F1, F2       # R5 = (P_balanced(|0>) > 0) ? 1 : 0
+    FGT R5, F1, F2       # R5 = (P_balanced(|0>) > 0) ? 1 : 0
 
 # Store verdicts
-ISTR R4, 0           # CMEM[0] = constant test result (expect 1)
-ISTR R5, 1           # CMEM[1] = balanced test result (expect 0 ideally)
-FSTR F0, 2           # CMEM[2] = P(|0>) for constant function
-FSTR F1, 3           # CMEM[3] = P(|0>) for balanced function
+    ISTR R4, 0           # CMEM[0] = constant test result (expect 1)
+    ISTR R5, 1           # CMEM[1] = balanced test result (expect 0 ideally)
+    FSTR F0, 2           # CMEM[2] = P(|0>) for constant function
+    FSTR F1, 3           # CMEM[3] = P(|0>) for balanced function
 
-HALT
+    HALT

@@ -21,73 +21,73 @@
 # equivalent.
 
 # --- Setup ---
-ILDI R0, 0           # R0 = ctx / basis state |0>
-ILDI R1, 1           # R1 = constant 1 / mask for qubit 0
+    ILDI R0, 0           # R0 = ctx / basis state |0>
+    ILDI R1, 1           # R1 = constant 1 / mask for qubit 0
 
 # --- Register interrupt handler for quantum errors ---
-SETIV 1, quantum_err_handler
+    SETIV 1, quantum_err_handler
 
 # ===============================================
 # Step 1: Prepare the state to teleport |psi>
 # ===============================================
-QPREP Q0, 1          # Q0 = |0...0>
-FLDI F0, 2           # F0 = rotation angle (creates non-trivial state)
-FLDI F1, 0           # F1 = unused
-QKERNELF Q0, Q0, 5, F0, F1  # Q0 = Rotate(|0>, theta=2) = |psi>
+    QPREP Q0, 1          # Q0 = |0...0>
+    FLDI F0, 2           # F0 = rotation angle (creates non-trivial state)
+    FLDI F1, 0           # F1 = unused
+    QKERNELF Q0, Q0, 5, F0, F1  # Q0 = Rotate(|0>, theta=2) = |psi>
 
 # Record |psi>'s signature for later verification
-QSAMPLE H0, Q0, 0, R0, R0   # H0 = distribution of |psi>
-HREDUCE H0, F2, 10           # F2 = mean of |psi> (fingerprint)
-HREDUCE H0, F3, 13           # F3 = variance of |psi>
+    QSAMPLE H0, Q0, 0, R0, R0   # H0 = distribution of |psi>
+    HREDUCE H0, F2, 10           # F2 = mean of |psi> (fingerprint)
+    HREDUCE H0, F3, 13           # F3 = variance of |psi>
 
 # ===============================================
 # Step 2: Create shared Bell pair
 # ===============================================
-QPREP Q1, 2          # Q1 = Bell state (register-level preparation)
+    QPREP Q1, 2          # Q1 = Bell state (register-level preparation)
 
 # ===============================================
 # Step 3: Alice's operations
 # ===============================================
 # Entangle |psi> with Alice's half of Bell pair (register-level)
-QKERNEL Q0, Q0, 1, R0, R0   # Entangle kernel creates correlations
+    QKERNEL Q0, Q0, 1, R0, R0   # Entangle kernel creates correlations
 
 # Hadamard on qubit 0 to change measurement basis.
 # This per-qubit gate is required: no kernel applies H to a subsystem.
-QHADM Q0, Q0, R1
+    QHADM Q0, Q0, R1
 
 # ===============================================
 # Step 4: Alice measures — get classical bits
 # ===============================================
-QOBSERVE H1, Q0      # H1 = measurement result (destructive)
-HREDUCE H1, R4, 11   # R4 = measured state (classical bits)
+    QOBSERVE H1, Q0      # H1 = measurement result (destructive)
+    HREDUCE H1, R4, 11   # R4 = measured state (classical bits)
 
 # Extract individual bits for correction
-IAND R5, R4, R1      # R5 = bit 0 (Alice's first measurement)
-ISHR R6, R4, 1
-IAND R6, R6, R1      # R6 = bit 1
+    IAND R5, R4, R1      # R5 = bit 0 (Alice's first measurement)
+    ISHR R6, R4, 1
+    IAND R6, R6, R1      # R6 = bit 1
 
 # ===============================================
 # Step 5: Bob's corrections based on Alice's bits
 # ===============================================
 # Prepare Bob's state (derived from Bell pair)
-QPREP Q2, 2          # Q2 = Bell state (Bob's entangled copy)
+    QPREP Q2, 2          # Q2 = Bell state (Bob's entangled copy)
 
 # Correction 1: if bit 0 = 1, apply X (bit-flip).
 # QFLIP is required: per-qubit conditional correction.
-JIF R5, apply_x_correction
-JMP check_z_correction
+    JIF R5, apply_x_correction
+    JMP check_z_correction
 
 LABEL: apply_x_correction
-QFLIP Q2, Q2, R1    # X on qubit 0
+    QFLIP Q2, Q2, R1    # X on qubit 0
 
 LABEL: check_z_correction
 # Correction 2: if bit 1 = 1, apply Z (phase-flip).
 # QPHASE is required: per-qubit conditional correction.
-JIF R6, apply_z_correction
-JMP teleport_verify
+    JIF R6, apply_z_correction
+    JMP teleport_verify
 
 LABEL: apply_z_correction
-QPHASE Q2, Q2, R1   # Z on qubit 0
+    QPHASE Q2, Q2, R1   # Z on qubit 0
 
 # ===============================================
 # Step 6: Verify teleportation
@@ -95,31 +95,31 @@ QPHASE Q2, Q2, R1   # Z on qubit 0
 LABEL: teleport_verify
 
 # Measure Bob's state
-QSAMPLE H2, Q2, 0, R0, R0
-HREDUCE H2, F4, 10   # F4 = mean of Bob's state
-HREDUCE H2, F5, 13   # F5 = variance of Bob's state
+    QSAMPLE H2, Q2, 0, R0, R0
+    HREDUCE H2, F4, 10   # F4 = mean of Bob's state
+    HREDUCE H2, F5, 13   # F5 = variance of Bob's state
 
 # Final destructive measurement
-QOBSERVE H3, Q2
-HREDUCE H3, R7, 11   # R7 = Bob's measured state
+    QOBSERVE H3, Q2
+    HREDUCE H3, R7, 11   # R7 = Bob's measured state
 
 # Measure the Bell pair witness
-QOBSERVE H4, Q1
-HREDUCE H4, R8, 11   # R8 = Bell pair measurement result
+    QOBSERVE H4, Q1
+    HREDUCE H4, R8, 11   # R8 = Bell pair measurement result
 
 # --- Store results ---
-FSTR F2, 0           # CMEM[0] = |psi> mean (original)
-FSTR F4, 1           # CMEM[1] = Bob's mean (should match)
-ISTR R4, 2           # CMEM[2] = Alice's measurement bits
-ISTR R7, 3           # CMEM[3] = Bob's measurement result
+    FSTR F2, 0           # CMEM[0] = |psi> mean (original)
+    FSTR F4, 1           # CMEM[1] = Bob's mean (should match)
+    ISTR R4, 2           # CMEM[2] = Alice's measurement bits
+    ISTR R7, 3           # CMEM[3] = Bob's measurement result
 
-JMP end_program
+    JMP end_program
 
 # --- Interrupt handler ---
 LABEL: quantum_err_handler
-ILDI R15, -1         # R15 = error flag
-ISTR R15, 999        # Store error indicator
-RETI
+    ILDI R15, -1         # R15 = error flag
+    ISTR R15, 999        # Store error indicator
+    RETI
 
 LABEL: end_program
-HALT
+    HALT

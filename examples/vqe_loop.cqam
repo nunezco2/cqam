@@ -15,75 +15,75 @@
 # All operations are register-level — no gate-level ops required.
 
 # --- VQE parameters ---
-FLDI F0, 0           # F0 = theta (current angle parameter)
-FLDI F1, 0           # F1 = unused fctx1
-FLDI F2, 1           # F2 = step size delta_theta
-FLDI F3, 100         # F3 = best energy so far (large initial value)
-ILDI R0, 10          # R0 = max iterations
-ILDI R1, 1           # R1 = constant 1
-ILDI R2, 0           # R2 = iteration counter
-ILDI R3, 0           # R3 = ctx0 for probability queries
-ILDI R4, 0           # R4 = convergence flag
+    FLDI F0, 0           # F0 = theta (current angle parameter)
+    FLDI F1, 0           # F1 = unused fctx1
+    FLDI F2, 1           # F2 = step size delta_theta
+    FLDI F3, 100         # F3 = best energy so far (large initial value)
+    ILDI R0, 10          # R0 = max iterations
+    ILDI R1, 1           # R1 = constant 1
+    ILDI R2, 0           # R2 = iteration counter
+    ILDI R3, 0           # R3 = ctx0 for probability queries
+    ILDI R4, 0           # R4 = convergence flag
 
 # === VQE main loop ===
 LABEL: vqe_loop
 
 # --- Step 1: Prepare trial state ---
-QPREP Q0, 0          # Start with uniform superposition
-QKERNEL Q0, Q0, 1, R3, R3   # Entangle (create correlations)
-QKERNELF Q0, Q0, 5, F0, F1  # Apply rotation with angle theta=F0
+    QPREP Q0, 0          # Start with uniform superposition
+    QKERNEL Q0, Q0, 1, R3, R3   # Entangle (create correlations)
+    QKERNELF Q0, Q0, 5, F0, F1  # Apply rotation with angle theta=F0
 
 # --- Step 2: Measure energy (mean of distribution) ---
-QOBSERVE H0, Q0      # H0 = full distribution
-HREDUCE H0, F4, 10   # F4 = <E> = mean of distribution (energy estimate)
-HREDUCE H0, F5, 13   # F5 = Var(E) = variance (uncertainty)
+    QOBSERVE H0, Q0      # H0 = full distribution
+    HREDUCE H0, F4, 10   # F4 = <E> = mean of distribution (energy estimate)
+    HREDUCE H0, F5, 13   # F5 = Var(E) = variance (uncertainty)
 
 # --- Step 3: Compare with best energy ---
-FLT R5, F4, F3       # R5 = (current < best) ? 1 : 0
-JIF R5, update_best
+    FLT R5, F4, F3       # R5 = (current < best) ? 1 : 0
+    JIF R5, update_best
 
 # Energy did not improve — try negative step
-FSUB F0, F0, F2      # theta -= delta
-FSUB F0, F0, F2      # theta -= delta (undo the forward step + go backward)
-JMP check_convergence
+    FSUB F0, F0, F2      # theta -= delta
+    FSUB F0, F0, F2      # theta -= delta (undo the forward step + go backward)
+    JMP check_convergence
 
 LABEL: update_best
 # New best found — store it
-FADD F3, F4, F1      # F3 = F4 (copy: best = current, F1=0 so F3=F4+0)
-FADD F0, F0, F2      # theta += delta (continue in this direction)
+    FADD F3, F4, F1      # F3 = F4 (copy: best = current, F1=0 so F3=F4+0)
+    FADD F0, F0, F2      # theta += delta (continue in this direction)
 
 LABEL: check_convergence
 # --- Step 4: Check convergence (variance below threshold) ---
-FLDI F6, 1           # F6 = variance threshold
-FLT R6, F5, F6       # R6 = (variance < threshold) ? 1 : 0
+    FLDI F6, 1           # F6 = variance threshold
+    FLT R6, F5, F6       # R6 = (variance < threshold) ? 1 : 0
 
 # Store intermediate results
-IADD R2, R2, R1      # iteration++
-FSTR F4, 0           # CMEM[0] = current energy
-FSTR F0, 1           # CMEM[1] = current theta
+    IADD R2, R2, R1      # iteration++
+    FSTR F4, 0           # CMEM[0] = current energy
+    FSTR F0, 1           # CMEM[1] = current theta
 
 # Decrement remaining iterations
-ISUB R0, R0, R1
+    ISUB R0, R0, R1
 
 # Exit if converged or max iterations reached
-JIF R6, vqe_done     # converged
-JIF R0, vqe_loop     # more iterations remain
+    JIF R6, vqe_done     # converged
+    JIF R0, vqe_loop     # more iterations remain
 
 LABEL: vqe_done
 
 # --- Final measurement at best theta ---
-QPREP Q1, 0
-QKERNEL Q1, Q1, 1, R3, R3
-QKERNELF Q1, Q1, 5, F0, F1
-QOBSERVE H1, Q1
-HREDUCE H1, F7, 10   # F7 = final energy estimate
-HREDUCE H1, R7, 11   # R7 = most probable state at optimum
+    QPREP Q1, 0
+    QKERNEL Q1, Q1, 1, R3, R3
+    QKERNELF Q1, Q1, 5, F0, F1
+    QOBSERVE H1, Q1
+    HREDUCE H1, F7, 10   # F7 = final energy estimate
+    HREDUCE H1, R7, 11   # R7 = most probable state at optimum
 
 # --- Store final results ---
-FSTR F3, 10          # CMEM[10] = best energy found
-FSTR F7, 11          # CMEM[11] = final energy measurement
-CVTIF F8, R2         # F8 = iterations performed as float
-FSTR F8, 12          # CMEM[12] = iteration count
-ISTR R7, 13          # CMEM[13] = ground state candidate
+    FSTR F3, 10          # CMEM[10] = best energy found
+    FSTR F7, 11          # CMEM[11] = final energy measurement
+    CVTIF F8, R2         # F8 = iterations performed as float
+    FSTR F8, 12          # CMEM[12] = iteration count
+    ISTR R7, 13          # CMEM[13] = ground state candidate
 
-HALT
+    HALT

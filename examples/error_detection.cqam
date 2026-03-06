@@ -16,34 +16,34 @@
 #! qubits 3
 
 # --- Setup ---
-ILDI R0, 0           # R0 = ctx / state |0>
-ILDI R1, 1           # R1 = mask qubit 0 (0b001)
-ILDI R2, 2           # R2 = mask qubit 1 (0b010)
-ILDI R3, 4           # R3 = mask qubit 2 (0b100)
+    ILDI R0, 0           # R0 = ctx / state |0>
+    ILDI R1, 1           # R1 = mask qubit 0 (0b001)
+    ILDI R2, 2           # R2 = mask qubit 1 (0b010)
+    ILDI R3, 4           # R3 = mask qubit 2 (0b100)
 
 # ===============================================
 # Step 1: Encode logical |0_L> = |000>
 # ===============================================
-QPREP Q0, 1          # Q0 = |0...0> (logical zero)
+    QPREP Q0, 1          # Q0 = |0...0> (logical zero)
 
 # Verify initial state: P(|000>) should be 1.0
-QSAMPLE H0, Q0, 1, R0, R0   # P(|0>)
-HREDUCE H0, F0, 8            # F0 = P(|0>) — expect 1.0
+    QSAMPLE H0, Q0, 1, R0, R0   # P(|0>)
+    HREDUCE H0, F0, 8            # F0 = P(|0>) — expect 1.0
 
 # ===============================================
 # Step 2: Introduce bit-flip error on qubit 1
 # ===============================================
 # QFLIP targets a specific qubit for error injection.
-QFLIP Q0, Q0, R2    # Flip qubit 1: |000> -> |010> (error!)
+    QFLIP Q0, Q0, R2    # Flip qubit 1: |000> -> |010> (error!)
 
 # Check: P(|0>) should now be 0 (state is |010> = state 2)
-QSAMPLE H1, Q0, 1, R0, R0
-HREDUCE H1, F1, 8            # F1 = P(|000>) after error — expect 0.0
+    QSAMPLE H1, Q0, 1, R0, R0
+    HREDUCE H1, F1, 8            # F1 = P(|000>) after error — expect 0.0
 
 # Check: P(|010>) should be 1.0
-ILDI R5, 2           # |010> = state 2
-QSAMPLE H2, Q0, 1, R5, R5
-HREDUCE H2, F2, 8            # F2 = P(|010>) — expect 1.0
+    ILDI R5, 2           # |010> = state 2
+    QSAMPLE H2, Q0, 1, R5, R5
+    HREDUCE H2, F2, 8            # F2 = P(|010>) — expect 1.0
 
 # ===============================================
 # Step 3: Syndrome extraction
@@ -52,18 +52,18 @@ HREDUCE H2, F2, 8            # F2 = P(|010>) — expect 1.0
 # The mode of the distribution reveals which qubit was flipped.
 
 # Probe pairwise probabilities
-ILDI R6, 0           # Check |000>
-QSAMPLE H3, Q0, 1, R6, R6
-HREDUCE H3, F3, 8   # F3 = P(|000>)
+    ILDI R6, 0           # Check |000>
+    QSAMPLE H3, Q0, 1, R6, R6
+    HREDUCE H3, F3, 8   # F3 = P(|000>)
 
-ILDI R6, 7           # Check |111>
-QSAMPLE H3, Q0, 1, R6, R6
-HREDUCE H3, F4, 8   # F4 = P(|111>)
+    ILDI R6, 7           # Check |111>
+    QSAMPLE H3, Q0, 1, R6, R6
+    HREDUCE H3, F4, 8   # F4 = P(|111>)
 
 # Full distribution for syndrome analysis
-QSAMPLE H4, Q0, 0, R0, R0
-HREDUCE H4, R7, 11  # R7 = mode (= error state index)
-HREDUCE H4, R8, 12  # R8 = argmax
+    QSAMPLE H4, Q0, 0, R0, R0
+    HREDUCE H4, R7, 11  # R7 = mode (= error state index)
+    HREDUCE H4, R8, 12  # R8 = argmax
 
 # ===============================================
 # Step 4: Error correction based on syndrome
@@ -74,26 +74,26 @@ HREDUCE H4, R8, 12  # R8 = argmax
 #   State 4 (100) -> error on qubit 2
 # QFLIP corrects by re-flipping the identified qubit.
 
-IEQ R9, R7, R1       # Is it state 1? (error on q0)
-JIF R9, correct_q0
-ILDI R10, 2
-IEQ R9, R7, R10      # Is it state 2? (error on q1)
-JIF R9, correct_q1
-IEQ R9, R7, R3       # Is it state 4? (error on q2)
-JIF R9, correct_q2
-JMP verify_correction # No error detected
+    IEQ R9, R7, R1       # Is it state 1? (error on q0)
+    JIF R9, correct_q0
+    ILDI R10, 2
+    IEQ R9, R7, R10      # Is it state 2? (error on q1)
+    JIF R9, correct_q1
+    IEQ R9, R7, R3       # Is it state 4? (error on q2)
+    JIF R9, correct_q2
+    JMP verify_correction # No error detected
 
 LABEL: correct_q0
-QFLIP Q0, Q0, R1    # Flip qubit 0
-JMP verify_correction
+    QFLIP Q0, Q0, R1    # Flip qubit 0
+    JMP verify_correction
 
 LABEL: correct_q1
-QFLIP Q0, Q0, R2    # Flip qubit 1
-JMP verify_correction
+    QFLIP Q0, Q0, R2    # Flip qubit 1
+    JMP verify_correction
 
 LABEL: correct_q2
-QFLIP Q0, Q0, R3    # Flip qubit 2
-JMP verify_correction
+    QFLIP Q0, Q0, R3    # Flip qubit 2
+    JMP verify_correction
 
 # ===============================================
 # Step 5: Verify correction
@@ -101,23 +101,23 @@ JMP verify_correction
 LABEL: verify_correction
 
 # After correction, should be back to |000>
-QSAMPLE H5, Q0, 1, R0, R0
-HREDUCE H5, F5, 8   # F5 = P(|000>) after correction — expect 1.0
+    QSAMPLE H5, Q0, 1, R0, R0
+    HREDUCE H5, F5, 8   # F5 = P(|000>) after correction — expect 1.0
 
 # Destructive final measurement
-QOBSERVE H6, Q0
-HREDUCE H6, R11, 11 # R11 = final measured state — expect 0
+    QOBSERVE H6, Q0
+    HREDUCE H6, R11, 11 # R11 = final measured state — expect 0
 
 # Verify success
-IEQ R12, R11, R0    # R12 = (final == |000>) ? 1 : 0
+    IEQ R12, R11, R0    # R12 = (final == |000>) ? 1 : 0
 
 # --- Store results ---
-FSTR F0, 0          # CMEM[0] = initial P(|000>) = 1.0
-FSTR F1, 1          # CMEM[1] = P(|000>) after error = 0.0
-FSTR F2, 2          # CMEM[2] = P(|010>) after error = 1.0
-FSTR F5, 3          # CMEM[3] = P(|000>) after correction = 1.0
-ISTR R7, 4          # CMEM[4] = detected error state
-ISTR R11, 5         # CMEM[5] = final state after correction
-ISTR R12, 6         # CMEM[6] = success flag (1 = corrected)
+    FSTR F0, 0          # CMEM[0] = initial P(|000>) = 1.0
+    FSTR F1, 1          # CMEM[1] = P(|000>) after error = 0.0
+    FSTR F2, 2          # CMEM[2] = P(|010>) after error = 1.0
+    FSTR F5, 3          # CMEM[3] = P(|000>) after correction = 1.0
+    ISTR R7, 4          # CMEM[4] = detected error state
+    ISTR R11, 5         # CMEM[5] = final state after correction
+    ISTR R12, 6         # CMEM[6] = success flag (1 = corrected)
 
-HALT
+    HALT

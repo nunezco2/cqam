@@ -18,91 +18,91 @@
 # partial superposition on a qubit subset.
 
 # --- Setup: define the secret period ---
-ILDI R0, 13          # R0 = secret period s = 13 (binary: 1101)
-ILDI R1, 0           # R1 = ctx
-ILDI R2, 4           # R2 = number of query rounds (collect 4 equations)
-ILDI R3, 1           # R3 = constant 1
-ILDI R4, 0           # R4 = round counter
-ILDI R5, 100         # R5 = memory pointer for storing y values
+    ILDI R0, 13          # R0 = secret period s = 13 (binary: 1101)
+    ILDI R1, 0           # R1 = ctx
+    ILDI R2, 4           # R2 = number of query rounds (collect 4 equations)
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = round counter
+    ILDI R5, 100         # R5 = memory pointer for storing y values
 
 # Partial mask: Hadamard on lower 8 qubits only (query register).
 # This partial superposition is why QHADM is required here.
-ILDI R6, 255         # R6 = 0xFF (lower 8 qubits)
+    ILDI R6, 255         # R6 = 0xFF (lower 8 qubits)
 
 # === Query rounds ===
 LABEL: simon_round
 
 # Step 1: Prepare zero state
-QPREP Q0, 1          # |0...0>
+    QPREP Q0, 1          # |0...0>
 
 # Step 2: Superpose query register (lower 8 qubits only).
 # QHADM with partial mask — no register-level alternative.
-QHADM Q0, Q0, R6
+    QHADM Q0, Q0, R6
 
 # Step 3: Oracle — encode period structure via phase_shift kernel
-CVTIF F0, R0         # F0 = s as float
-CVTFZ Z0, F0         # Z0 = (s, 0) as complex
-ZLDI Z1, 0, 0        # Z1 = unused
-QKERNELZ Q0, Q0, 6, Z0, Z1  # Phase shift encodes period (register-level)
+    CVTIF F0, R0         # F0 = s as float
+    CVTFZ Z0, F0         # Z0 = (s, 0) as complex
+    ZLDI Z1, 0, 0        # Z1 = unused
+    QKERNELZ Q0, Q0, 6, Z0, Z1  # Phase shift encodes period (register-level)
 
 # Step 4: Superpose query register again (partial mask).
-QHADM Q0, Q0, R6
+    QHADM Q0, Q0, R6
 
 # Step 5: Measure -> y such that y . s = 0 (mod 2)
-QOBSERVE H0, Q0
-HREDUCE H0, R7, 11   # R7 = measured y value (mode)
-HREDUCE H0, R8, 12   # R8 = argmax
+    QOBSERVE H0, Q0
+    HREDUCE H0, R7, 11   # R7 = measured y value (mode)
+    HREDUCE H0, R8, 12   # R8 = argmax
 
 # Step 6: Store y value
-ISTRX R7, R5         # CMEM[R5] = y
-IADD R5, R5, R3      # R5++ advance pointer
+    ISTRX R7, R5         # CMEM[R5] = y
+    IADD R5, R5, R3      # R5++ advance pointer
 
 # --- Classical verification: check y . s = 0 (mod 2) ---
-IAND R9, R7, R0      # R9 = y AND s
+    IAND R9, R7, R0      # R9 = y AND s
 
 # Popcount of R9 (poor man's popcount via shifts and adds)
-ILDI R10, 0          # R10 = bit count accumulator
-IAND R11, R9, R3     # bit 0
-IADD R10, R10, R11
-ISHR R9, R9, 1
-IAND R11, R9, R3     # bit 1
-IADD R10, R10, R11
-ISHR R9, R9, 1
-IAND R11, R9, R3     # bit 2
-IADD R10, R10, R11
-ISHR R9, R9, 1
-IAND R11, R9, R3     # bit 3
-IADD R10, R10, R11
+    ILDI R10, 0          # R10 = bit count accumulator
+    IAND R11, R9, R3     # bit 0
+    IADD R10, R10, R11
+    ISHR R9, R9, 1
+    IAND R11, R9, R3     # bit 1
+    IADD R10, R10, R11
+    ISHR R9, R9, 1
+    IAND R11, R9, R3     # bit 2
+    IADD R10, R10, R11
+    ISHR R9, R9, 1
+    IAND R11, R9, R3     # bit 3
+    IADD R10, R10, R11
 # R10 = popcount of (y AND s) — should be even for y . s = 0 mod 2
-ILDI R13, 2
-IMOD R12, R10, R13   # R12 = popcount mod 2 — should be 0
+    ILDI R13, 2
+    IMOD R12, R10, R13   # R12 = popcount mod 2 — should be 0
 
 # --- Advance round ---
-IADD R4, R4, R3
-ISUB R2, R2, R3
-JIF R2, simon_round
+    IADD R4, R4, R3
+    ISUB R2, R2, R3
+    JIF R2, simon_round
 
 # === Classical post-processing ===
 # Load collected y values (Gaussian elimination over GF(2) in full version)
-ILDI R14, 100
-ILDX R7, R14         # Load y_0
-IADD R14, R14, R3
-ILDX R8, R14         # Load y_1
-IADD R14, R14, R3
-ILDX R9, R14         # Load y_2
-IADD R14, R14, R3
-ILDX R10, R14        # Load y_3
+    ILDI R14, 100
+    ILDX R7, R14         # Load y_0
+    IADD R14, R14, R3
+    ILDX R8, R14         # Load y_1
+    IADD R14, R14, R3
+    ILDX R9, R14         # Load y_2
+    IADD R14, R14, R3
+    ILDX R10, R14        # Load y_3
 
 # Simple XOR-based recovery attempt: s = y_0 XOR y_1 (heuristic)
-IXOR R15, R7, R8     # R15 = y_0 XOR y_1 (candidate for s)
+    IXOR R15, R7, R8     # R15 = y_0 XOR y_1 (candidate for s)
 
 # Verify: does candidate match the secret?
-IEQ R11, R15, R0     # R11 = (candidate == secret) ? 1 : 0
+    IEQ R11, R15, R0     # R11 = (candidate == secret) ? 1 : 0
 
 # --- Store results ---
-ISTR R15, 0          # CMEM[0] = recovered period candidate
-ISTR R0, 1           # CMEM[1] = actual secret period
-ISTR R11, 2          # CMEM[2] = verification (1=success)
-ISTR R4, 3           # CMEM[3] = total rounds performed
+    ISTR R15, 0          # CMEM[0] = recovered period candidate
+    ISTR R0, 1           # CMEM[1] = actual secret period
+    ISTR R11, 2          # CMEM[2] = verification (1=success)
+    ISTR R4, 3           # CMEM[3] = total rounds performed
 
-HALT
+    HALT

@@ -10,49 +10,49 @@
 # All operations are register-level — no gate-level ops required.
 
 # --- Classical setup ---
-ILDI R0, 42          # R0 = target state to search for
-ILDI R1, 0           # R1 = unused ctx1 parameter
-ILDI R2, 201         # R2 = iteration count (pi/4 * sqrt(2^16) ~ 201)
-ILDI R3, 1           # R3 = constant 1
-ILDI R4, 0           # R4 = iteration counter (for statistics)
+    ILDI R0, 42          # R0 = target state to search for
+    ILDI R1, 0           # R1 = unused ctx1 parameter
+    ILDI R2, 201         # R2 = iteration count (pi/4 * sqrt(2^16) ~ 201)
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = iteration counter (for statistics)
 
 # --- Prepare uniform superposition ---
-QPREP Q0, 0          # Q0 = |+>^16 (uniform over 65536 states)
+    QPREP Q0, 0          # Q0 = |+>^16 (uniform over 65536 states)
 
 # --- Store initial state to quantum memory for later comparison ---
-QSTORE Q0, 0         # QMEM[0] = initial uniform state
+    QSTORE Q0, 0         # QMEM[0] = initial uniform state
 
 # --- Grover iteration loop ---
 LABEL: grover_loop
 
 # Apply one Grover iteration (oracle + diffusion)
-QKERNEL Q0, Q0, 4, R0, R1   # kernel=4 (grover_iter), target=R0
+    QKERNEL Q0, Q0, 4, R0, R1   # kernel=4 (grover_iter), target=R0
 
 # Increment counter, decrement remaining
-IADD R4, R4, R3      # R4 += 1
-ISUB R2, R2, R3      # R2 -= 1
+    IADD R4, R4, R3      # R4 += 1
+    ISUB R2, R2, R3      # R2 -= 1
 
 # Loop while R2 > 0
-JIF R2, grover_loop
+    JIF R2, grover_loop
 
 # --- Measure the final state ---
-QOBSERVE H0, Q0      # H0 = full probability distribution (destructive)
+    QOBSERVE H0, Q0      # H0 = full probability distribution (destructive)
 
 # --- Extract classical results ---
-HREDUCE H0, R5, 11   # R5 = mode (most probable state)
-HREDUCE H0, R6, 12   # R6 = argmax (index of max probability)
-HREDUCE H0, F0, 10   # F0 = mean of distribution
-HREDUCE H0, F1, 13   # F1 = variance of distribution
+    HREDUCE H0, R5, 11   # R5 = mode (most probable state)
+    HREDUCE H0, R6, 12   # R6 = argmax (index of max probability)
+    HREDUCE H0, F0, 10   # F0 = mean of distribution
+    HREDUCE H0, F1, 13   # F1 = variance of distribution
 
 # --- Verify: did we find the target? ---
-IEQ R7, R5, R0       # R7 = (mode == target) ? 1 : 0
+    IEQ R7, R5, R0       # R7 = (mode == target) ? 1 : 0
 
 # --- Store results to classical memory ---
-ISTR R5, 0           # CMEM[0] = found state
-ISTR R4, 1           # CMEM[1] = total iterations performed
-FSTR F1, 2           # CMEM[2] = variance (as bits)
+    ISTR R5, 0           # CMEM[0] = found state
+    ISTR R4, 1           # CMEM[1] = total iterations performed
+    FSTR F1, 2           # CMEM[2] = variance (as bits)
 
 # --- Convert iteration count to float for reporting ---
-CVTIF F2, R4         # F2 = iterations as float
+    CVTIF F2, R4         # F2 = iterations as float
 
-HALT
+    HALT

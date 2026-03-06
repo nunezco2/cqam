@@ -13,49 +13,49 @@
 # All operations are register-level — no gate-level ops required.
 
 # --- Classical setup ---
-ILDI R0, 0           # R0 = basis state index 0
-ILDI R1, 1           # R1 = basis state index 1
-ILDI R2, 0           # R2 = unused ctx
+    ILDI R0, 0           # R0 = basis state index 0
+    ILDI R1, 1           # R1 = basis state index 1
+    ILDI R2, 0           # R2 = unused ctx
 
 # --- Stage 1: Prepare zero state and entangle ---
-QPREP Q0, 1          # Q0 = |0...0> (zero state)
-QKERNEL Q0, Q0, 1, R0, R2   # Apply entangle kernel
+    QPREP Q0, 1          # Q0 = |0...0> (zero state)
+    QKERNEL Q0, Q0, 1, R0, R2   # Apply entangle kernel
 
 # --- Stage 2: Apply QFT ---
-QKERNEL Q1, Q0, 2, R0, R2   # Q1 = QFT(Q0)
+    QKERNEL Q1, Q0, 2, R0, R2   # Q1 = QFT(Q0)
 
 # --- Stage 3: Non-destructive sampling of QFT output ---
-QSAMPLE H0, Q1, 0, R0, R0   # H0 = full distribution (DIST mode)
-HREDUCE H0, F0, 10           # F0 = mean frequency
+    QSAMPLE H0, Q1, 0, R0, R0   # H0 = full distribution (DIST mode)
+    HREDUCE H0, F0, 10           # F0 = mean frequency
 
 # Single-state probability check
-QSAMPLE H1, Q1, 1, R0, R0   # H1 = P(|0>) in QFT domain (PROB mode)
-HREDUCE H1, F1, 8            # F1 = real part (it's a Float, so real = value)
+    QSAMPLE H1, Q1, 1, R0, R0   # H1 = P(|0>) in QFT domain (PROB mode)
+    HREDUCE H1, F1, 8            # F1 = real part (it's a Float, so real = value)
 
 # --- Stage 4: Apply phase shift and re-transform ---
-ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
-ZLDI Z1, 0, 0        # Z1 = (0, 0) unused
-QKERNELZ Q2, Q1, 6, Z0, Z1  # Q2 = phase_shift(QFT(Q0))
+    ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
+    ZLDI Z1, 0, 0        # Z1 = (0, 0) unused
+    QKERNELZ Q2, Q1, 6, Z0, Z1  # Q2 = phase_shift(QFT(Q0))
 
 # Second QFT (inverse-like behavior with phase)
-QKERNEL Q3, Q2, 2, R0, R2   # Q3 = QFT(phase_shift(QFT(Q0)))
+    QKERNEL Q3, Q2, 2, R0, R2   # Q3 = QFT(phase_shift(QFT(Q0)))
 
 # --- Stage 5: Extract density matrix element (AMP mode) ---
-ILDI R3, 0            # row = 0
-ILDI R4, 1            # col = 1
-QOBSERVE H2, Q3, 2, R3, R4  # H2 = rho[0][1] as Complex (destructive)
+    ILDI R3, 0            # row = 0
+    ILDI R4, 1            # col = 1
+    QOBSERVE H2, Q3, 2, R3, R4  # H2 = rho[0][1] as Complex (destructive)
 
 # --- Stage 6: Complex reductions ---
-HREDUCE H2, F2, 6    # F2 = magnitude of rho[0][1]
-HREDUCE H2, F3, 7    # F3 = phase of rho[0][1]
-HREDUCE H2, F4, 8    # F4 = real part
-HREDUCE H2, F5, 9    # F5 = imaginary part
-HREDUCE H2, Z2, 14   # Z2 = conjugate of rho[0][1]
-HREDUCE H2, Z3, 15   # Z3 = negation of rho[0][1]
+    HREDUCE H2, F2, 6    # F2 = magnitude of rho[0][1]
+    HREDUCE H2, F3, 7    # F3 = phase of rho[0][1]
+    HREDUCE H2, F4, 8    # F4 = real part
+    HREDUCE H2, F5, 9    # F5 = imaginary part
+    HREDUCE H2, Z2, 14   # Z2 = conjugate of rho[0][1]
+    HREDUCE H2, Z3, 15   # Z3 = negation of rho[0][1]
 
 # --- Store frequency-domain metrics ---
-FSTR F0, 0            # CMEM[0] = mean frequency
-FSTR F2, 1            # CMEM[1] = off-diagonal magnitude
-FSTR F3, 2            # CMEM[2] = off-diagonal phase
+    FSTR F0, 0            # CMEM[0] = mean frequency
+    FSTR F2, 1            # CMEM[1] = off-diagonal magnitude
+    FSTR F3, 2            # CMEM[2] = off-diagonal phase
 
-HALT
+    HALT
