@@ -111,6 +111,30 @@ Eight quantum kernels are provided as ISA-level operations:
 | 6 | phase_shift | Phase shift: U\[k\]\[k\] = exp(i \* \|z\| \* k), z from complex register |
 | 7 | fourier_inv | Inverse Quantum Fourier Transform |
 
+## Data Parallelism
+
+The `cqam-sim` and `cqam-vm` crates use [Rayon](https://github.com/rayon-rs/rayon) for
+data-parallel execution of computationally intensive simulation operations. Parallelism is
+applied selectively: a threshold of `PAR_THRESHOLD = 256` (corresponding to 8 or more qubits)
+gates entry to the thread pool, and all operations fall back to sequential iteration below
+that threshold to avoid scheduling overhead on small registers.
+
+Operations parallelized in `cqam-sim`:
+
+- **Density matrix:** `apply_unitary`, `apply_two_qubit_gate`, `partial_trace_b`, `purity`,
+  `tensor_product`, `jacobi_eigenvalues`, `diagonal_probabilities`, `von_neumann_entropy`
+- **Statevector:** `apply_unitary`, `apply_single_qubit_gate`, `apply_two_qubit_gate`,
+  `measure_qubit`, `tensor_product`, `diagonal_probabilities`
+- **Kernels:** the `apply_sv` methods of the `grover_iter`, `diffuse`, `rotate`, `phase_shift`,
+  and `fourier` kernels
+
+Operations parallelized in `cqam-vm`:
+
+- **HREDUCE reductions:** MEAN, VARIANCE, MODE, ARGMAX, and EXPECT
+
+Rayon's work-stealing thread pool is cross-platform and runs without modification on Linux,
+macOS, and Windows.
+
 ## Architecture
 
 ```
