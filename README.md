@@ -107,8 +107,8 @@ Eight quantum kernels are provided as ISA-level operations:
 | 2 | fourier | Quantum Fourier Transform |
 | 3 | diffuse | Grover diffusion (inversion about the mean) |
 | 4 | grover_iter | Complete Grover iteration (oracle + diffusion) |
-| 5 | rotate | Diagonal rotation: U[k][k] = exp(i * theta * k) |
-| 6 | phase_shift | Phase shift: U[k][k] = exp(i * |z| * k) |
+| 5 | rotate | Diagonal rotation: U\[k\]\[k\] = exp(i \* theta \* k) |
+| 6 | phase_shift | Phase shift: U\[k\]\[k\] = exp(i \* \|z\| \* k), z from complex register |
 | 7 | fourier_inv | Inverse Quantum Fourier Transform |
 
 ## Architecture
