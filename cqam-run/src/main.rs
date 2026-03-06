@@ -7,7 +7,7 @@
 //! # Usage
 //!
 //! ```text
-//! cqam-run <file.cqam> [OPTIONS]
+//! cqam-run <file.cqam|file.cqb> [OPTIONS]
 //!
 //! Options:
 //!   --config <path>         Path to TOML simulator config
@@ -32,8 +32,8 @@ const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 fn print_help() {
     eprintln!("cqam-run {}", VERSION);
-    eprintln!("Execute a CQAM assembly program.\n");
-    eprintln!("Usage: cqam-run <file.cqam> [OPTIONS]\n");
+    eprintln!("Execute a CQAM program.\n");
+    eprintln!("Usage: cqam-run <file.cqam|file.cqb> [OPTIONS]\n");
     eprintln!("Options:");
     eprintln!("  --config <path>       TOML simulator config file");
     eprintln!("  --qubits <n>          Default qubits per quantum register (1-16)");
@@ -129,7 +129,7 @@ fn parse_args() -> Result<CliArgs, String> {
         i += 1;
     }
 
-    let input = input.ok_or("Missing input file. Usage: cqam-run <file.cqam> [OPTIONS]")?;
+    let input = input.ok_or("Missing input file. Usage: cqam-run <file.cqam|file.cqb> [OPTIONS]")?;
 
     Ok(CliArgs {
         input,

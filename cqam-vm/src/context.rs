@@ -116,14 +116,22 @@ impl ExecutionContext {
         self.program.get(self.pc)
     }
 
-    /// Jump to the instruction at the given label.
+    /// Jump to the instruction at the given label or numeric address.
     ///
-    /// Sets PC to the label's resolved address.
+    /// Accepts either a label name (resolved via the label cache) or a
+    /// numeric address in `@N` format (used by decoded binary programs).
     /// Returns `Err(CqamError::UnresolvedLabel)` if the label is not found.
     pub fn jump_to_label(&mut self, label: &str) -> Result<(), CqamError> {
         if let Some(&addr) = self.labels.get(label) {
             self.pc = addr;
             Ok(())
+        } else if let Some(addr_str) = label.strip_prefix('@') {
+            if let Ok(addr) = addr_str.parse::<usize>() {
+                self.pc = addr;
+                Ok(())
+            } else {
+                Err(CqamError::UnresolvedLabel(label.to_string()))
+            }
         } else {
             Err(CqamError::UnresolvedLabel(label.to_string()))
         }
