@@ -63,6 +63,8 @@ Complex registers are lowered to paired floats (real and imaginary parts).
 | `ILDI R0, 42` | `R0 = 42;` |
 | `ILDM R0, 100` | `R0 = CMEM[100];` |
 | `ISTR R0, 100` | `CMEM[100] = R0;` |
+| `ILDX R1, R0` | `R1 = CMEM[R0];` |
+| `ISTRX R0, R1` | `CMEM[R1] = R0;` |
 
 ### 4.4 Integer Comparison
 
@@ -77,7 +79,16 @@ Complex registers are lowered to paired floats (real and imaginary parts).
 Same pattern as integer, using F-prefixed registers. Float comparison results
 are written to integer registers (since the result is boolean 0 or 1).
 
-### 4.6 Complex Arithmetic
+### 4.6 Float Math
+
+| CQAM | QASM |
+|------|------|
+| `FSIN F1, F0` | `F1 = sin(F0);` |
+| `FCOS F1, F0` | `F1 = cos(F0);` |
+| `FATAN2 F2, F0, F1` | `F2 = atan2(F0, F1);` |
+| `FSQRT F1, F0` | `F1 = sqrt(F0);` |
+
+### 4.7 Complex Arithmetic
 
 Complex operations are lowered to paired float operations:
 
@@ -87,7 +98,7 @@ Complex operations are lowered to paired float operations:
 | `ZMUL Z2, Z0, Z1` | Standard (a+bi)(c+di) expansion |
 | `ZLDI Z0, 3, -2` | `Z0_re = 3.0;` and `Z0_im = -2.0;` |
 
-### 4.7 Type Conversion
+### 4.8 Type Conversion
 
 | CQAM | QASM |
 |------|------|
@@ -96,7 +107,7 @@ Complex operations are lowered to paired float operations:
 | `CVTFZ Z0, F0` | `Z0_re = F0;` and `Z0_im = 0.0;` |
 | `CVTZF F0, Z0` | `F0 = Z0_re;` |
 
-### 4.8 Control Flow
+### 4.9 Control Flow
 
 | CQAM | QASM |
 |------|------|
@@ -107,25 +118,61 @@ Complex operations are lowered to paired float operations:
 | `HALT` | `// HALT` |
 | `LABEL: name` | `name:` |
 
-### 4.9 Quantum Operations
+### 4.10 Quantum State Preparation
 
 | CQAM | QASM |
 |------|------|
 | `QPREP Q0, 0` | `reset q0;` followed by distribution comment |
-| `QKERNEL Q1, Q0, 2, R0, R1` | Kernel header comment + gate call or expanded template |
-| `QOBSERVE H0, Q1, 0, R0, R0` | `H0 = measure q1;` (mode=DIST). PROB and AMP modes emit annotation comments. |
-| `QLOAD Q0, 10` | Comment (no QASM equivalent) |
-| `QSTORE Q0, 10` | Comment (no QASM equivalent) |
-| `QSAMPLE H0, Q0, 0, R0, R0` | `// @cqam.qsample: H0 = sample(q0, dist)` (no QASM equivalent) |
-| `QKERNELF Q1, Q0, 5, F0, F1` | Kernel header comment + gate call (same as QKERNEL but params from F-file) |
-| `QKERNELZ Q1, Q0, 6, Z0, Z1` | Kernel header comment + gate call (params from Z-file) |
-| `QPREPR Q0, R0` | `reset q0;` followed by distribution comment (same as QPREP, dist ID from register) |
+| `QPREPR Q0, R0` | `reset q0;` followed by distribution comment (dist ID from register) |
+| `QPREPN Q0, 0, R1` | `reset q0;` followed by qubit-count and distribution comment |
 | `QENCODE Q0, F0, 4, 1` | `// @cqam.qencode: q0 = encode(F0..F3, file=F)` (no QASM equivalent) |
+| `QMIXED Q0, R5, R6` | `// @cqam.qmixed: q0 = mixed_state(CMEM[R5], count=R6)` (no QASM equivalent) |
+
+### 4.11 Quantum Kernel Operations
+
+| CQAM | QASM |
+|------|------|
+| `QKERNEL Q1, Q0, 2, R0, R1` | Kernel header comment + gate call or expanded template |
+| `QKERNELF Q1, Q0, 5, F0, F1` | Same as QKERNEL but params from F-file |
+| `QKERNELZ Q1, Q0, 6, Z0, Z1` | Same as QKERNEL but params from Z-file |
+
+### 4.12 Qubit-Level Gate Operations
+
+| CQAM | QASM |
+|------|------|
+| `QCNOT Q1, Q0, R0, R1` | `cx q0[R0], q0[R1];` (approximate; register indexing is classical-controlled) |
+| `QCZ Q1, Q0, R0, R1` | `cz q0[R0], q0[R1];` |
+| `QSWAP Q1, Q0, R0, R1` | `swap q0[R0], q0[R1];` |
+| `QROT Q1, Q0, R0, 0, F0` | `rx(F0) q0[R0];` (axis 0=rx, 1=ry, 2=rz) |
 | `QHADM Q1, Q0, R2` | `// @cqam.qhadm: apply H to q0 masked by R2, result in q1` |
 | `QFLIP Q1, Q0, R2` | `// @cqam.qflip: apply X to q0 masked by R2, result in q1` |
 | `QPHASE Q1, Q0, R2` | `// @cqam.qphase: apply Z to q0 masked by R2, result in q1` |
+| `QCUSTOM Q1, Q0, R3, R4` | `// @cqam.qcustom: apply U from CMEM[R3] (dim=R4) to q0` |
 
-### 4.10 Hybrid Operations
+Note: For QCNOT, QCZ, QSWAP, and QROT the qubit indices are stored in classical
+registers at runtime. The emitter emits the gate mnemonic with a comment
+indicating the source registers; precise qubit indices are only known at
+execution time.
+
+### 4.13 Measurement Operations
+
+| CQAM | QASM |
+|------|------|
+| `QOBSERVE H0, Q1, 0, R0, R0` | `H0 = measure q1;` (mode=DIST). PROB and AMP modes emit annotation comments. |
+| `QSAMPLE H0, Q0, 0, R0, R0` | `// @cqam.qsample: H0 = sample(q0, dist)` (no QASM equivalent) |
+| `QMEAS R3, Q0, R0` | `// @cqam.qmeas: R3 = measure_qubit(q0, R0)` |
+
+### 4.14 Mixed-State / Structural Operations
+
+| CQAM | QASM |
+|------|------|
+| `QTENSOR Q2, Q0, Q1` | `// @cqam.qtensor: q2 = q0 tensor q1` (no QASM equivalent) |
+| `QPTRACE Q1, Q0, R0` | `// @cqam.qptrace: q1 = partial_trace_b(q0, num_qubits_a=R0)` |
+| `QRESET Q1, Q0, R0` | `reset q0[R0]; // @cqam.qreset: qubit R0 -> |0>` |
+| `QLOAD Q0, 10` | `// @cqam.qload: q0 = QMEM[10]` (no QASM equivalent) |
+| `QSTORE Q0, 10` | `// @cqam.qstore: QMEM[10] = q0` (no QASM equivalent) |
+
+### 4.15 Hybrid Operations
 
 All hybrid operations emit CQAM-specific annotation comments:
 
@@ -135,6 +182,13 @@ All hybrid operations emit CQAM-specific annotation comments:
 | `HMERGE` | `// @cqam.hmerge: end parallel execution region, merge results` |
 | `HCEXEC 3, target` | `// @cqam.hcexec: if PSW.PF goto target` |
 | `HREDUCE H0, R2, 11` | `// @cqam.hreduce: R2 = mode(H0)` |
+
+### 4.16 Interrupt Operations
+
+| CQAM | QASM |
+|------|------|
+| `SETIV 0, handler` | `// @cqam.setiv: trap[0] -> handler` (no QASM equivalent) |
+| `RETI` | `// @cqam.reti: return from interrupt handler` (no QASM equivalent) |
 
 ## 5. Kernel Template Expansion
 
@@ -166,9 +220,10 @@ Templates are loaded from `{template_dir}/{kernel_name}.qasm` where
 | grover_iter (ID 4) | `grover_iter.qasm` | Oracle phase-flip + diffusion |
 | rotate (ID 5) | `rotate.qasm` | Diagonal rotation gate |
 | phase_shift (ID 6) | `phase_shift.qasm` | Phase shift gate |
+| fourier_inv (ID 7) | `fourier_inv.qasm` | Inverse QFT circuit |
 
-Note: Template files for rotate and phase_shift are optional extensions.
-When no template is found, the emitter generates a stub or annotation comment.
+When no template is found for a kernel, the emitter generates a stub or
+annotation comment instead.
 
 ## 6. Kernel Gate Stubs
 

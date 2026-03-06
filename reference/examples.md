@@ -20,6 +20,17 @@ Register prefixes indicate the register file:
 
 Comments use `#` or `//`. Blank lines are ignored.
 
+## Pragma Directives
+
+Programs may include a qubit hint on the first line using the `#!` pragma
+syntax. This sets the default qubit count for QPREP and related instructions
+in that program, overriding the config file but not the `--qubits` CLI flag:
+
+```
+#! qubits 4
+QPREP Q0, 0          # Prepares a 4-qubit uniform state
+```
+
 ## Integer Instructions
 
 | Instruction | Example | Description |
@@ -27,6 +38,8 @@ Comments use `#` or `//`. Blank lines are ignored.
 | ILDI | `ILDI R0, 42` | Load immediate: R0 = 42 |
 | ILDM | `ILDM R1, 100` | Load from memory: R1 = CMEM[100] |
 | ISTR | `ISTR R0, 200` | Store to memory: CMEM[200] = R0 |
+| ILDX | `ILDX R1, R0` | Indirect load: R1 = CMEM[R0] |
+| ISTRX | `ISTRX R0, R1` | Indirect store: CMEM[R1] = R0 |
 | IADD | `IADD R2, R0, R1` | Integer add: R2 = R0 + R1 |
 | ISUB | `ISUB R3, R1, R0` | Integer subtract: R3 = R1 - R0 |
 | IMUL | `IMUL R4, R0, R1` | Integer multiply: R4 = R0 * R1 |
@@ -49,6 +62,8 @@ Comments use `#` or `//`. Blank lines are ignored.
 | FLDI | `FLDI F0, 7` | Load immediate: F0 = 7.0 |
 | FLDM | `FLDM F1, 100` | Load from memory: F1 = f64::from_bits(CMEM[100]) |
 | FSTR | `FSTR F0, 200` | Store to memory: CMEM[200] = F0.to_bits() |
+| FLDX | `FLDX F1, R0` | Indirect load: F1 = f64::from_bits(CMEM[R0]) |
+| FSTRX | `FSTRX F0, R1` | Indirect store: CMEM[R1] = F0.to_bits() |
 | FADD | `FADD F2, F0, F1` | Float add: F2 = F0 + F1 |
 | FSUB | `FSUB F3, F1, F0` | Float subtract: F3 = F1 - F0 |
 | FMUL | `FMUL F4, F0, F1` | Float multiply: F4 = F0 * F1 |
@@ -56,6 +71,20 @@ Comments use `#` or `//`. Blank lines are ignored.
 | FEQ | `FEQ R3, F0, F1` | Float equality (result in R): R3 = (F0 == F1) ? 1 : 0 |
 | FLT | `FLT R3, F0, F1` | Float less than (result in R): R3 = (F0 < F1) ? 1 : 0 |
 | FGT | `FGT R3, F0, F1` | Float greater than (result in R): R3 = (F0 > F1) ? 1 : 0 |
+| FSIN | `FSIN F1, F0` | Sine: F1 = sin(F0) |
+| FCOS | `FCOS F1, F0` | Cosine: F1 = cos(F0) |
+| FATAN2 | `FATAN2 F2, F0, F1` | Arctangent: F2 = atan2(F0, F1) (F0=y, F1=x) |
+| FSQRT | `FSQRT F1, F0` | Square root: F1 = sqrt(F0); traps if F0 < 0 |
+
+### Transcendental function example
+
+    # Compute rotation angle for Ry(pi/3)
+    FLDI F0, 1               # numerator = 1
+    FLDI F1, 3               # denominator = 3
+    FDIV F2, F0, F1          # F2 = 1/3
+    FSIN F3, F2              # F3 = sin(1/3) [just an example; typically use FLDM for pi]
+    FCOS F4, F2              # F4 = cos(1/3)
+    QROT Q1, Q0, R0, 1, F2  # Ry(1/3) on qubit R0
 
 ## Complex Instructions
 
@@ -64,6 +93,8 @@ Comments use `#` or `//`. Blank lines are ignored.
 | ZLDI | `ZLDI Z0, 3, -2` | Load complex immediate: Z0 = (3.0, -2.0) |
 | ZLDM | `ZLDM Z0, 100` | Load complex from CMEM[100..101] |
 | ZSTR | `ZSTR Z0, 200` | Store complex to CMEM[200..201] |
+| ZLDX | `ZLDX Z0, R0` | Indirect complex load from CMEM[R0]..+1 |
+| ZSTRX | `ZSTRX Z0, R1` | Indirect complex store to CMEM[R1]..+1 |
 | ZADD | `ZADD Z2, Z0, Z1` | Complex add |
 | ZSUB | `ZSUB Z3, Z1, Z0` | Complex subtract |
 | ZMUL | `ZMUL Z4, Z0, Z1` | Complex multiply: (a+bi)(c+di) |
@@ -89,43 +120,118 @@ Comments use `#` or `//`. Blank lines are ignored.
 | RET | `RET` | Return from subroutine (pop PC) |
 | HALT | `HALT` | Terminate execution |
 
-## Quantum Instructions
-
-| Instruction | Example | Description |
-|-------------|---------|-------------|
-| QPREP | `QPREP Q0, 0` | Prepare Q0 with distribution (0=uniform, 1=zero, 2=bell, 3=ghz) |
-| QKERNEL | `QKERNEL Q1, Q0, 2, R0, R1` | Apply kernel 2 (fourier) to Q0, result in Q1, context R0/R1 |
-| QOBSERVE | `QOBSERVE H0, Q1, 0, R0, R0` | Measure Q1 into H0 (mode=DIST, full distribution) |
-| QLOAD | `QLOAD Q0, 10` | Load Q0 from QMEM[10] |
-| QSTORE | `QSTORE Q0, 10` | Store Q0 to QMEM[10] |
-| QSAMPLE  | `QSAMPLE H1, Q0, 0, R0, R0` | Non-destructive sample of Q0 distribution into H1 |
-| QKERNELF | `QKERNELF Q1, Q0, 5, F0, F1` | Apply kernel 5 (rotate) with float params F0, F1 |
-| QKERNELZ | `QKERNELZ Q1, Q0, 6, Z0, Z1` | Apply kernel 6 (phase_shift) with complex params Z0, Z1 |
-| QPREPR   | `QPREPR Q0, R0`               | Prepare Q0 with dist ID from R0 (R0=0 -> uniform) |
-| QENCODE  | `QENCODE Q0, F0, 4, 1`        | Encode F0..F3 (4 float regs) as quantum amplitudes |
-| QHADM    | `QHADM Q1, Q0, R2`            | Apply Hadamard to qubits selected by bitmask R2 |
-| QFLIP    | `QFLIP Q1, Q0, R2`            | Apply X (bit-flip) to qubits selected by bitmask R2 |
-| QPHASE   | `QPHASE Q1, Q0, R2`           | Apply Z (phase-flip) to qubits selected by bitmask R2 |
-
-## Hybrid Instructions
-
-| Instruction | Example | Description |
-|-------------|---------|-------------|
-| HFORK | `HFORK` | Fork hybrid execution (set fork flags) |
-| HMERGE | `HMERGE` | Merge hybrid branches (set merge flags) |
-| HCEXEC | `HCEXEC 3, label` | Conditional jump if PSW flag 3 (PF) is set |
-| HREDUCE | `HREDUCE H0, R2, 11` | Reduce H0 using func 11 (mode), store in R2. 16 reduction functions available. |
-
-## System Instructions
+## System / Interrupt Instructions
 
 | Instruction | Example | Description |
 |-------------|---------|-------------|
 | NOP | `NOP` | No operation |
-| HALT | `HALT` | Terminate program execution |
+| SETIV | `SETIV 0, arith_handler` | Register handler for trap 0 (arithmetic) at label |
+| RETI | `RETI` | Return from interrupt, clear maskable traps |
 
-## QOBSERVE and QSAMPLE Mode Examples
+### Interrupt handler example
 
-The observation instructions support three modes via the third operand:
+    # Register arithmetic fault handler before any arithmetic
+    SETIV 0, on_arith_fault  # trap_id 0 = arithmetic
+
+    ILDI R0, 10
+    ILDI R1, 0
+    IDIV R2, R0, R1          # division by zero -> fires trap 0 -> jumps to handler
+
+    JMP done
+
+    LABEL: on_arith_fault
+    # Handle arithmetic fault here
+    ILDI R2, -1              # store sentinel
+    RETI                     # return from handler, execution resumes after IDIV
+
+    LABEL: done
+    HALT
+
+## Quantum State Preparation
+
+| Instruction | Example | Description |
+|-------------|---------|-------------|
+| QPREP | `QPREP Q0, 0` | Prepare Q0 with distribution (0=uniform, 1=zero, 2=bell, 3=ghz) |
+| QPREPR | `QPREPR Q0, R0` | Prepare with dist ID from R0 at runtime |
+| QPREPN | `QPREPN Q0, 0, R1` | Prepare uniform state with R1 qubits |
+| QENCODE | `QENCODE Q0, F0, 4, 1` | Encode F0..F3 (4 float regs) as quantum amplitudes |
+| QMIXED | `QMIXED Q0, R5, R6` | Build mixed state from CMEM[R5], R6 entries |
+
+### QPREPN example
+
+    ILDI R1, 4               # num_qubits = 4
+    QPREPN Q0, 0, R1         # Q0 = uniform 4-qubit state (16-dimensional)
+
+### QMIXED example
+
+    # Prepare a 50/50 mixture of |0> and |+> (2-qubit, 1-qubit illustrative)
+    # See reference/opcodes.md section 12 for CMEM layout details
+    QMIXED Q0, R5, R6        # Q0 = sum_i w_i |psi_i><psi_i|
+
+## Quantum Kernel Operations
+
+| Instruction | Example | Description |
+|-------------|---------|-------------|
+| QKERNEL | `QKERNEL Q1, Q0, 2, R0, R1` | Apply kernel 2 (fourier) to Q0, context from R0/R1 |
+| QKERNELF | `QKERNELF Q1, Q0, 5, F0, F1` | Apply kernel 5 (rotate) with float params F0, F1 |
+| QKERNELZ | `QKERNELZ Q1, Q0, 6, Z0, Z1` | Apply kernel 6 (phase_shift) with complex params Z0, Z1 |
+
+Kernel IDs: 0=init, 1=entangle, 2=fourier, 3=diffuse, 4=grover_iter,
+5=rotate, 6=phase_shift, 7=fourier_inv.
+
+## Qubit-Level Gate Operations
+
+| Instruction | Example | Description |
+|-------------|---------|-------------|
+| QCNOT | `QCNOT Q1, Q0, R0, R1` | CNOT: ctrl=R0, tgt=R1, applied within Q0 |
+| QCZ | `QCZ Q1, Q0, R0, R1` | Controlled-Z: ctrl=R0, tgt=R1 |
+| QSWAP | `QSWAP Q1, Q0, R0, R1` | SWAP qubits R0 and R1 within Q0 |
+| QROT | `QROT Q1, Q0, R0, 1, F0` | Ry rotation (axis=1) by F0 radians on qubit R0 |
+| QHADM | `QHADM Q1, Q0, R2` | Hadamard on qubits selected by bitmask R2 |
+| QFLIP | `QFLIP Q1, Q0, R2` | Pauli-X on qubits selected by bitmask R2 |
+| QPHASE | `QPHASE Q1, Q0, R2` | Pauli-Z on qubits selected by bitmask R2 |
+| QCUSTOM | `QCUSTOM Q1, Q0, R3, R4` | Custom unitary U from CMEM[R3], dim=R4 |
+
+### QCNOT example
+
+    QPREP Q0, 1              # |00> state (2 qubits)
+    ILDI R0, 0               # ctrl = qubit 0
+    ILDI R1, 1               # tgt  = qubit 1
+    QHADM Q1, Q0, R0         # Hadamard on qubit 0 -> (|00>+|10>)/sqrt(2)
+    QCNOT Q2, Q1, R0, R1     # CNOT -> Bell state (|00>+|11>)/sqrt(2)
+
+### QROT example (Rx rotation)
+
+    QPREP Q0, 1              # |0> state (1 qubit)
+    ILDI R0, 0               # target qubit = 0
+    FLDI F0, 1               # angle = 1.0 radian
+    QROT Q1, Q0, R0, 0, F0  # Rx(1.0) on qubit 0
+
+### QSWAP example
+
+    ILDI R0, 0               # qubit a = 0
+    ILDI R1, 1               # qubit b = 1
+    QSWAP Q1, Q0, R0, R1    # swap qubits 0 and 1 in Q0
+
+## Measurement Instructions
+
+| Instruction | Example | Description |
+|-------------|---------|-------------|
+| QOBSERVE | `QOBSERVE H0, Q1, 0, R0, R0` | Measure Q1 into H0 (destructive, mode=DIST) |
+| QSAMPLE  | `QSAMPLE H1, Q0, 0, R0, R0` | Non-destructive sample of Q0 into H1 |
+| QMEAS | `QMEAS R3, Q0, R0` | Measure qubit R0 of Q0; outcome (0 or 1) -> R3; Q0 updated |
+
+### QMEAS example
+
+    QPREP Q0, 0              # uniform 2-qubit superposition
+    ILDI R0, 0               # measure qubit 0
+    QMEAS R1, Q0, R0         # R1 = 0 or 1; Q0 = post-measurement state
+    ILDI R0, 1               # now measure qubit 1
+    QMEAS R2, Q0, R0         # R2 = 0 or 1
+
+## Observation Mode Examples
+
+The observation instructions (QOBSERVE, QSAMPLE) support three modes:
 
 ### Mode 0 (DIST): Full distribution (default)
 
@@ -137,7 +243,7 @@ ctx0 and ctx1 are ignored in DIST mode.
 ### Mode 1 (PROB): Single probability
 
     QPREP Q0, 2              # Bell state
-    ILDI R0, 0                # Query basis state |0>
+    ILDI R0, 0               # Query basis state |0>
     QSAMPLE H0, Q0, 1, R0, R0    # H0 = Float(0.5)
 
 ctx0 selects the basis state index; ctx1 is ignored.
@@ -145,24 +251,53 @@ ctx0 selects the basis state index; ctx1 is ignored.
 ### Mode 2 (AMP): Density matrix element
 
     QPREP Q0, 2              # Bell state
-    ILDI R0, 0                # row = 0
-    ILDI R1, 3                # col = 3 (|11> = state 3)
+    ILDI R0, 0               # row = 0
+    ILDI R1, 3               # col = 3 (|11> = state 3)
     QSAMPLE H0, Q0, 2, R0, R1    # H0 = Complex(0.5, 0.0)
 
 ctx0 selects the row; ctx1 selects the column.
+
+## Quantum Memory Instructions
+
+| Instruction | Example | Description |
+|-------------|---------|-------------|
+| QLOAD | `QLOAD Q0, 10` | Load Q0 from QMEM[10] |
+| QSTORE | `QSTORE Q0, 10` | Store Q0 to QMEM[10] |
 
 ## Masked Gate Operations
 
 Masked gates apply single-qubit gates to qubits selected by a classical bitmask:
 
     QPREP Q0, 1              # |00> state
-    ILDI R0, 1                # mask = 0b01 (qubit 0 only)
-    QHADM Q1, Q0, R0         # Hadamard on qubit 0 only -> (|0>+|1>)/sqrt(2) x |0>
+    ILDI R0, 1               # mask = 0b01 (qubit 0 only)
+    QHADM Q1, Q0, R0         # Hadamard on qubit 0 only -> (|0>+|1>)/sqrt(2) tensor |0>
 
-    ILDI R1, 3                # mask = 0b11 (both qubits)
-    QFLIP Q2, Q0, R1          # X on both qubits: |00> -> |11>
+    ILDI R1, 3               # mask = 0b11 (both qubits)
+    QFLIP Q2, Q0, R1         # X on both qubits: |00> -> |11>
 
-    QPHASE Q3, Q1, R0         # Z on qubit 0 of the superposition state
+    QPHASE Q3, Q1, R0        # Z on qubit 0 of the superposition state
+
+## Tensor Product and Partial Trace
+
+### QTENSOR example
+
+    QPREP Q0, 1              # 1-qubit state |0>
+    QPREP Q1, 1              # 1-qubit state |0>
+    QHADM Q2, Q0, R0         # Q2 = |+> (mask qubit 0)
+    QTENSOR Q3, Q2, Q1       # Q3 = |+> tensor |0> = (|00>+|10>)/sqrt(2); Q2, Q1 consumed
+
+### QPTRACE example
+
+    QPREP Q0, 2              # Bell state (2 qubits)
+    ILDI R0, 1               # num_qubits_a = 1 (keep subsystem A)
+    QPTRACE Q1, Q0, R0      # Q1 = Tr_B(Bell state) = I/2 (maximally mixed 1-qubit state)
+    # Q0 is NOT consumed; Q1 is always Mixed (DensityMatrix)
+
+### QRESET example
+
+    QPREP Q0, 0              # Uniform 2-qubit superposition
+    ILDI R0, 1               # target qubit = 1
+    QRESET Q1, Q0, R0       # Q1 = state with qubit 1 guaranteed |0>
 
 ## Classical-to-Quantum Amplitude Encoding
 
@@ -170,36 +305,56 @@ QENCODE reads consecutive registers from a selected file and constructs a
 normalized quantum state:
 
     # Encode 4 float registers as a 2-qubit state
-    FLDI F0, 1                # amplitude for |00>
-    FLDI F1, 0                # amplitude for |01>
-    FLDI F2, 0                # amplitude for |10>
-    FLDI F3, 1                # amplitude for |11>
-    QENCODE Q0, F0, 4, 1     # Q0 = normalized |psi> from F0..F3, file_sel=1 (F-file)
+    FLDI F0, 1               # amplitude for |00>
+    FLDI F1, 0               # amplitude for |01>
+    FLDI F2, 0               # amplitude for |10>
+    FLDI F3, 1               # amplitude for |11>
+    QENCODE Q0, F0, 4, 1    # Q0 = normalized |psi> from F0..F3, file_sel=1 (F-file)
     # Q0 is now (|00> + |11>) / sqrt(2)
 
     # Encode from complex registers for phase control
-    ZLDI Z0, 1, 0             # (1.0, 0.0)
-    ZLDI Z1, 0, 1             # (0.0, 1.0) = i
-    QENCODE Q1, Z0, 2, 2     # Q1 = normalized from Z0..Z1, file_sel=2 (Z-file)
+    ZLDI Z0, 1, 0            # (1.0, 0.0)
+    ZLDI Z1, 0, 1            # (0.0, 1.0) = i
+    QENCODE Q1, Z0, 2, 2    # Q1 = normalized from Z0..Z1, file_sel=2 (Z-file)
     # Q1 encodes a state with a relative phase of pi/2
 
 ## Register-Parameterized Preparation
 
 QPREPR reads the distribution ID from an integer register at runtime:
 
-    ILDI R0, 2                # dist_id = BELL
-    QPREPR Q0, R0             # Equivalent to QPREP Q0, 2
+    ILDI R0, 2               # dist_id = BELL
+    QPREPR Q0, R0            # Equivalent to QPREP Q0, 2
 
 This enables data-driven state preparation in loops:
 
-    ILDI R5, 0                # loop counter
-    ILDI R6, 4                # limit (4 distributions)
+    ILDI R5, 0               # loop counter
+    ILDI R6, 4               # limit (4 distributions)
+    ILDI R3, 1               # increment
     LABEL: prep_loop
-    QPREPR Q0, R5             # Prepare with dist_id = R5
+    QPREPR Q0, R5            # Prepare with dist_id = R5
     QSAMPLE H0, Q0, 0, R0, R0   # Sample without destroying
-    IADD R5, R5, R3           # R5 += 1 (R3 = 1)
-    ILT R7, R5, R6            # R7 = (R5 < 4)
+    IADD R5, R5, R3          # R5 += 1
+    ILT R7, R5, R6           # R7 = (R5 < 4)
     JIF R7, prep_loop
+
+## Hybrid Instructions
+
+| Instruction | Example | Description |
+|-------------|---------|-------------|
+| HFORK | `HFORK` | Fork hybrid execution (set fork flags) |
+| HMERGE | `HMERGE` | Merge hybrid branches (set merge flags) |
+| HCEXEC | `HCEXEC 3, label` | Conditional jump if PSW flag 3 (PF) is set |
+| HREDUCE | `HREDUCE H0, R2, 11` | Reduce H0 using func 11 (mode), store in R2 |
+
+Reduction function IDs: 0=round, 1=floor, 2=ceil, 3=trunc, 4=abs, 5=negate,
+6=magnitude, 7=phase, 8=real, 9=imag, 10=mean, 11=mode, 12=argmax, 13=variance,
+14=conj_z, 15=negate_z, 16=expect.
+
+### Expectation value example (ID 16)
+
+The `expect` function computes sum_k eigenvalue_k * p_k, reading n eigenvalues
+from CMEM starting at R[ctx]. The HREDUCE instruction passes R[ctx] as the
+context via the standard HR encoding (see reference/opcodes.md).
 
 ---
 For more details, see `cqam-core/src/instruction.rs` and `reference/opcodes.md`.
