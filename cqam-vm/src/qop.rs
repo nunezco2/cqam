@@ -19,6 +19,7 @@ use cqam_sim::kernels::grover::GroverIter;
 use cqam_sim::kernels::rotate::Rotate;
 use cqam_sim::kernels::phase::PhaseShift;
 use cqam_sim::kernels::fourier_inv::FourierInv;
+use cqam_sim::kernels::controlled_u::ControlledU;
 use crate::context::ExecutionContext;
 
 // =============================================================================
@@ -200,6 +201,23 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         }
                     }
                     kernel_id::FOURIER_INV => Box::new(FourierInv),
+                    kernel_id::CONTROLLED_U => {
+                        // R[ctx0] = control qubit index
+                        // R[ctx1] = CMEM base address for parameter block
+                        let control_qubit = param0 as u8;
+                        let base = param1 as u16;
+                        let sub_kernel_id = ctx.cmem.load(base) as u8;
+                        let power = ctx.cmem.load(base.wrapping_add(1)) as u32;
+                        let param_re = f64::from_bits(ctx.cmem.load(base.wrapping_add(2)) as u64);
+                        let param_im = f64::from_bits(ctx.cmem.load(base.wrapping_add(3)) as u64);
+                        Box::new(ControlledU {
+                            control_qubit,
+                            sub_kernel_id,
+                            power,
+                            param_re,
+                            param_im,
+                        })
+                    }
                     _ => {
                         return Err(CqamError::UnknownKernel(
                             format!("Unknown kernel ID: {}", kernel),
@@ -225,7 +243,6 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
             let fparam0 = ctx.fregs.get(*fctx0)?;
             let fparam1 = ctx.fregs.get(*fctx1)?;
-            let _ = fparam1; // reserved for future use
 
             if let Some(ref qr) = ctx.qregs[*src as usize] {
                 let k: Box<dyn Kernel> = match *kernel {
@@ -240,6 +257,17 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     kernel_id::ROTATE => Box::new(Rotate { theta: fparam0 }),
                     kernel_id::PHASE_SHIFT => Box::new(PhaseShift { amplitude: (fparam0, 0.0) }),
                     kernel_id::FOURIER_INV => Box::new(FourierInv),
+                    kernel_id::CONTROLLED_U => {
+                        // QKernelF shorthand: F[fctx0] = control qubit, F[fctx1] = theta
+                        // Controlled-ROTATE with power=0
+                        Box::new(ControlledU {
+                            control_qubit: fparam0 as u8,
+                            sub_kernel_id: kernel_id::ROTATE,
+                            power: 0,
+                            param_re: fparam1,
+                            param_im: 0.0,
+                        })
+                    }
                     _ => {
                         return Err(CqamError::UnknownKernel(
                             format!("Unknown kernel ID: {}", kernel),
@@ -264,7 +292,6 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
             let zparam0 = ctx.zregs.get(*zctx0)?;
             let zparam1 = ctx.zregs.get(*zctx1)?;
-            let _ = zparam1; // reserved for future use
 
             if let Some(ref qr) = ctx.qregs[*src as usize] {
                 let k: Box<dyn Kernel> = match *kernel {
@@ -279,6 +306,17 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     kernel_id::ROTATE => Box::new(Rotate { theta: zparam0.0 }),
                     kernel_id::PHASE_SHIFT => Box::new(PhaseShift { amplitude: zparam0 }),
                     kernel_id::FOURIER_INV => Box::new(FourierInv),
+                    kernel_id::CONTROLLED_U => {
+                        // QKernelZ: Z[zctx0] = (control_qubit, sub_kernel_id)
+                        //           Z[zctx1] = (param_re, param_im)
+                        Box::new(ControlledU {
+                            control_qubit: zparam0.0 as u8,
+                            sub_kernel_id: zparam0.1 as u8,
+                            power: 0,
+                            param_re: zparam1.0,
+                            param_im: zparam1.1,
+                        })
+                    }
                     _ => {
                         return Err(CqamError::UnknownKernel(
                             format!("Unknown kernel ID: {}", kernel),

@@ -1,0 +1,76 @@
+# examples/iterative_qpe.cqam
+# Iterative (single-ancilla) Quantum Phase Estimation
+#
+# Algorithm: Instead of using multiple counting qubits simultaneously,
+# iterative QPE reuses a single ancilla qubit, measuring it after each
+# controlled-U^{2^k} application and feeding back the classical result.
+#
+# Pipeline (per bit k = m-1, m-2, ..., 0):
+#   1. Prepare ancilla in |+> (Hadamard on |0>)
+#   2. Apply C-U^{2^k} controlled on the ancilla
+#   3. Apply phase correction based on previously measured bits
+#   4. Apply Hadamard and measure the ancilla
+#   5. Record the classical bit
+#
+# Here we estimate the phase of ROTATE(theta=1.0) using 3 iterations.
+#
+#! qubits 2
+#
+# Register layout:
+#   Q0 = 2-qubit register (qubit 0 = ancilla, qubit 1 = eigenstate)
+#   CMEM[100..103] = Controlled-U parameter block
+
+# --- Classical setup ---
+    ILDI R0, 0           # R0 = ancilla qubit index (qubit 0)
+    ILDI R1, 100         # R1 = CMEM base for C-U params
+    ILDI R2, 2           # R2 = iteration counter (k = 2, 1, 0)
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = accumulated phase bits result
+    ILDI R5, 3           # R5 = total iterations (m = 3)
+
+# --- Store C-U parameter block ---
+    ILDI R6, 5           # sub_kernel_id = ROTATE
+    ISTR R6, 100         # CMEM[100] = 5
+    ILDI R6, 0
+    ISTR R6, 101         # CMEM[101] = power (set per iteration)
+    FLDI F0, 1           # theta = 1.0 radian
+    FSTR F0, 102         # CMEM[102] = 1.0
+    FLDI F1, 0
+    FSTR F1, 103         # CMEM[103] = 0.0
+
+# === Iterative QPE loop ===
+LABEL: iter_loop
+
+# --- Prepare fresh state: ancilla in |+>, eigenstate in |0> ---
+    QPREP Q0, 1          # Q0 = |00> (zero state)
+
+    # Put ancilla (qubit 0) in superposition
+    ILDI R7, 1           # mask = bit 0 only
+    QHADM Q0, Q0, R7    # Hadamard on qubit 0 → ancilla = |+>
+
+# --- Apply C-U^{2^k} ---
+    ISTR R2, 101         # CMEM[101] = power = k
+    QKERNEL Q0, Q0, 8, R0, R1   # Controlled-U on Q0
+
+# --- Measure ancilla ---
+    QMEAS R8, Q0, R0    # R8 = measurement outcome of ancilla (0 or 1)
+
+# --- Accumulate result: shift and OR ---
+    IADD R4, R4, R4      # R4 <<= 1
+    IADD R4, R4, R8      # R4 |= measurement bit
+
+# --- Decrement iteration counter ---
+    ISUB R2, R2, R3
+    ILDI R9, 0
+    ILT R9, R9, R2       # R9 = (0 < R2)?
+    # Also check R2 >= 0 (since it's signed)
+    ILDI R10, -1
+    ILT R10, R10, R2     # R10 = (-1 < R2)? i.e., R2 >= 0
+    # Continue if R2 > 0
+    JIF R9, iter_loop
+
+# === Store results ===
+    ISTR R4, 0           # CMEM[0] = accumulated phase bits
+    ISTR R5, 1           # CMEM[1] = total iterations
+
+    HALT

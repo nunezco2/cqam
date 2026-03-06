@@ -1,0 +1,68 @@
+# examples/quantum_counting_general.cqam
+# Quantum Counting using Controlled-U with Grover operator
+#
+# Algorithm: Apply QPE to the Grover iteration operator to estimate
+# the number of marked states M. The eigenphase theta of the Grover
+# operator satisfies sin^2(theta/2) = M/N.
+#
+# Pipeline:
+#   1. Prepare uniform superposition
+#   2. Apply C-G^{2^k} (controlled Grover iterations) for each counting qubit
+#   3. Apply inverse QFT
+#   4. Measure to extract the Grover eigenphase
+#
+# We search for state |5> in a 4-qubit register (N=16).
+#
+#! qubits 4
+#
+# CMEM layout:
+#   CMEM[100..103] = C-U parameter block for controlled Grover
+#   CMEM[110..111] = Grover target list (for multi-target mode, unused here)
+
+# --- Classical setup ---
+    ILDI R0, 0           # R0 = control qubit index (varies)
+    ILDI R1, 100         # R1 = CMEM base for C-U params
+    ILDI R2, 0           # R2 = QPE step counter
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 2           # R4 = number of QPE steps
+
+# --- Store C-U parameter block ---
+# Sub-kernel = GROVER_ITER (id=4), target = state 5
+    ILDI R5, 4           # sub_kernel_id = GROVER_ITER
+    ISTR R5, 100         # CMEM[100] = 4
+    ILDI R5, 0
+    ISTR R5, 101         # CMEM[101] = power (set per step)
+    # For GROVER_ITER, param_re encodes the target state
+    FLDI F0, 5           # target = state 5
+    FSTR F0, 102         # CMEM[102] = 5.0 (target as f64 bits)
+    FLDI F1, 0
+    FSTR F1, 103         # CMEM[103] = 0.0
+
+# --- Prepare quantum state ---
+    QPREP Q0, 0          # Uniform superposition
+
+# --- QPE with Controlled-Grover ---
+LABEL: qc_loop
+    ISTR R2, 101         # CMEM[101] = power = k
+    QKERNEL Q0, Q0, 8, R2, R1   # C-Grover^{2^k}
+
+    IADD R2, R2, R3
+    ISUB R4, R4, R3
+    JIF R4, qc_loop
+
+# --- Inverse QFT ---
+    ILDI R6, 0
+    QKERNEL Q0, Q0, 7, R6, R6
+
+# --- Measure ---
+    QOBSERVE H0, Q0
+    HREDUCE H0, R7, 12          # argmax
+    HREDUCE H0, F2, 10          # mean
+
+# --- Store results ---
+    ISTR R7, 0           # CMEM[0] = phase index
+    FSTR F2, 1           # CMEM[1] = mean phase
+    ILDI R8, 5
+    ISTR R8, 2           # CMEM[2] = target state
+
+    HALT

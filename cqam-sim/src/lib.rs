@@ -57,4 +57,5 @@ pub mod kernels {
     pub mod rotate;
     pub mod phase;
     pub mod fourier_inv;
+    pub mod controlled_u;
 }

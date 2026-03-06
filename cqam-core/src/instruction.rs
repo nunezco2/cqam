@@ -478,6 +478,8 @@ pub mod kernel_id {
     pub const PHASE_SHIFT: u8 = 6;
     /// Inverse Quantum Fourier Transform.
     pub const FOURIER_INV: u8 = 7;
+    /// Controlled-U kernel: applies a sub-kernel conditioned on a control qubit.
+    pub const CONTROLLED_U: u8 = 8;
 }
 
 /// PSW flag IDs for HCExec.
@@ -580,6 +582,7 @@ pub fn kernel_name(id: u8) -> &'static str {
         kernel_id::ROTATE => "rotate",
         kernel_id::PHASE_SHIFT => "phase_shift",
         kernel_id::FOURIER_INV => "fourier_inv",
+        kernel_id::CONTROLLED_U => "controlled_u",
         _ => "unknown",
     }
 }

@@ -1,0 +1,78 @@
+# examples/hhl.cqam
+# HHL Algorithm — Quantum Linear Systems (simplified)
+#
+# Algorithm: Solve Ax = b for a Hermitian matrix A using:
+#   1. Prepare |b> in the eigenstate register
+#   2. QPE to estimate eigenvalues of A (using C-U^{2^k})
+#   3. Controlled rotation to encode 1/lambda in an ancilla
+#   4. Inverse QPE to uncompute the eigenvalue register
+#   5. Measure ancilla; post-select on |1>
+#
+# In this simplified version, we use ROTATE as the Hamiltonian
+# simulation unitary e^{iAt}, demonstrating the QPE sub-routine
+# of HHL with 2 counting qubits and 2 system qubits.
+#
+#! qubits 4
+#
+# Register layout:
+#   Q0 = 4-qubit register
+#     qubits 0-1: counting register (for QPE)
+#     qubits 2-3: system register (eigenstate |b>)
+#   CMEM[100..103] = C-U parameter block
+
+# --- Classical setup ---
+    ILDI R0, 0           # R0 = control qubit index
+    ILDI R1, 100         # R1 = CMEM base for C-U params
+    ILDI R2, 0           # R2 = QPE step counter
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 2           # R4 = number of QPE steps
+
+# --- Store C-U parameter block ---
+# U = ROTATE with theta = 0.5 (simulating e^{iAt})
+    ILDI R5, 5           # sub_kernel_id = ROTATE
+    ISTR R5, 100
+    ILDI R5, 0
+    ISTR R5, 101         # power (set per step)
+    FLDI F0, 0           # workspace
+    FLDI F1, 1           # theta = 1.0
+    FLDI F2, 2
+    FDIV F3, F1, F2      # F3 = 0.5
+    FSTR F3, 102         # CMEM[102] = 0.5 (theta)
+    FLDI F4, 0
+    FSTR F4, 103         # CMEM[103] = 0.0
+
+# --- Prepare initial state ---
+    QPREP Q0, 0          # Uniform superposition (simplified |b>)
+
+# === Phase 1: QPE (forward) ===
+LABEL: hhl_qpe_fwd
+    ISTR R2, 101         # power = k
+    QKERNEL Q0, Q0, 8, R2, R1   # C-U^{2^k}
+    IADD R2, R2, R3
+    ISUB R4, R4, R3
+    JIF R4, hhl_qpe_fwd
+
+# === Phase 2: Controlled rotation on ancilla ===
+# Apply a rotation conditioned on the counting register state.
+# This encodes eigenvalue information into the phase.
+    FLDI F5, 1
+    FLDI F6, 0
+    QKERNELF Q0, Q0, 5, F5, F6  # ROTATE with theta=1.0 on full register
+
+# === Phase 3: Inverse QPE (uncompute) ===
+# Apply QFT (forward) to undo the inverse-QFT effect
+    ILDI R6, 0
+    QKERNEL Q0, Q0, 7, R6, R6   # Inverse QFT
+
+# --- Measure ---
+    QOBSERVE H0, Q0
+    HREDUCE H0, R7, 12          # argmax
+    HREDUCE H0, F7, 10          # mean
+    HREDUCE H0, F8, 13          # variance
+
+# --- Store results ---
+    ISTR R7, 0           # CMEM[0] = measurement argmax
+    FSTR F7, 1           # CMEM[1] = mean
+    FSTR F8, 2           # CMEM[2] = variance
+
+    HALT
