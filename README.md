@@ -1,5 +1,11 @@
 # CQAM: Classical-Quantum Abstract Machine
 
+
+Santiago Núñez-Corrales, PhD
+*National Center for Supercomputing Applications*
+*University of Illinois Urbana-Champaign*
+
+
 ## Overview
 
 CQAM is a register-based virtual machine and instruction set architecture
@@ -209,9 +215,7 @@ classical, quantum, and hybrid computations:
 
 | File | Description |
 |------|-------------|
-| `hybrid_fork.cqam` | Parallel execution with HFORK/HMERGE and conditional branching via HCEXEC |
 | `grover_16q.cqam` | Grover search on a 16-qubit register |
-| `bell_state.cqam` | Bell state preparation, measurement, and mode/mean extraction |
 | `ghz_verify.cqam` | GHZ state preparation and fidelity verification |
 | `qft_16q.cqam` | Quantum Fourier Transform on a 16-qubit register |
 | `phase_estimation.cqam` | Quantum phase estimation algorithm |
@@ -253,6 +257,14 @@ API documentation from inline Rust doc comments:
 cargo doc --workspace --no-deps --open
 ```
 
+## Acknowledgments
+
+This project was partially funded by the IBM-Illinois Discovery Accelerator Institute. 
+
+## Related literature
+
+Núñez-Corrales, S., Di Matteo, O., Dumbell, J., Edwards, M., Giusto, E., Pakin, S. and Stirbu, V., 2025, August. [Productive Quantum Programming Needs Better Abstract Machines](https://ieeexplore.ieee.org/abstract/document/11250286). *In 2025 IEEE International Conference on Quantum Computing and Engineering (QCE)* (Vol. 1, pp. 816-826). IEEE.
+
 ## License
 
-See LICENSE file for details.
+Apache 2.0.
