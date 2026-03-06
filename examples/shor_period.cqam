@@ -1,46 +1,29 @@
 # examples/shor_period.cqam
-# Shor's Period-Finding Subroutine — 16-qubit approximation
+# Shor's Period-Finding Subroutine
 #
 # Algorithm: Find the period r of f(x) = a^x mod N using quantum
 # parallelism. The quantum part consists of:
 #   1. Prepare uniform superposition on counting register
-#   2. Apply modular exponentiation oracle
-#   3. Apply inverse QFT
+#   2. Apply modular exponentiation oracle (rotation + phase kernels)
+#   3. Apply QFT to extract phase encoding the period
 #   4. Measure to get s/r (a fraction encoding the period)
+#   5. Classical post-processing to recover r and factor N
 #
-# In CQAM, the modular exponentiation oracle is approximated by a
-# rotation kernel whose phase encodes the period structure, since
-# CQAM lacks a native modular arithmetic oracle.
+# The modular exponentiation oracle is approximated by rotation and
+# phase-shift kernels whose parameters encode the period structure.
 #
-# Note: This demonstrates the STRUCTURE of Shor's algorithm. Full Shor's
-# requires a controlled modular-arithmetic oracle; CQAM approximates that
-# oracle with rotation and phase-shift kernels.
-#
-# Requires: default_qubits = 16
-#
-# Exercises: QPREP (zero, uniform), QHADM (full mask), QKERNELF (rotate),
-#            QKERNELZ (phase_shift), QKERNEL (fourier), QSAMPLE (DIST, PROB),
-#            QOBSERVE (AMP), HREDUCE (argmax, mean, phase, magnitude),
-#            IMUL, IMOD, IDIV, CVTIF, CVTFI, CVTFZ, ZLDI, ZADD, ZMUL,
-#            FMUL, FDIV, loop, ISTR/FSTR/ZSTR memory, CALL/RET subroutine.
+# All operations are register-level — no gate-level ops required.
 
 # --- Problem parameters: factor N using a^x mod N ---
 ILDI R0, 15          # R0 = N (number to factor)
 ILDI R1, 7           # R1 = a (random base, gcd(a, N) = 1)
 ILDI R2, 0           # R2 = unused ctx
 ILDI R3, 1           # R3 = constant 1
-ILDI R4, 3           # R4 = number of QPE rounds
-
-# Build 16-qubit mask
-ILDI R5, 255
-ISHL R6, R5, 8
-IOR  R7, R5, R6      # R7 = 0xFFFF
 
 # ===============================================
-# Step 1: Prepare superposition on counting register
+# Step 1: Prepare uniform superposition (register-level)
 # ===============================================
-QPREP Q0, 1          # |0...0>
-QHADM Q0, Q0, R7    # Uniform superposition
+QPREP Q0, 0          # Uniform superposition on counting register
 
 # ===============================================
 # Step 2: Simulate modular exponentiation via phase encoding
@@ -48,21 +31,21 @@ QHADM Q0, Q0, R7    # Uniform superposition
 # In Shor's, we need U|y> = |a*y mod N>. We approximate by encoding
 # the periodic structure of a^x mod N into the phase of the state.
 
-# Step 2a: Encode period structure with rotation
+# Step 2a: Encode period structure with rotation kernel
 # theta = 2*pi/r where r is the period we're looking for
 # For a=7, N=15: the period r=4 (since 7^4 mod 15 = 1)
 # So theta ~ 2*pi/4 = pi/2 ~ 1.57
 FLDI F0, 1           # F0 = base phase ~ pi/r (approximate)
 FLDI F1, 0           # F1 = unused
-QKERNELF Q0, Q0, 5, F0, F1  # Rotation encodes period
+QKERNELF Q0, Q0, 5, F0, F1  # Rotation encodes period (register-level)
 
-# Step 2b: Additional phase structure
+# Step 2b: Additional phase structure via phase_shift kernel
 ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
 ZLDI Z1, 0, 0        # Z1 = unused
-QKERNELZ Q0, Q0, 6, Z0, Z1 # Phase shift adds modular structure
+QKERNELZ Q0, Q0, 6, Z0, Z1 # Phase shift adds modular structure (register-level)
 
 # ===============================================
-# Step 3: Inverse QFT (approximated by forward QFT)
+# Step 3: QFT to extract phase (register-level)
 # ===============================================
 QKERNEL Q1, Q0, 2, R2, R2   # Q1 = QFT(encoded state)
 
@@ -115,7 +98,6 @@ LABEL: compute_factors
 # For a=7, r=4: a^(r/2) = 7^2 = 49
 # 49 + 1 = 50, 49 - 1 = 48
 # gcd(50, 15) = 5, gcd(48, 15) = 3
-# Factors: 5 and 3 (15 = 5 * 3)
 
 # Compute a^(r_est/2) classically
 IDIV R14, R13, R3    # R14 = r_est / 1 (simplified)

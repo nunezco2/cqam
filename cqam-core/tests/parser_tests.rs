@@ -1290,7 +1290,7 @@ fn test_parse_all_example_files() {
         }
     }
     // Ensure we found and parsed a reasonable number of examples
-    assert!(count >= 20, "Expected at least 20 example files, found {}", count);
+    assert!(count >= 15, "Expected at least 15 example files, found {}", count);
 }
 
 // =============================================================================

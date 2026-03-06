@@ -1,32 +1,23 @@
 # examples/error_detection.cqam
-# Quantum Error Detection — 3-qubit bit-flip repetition code (16-qubit reg)
+# Quantum Error Detection — 3-qubit bit-flip repetition code
 #
 # Algorithm: Encode a logical qubit into 3 physical qubits using the
 # repetition code: |0_L> = |000>, |1_L> = |111>. Then:
 #   1. Introduce a bit-flip error on one qubit
-#   2. Extract the error syndrome via measurement
+#   2. Extract the error syndrome via distribution sampling
 #   3. Correct the error based on the syndrome
 #   4. Verify the logical qubit is restored
 #
-# In CQAM, we simulate this by:
-#   - Preparing a zero state (logical |0_L> = |000>)
-#   - Using QFLIP with targeted mask to introduce errors
-#   - Using QSAMPLE to extract syndrome-like information
-#   - Using QFLIP again to correct
-#
-# Requires: default_qubits = 16
-#
-# Exercises: QPREP (zero), QFLIP (targeted error injection + correction),
-#            QHADM, QPHASE, QSAMPLE (PROB, DIST, AMP), QOBSERVE,
-#            HREDUCE (mode, real, magnitude, imag), IAND, IOR, IXOR, ISHL,
-#            JIF conditional correction, IEQ, FLT, FSTR/ISTR memory.
+# Gate-level justification: QFLIP is required for targeted bit-flip
+# error injection and correction — it applies Pauli-X to specific
+# qubits identified by the syndrome. No register-level kernel can
+# target individual qubits for error correction.
 
 # --- Setup ---
 ILDI R0, 0           # R0 = ctx / state |0>
 ILDI R1, 1           # R1 = mask qubit 0 (0b001)
 ILDI R2, 2           # R2 = mask qubit 1 (0b010)
 ILDI R3, 4           # R3 = mask qubit 2 (0b100)
-ILDI R4, 7           # R4 = mask all 3 qubits (0b111)
 
 # ===============================================
 # Step 1: Encode logical |0_L> = |000>
@@ -40,6 +31,7 @@ HREDUCE H0, F0, 8            # F0 = P(|0>) — expect 1.0
 # ===============================================
 # Step 2: Introduce bit-flip error on qubit 1
 # ===============================================
+# QFLIP targets a specific qubit for error injection.
 QFLIP Q0, Q0, R2    # Flip qubit 1: |000> -> |010> (error!)
 
 # Check: P(|0>) should now be 0 (state is |010> = state 2)
@@ -54,12 +46,8 @@ HREDUCE H2, F2, 8            # F2 = P(|010>) — expect 1.0
 # ===============================================
 # Step 3: Syndrome extraction
 # ===============================================
-# Syndrome is determined by comparing pairs of qubits.
-# In CQAM, we probe specific state probabilities.
-
-# Check P(states with qubit 0 = qubit 1):
-# States where q0 == q1: {000, 011, 100, 111} = {0, 3, 4, 7}
-# For |010>: q0=0, q1=1 -> mismatch -> syndrome bit 1 = 1
+# Probe the full distribution to identify the error state.
+# The mode of the distribution reveals which qubit was flipped.
 
 # Probe pairwise probabilities
 ILDI R6, 0           # Check |000>
@@ -78,13 +66,11 @@ HREDUCE H4, R8, 12  # R8 = argmax
 # ===============================================
 # Step 4: Error correction based on syndrome
 # ===============================================
-# Syndrome analysis: R7 tells us which state we're in
-# |010> = state 2 -> error on qubit 1 -> correction: flip qubit 1
-
-# Determine which qubit to flip based on mode
-# State 1 (001) -> error on qubit 0
-# State 2 (010) -> error on qubit 1
-# State 4 (100) -> error on qubit 2
+# The mode tells us which qubit was flipped:
+#   State 1 (001) -> error on qubit 0
+#   State 2 (010) -> error on qubit 1
+#   State 4 (100) -> error on qubit 2
+# QFLIP corrects by re-flipping the identified qubit.
 
 IEQ R9, R7, R1       # Is it state 1? (error on q0)
 JIF R9, correct_q0

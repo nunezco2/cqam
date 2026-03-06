@@ -1,21 +1,15 @@
 # examples/qrng.cqam
-# Quantum Random Number Generator — 16-bit true random numbers
+# Quantum Random Number Generator — true random numbers
 #
 # Algorithm: Generate cryptographically random bits by:
-#   1. Prepare |0> state
-#   2. Apply Hadamard to all 16 qubits (uniform superposition)
-#   3. Measure to collapse to a random basis state
-#   4. The measurement outcome is a truly random 16-bit number
+#   1. Prepare uniform superposition
+#   2. Measure to collapse to a random basis state
+#   3. The measurement outcome is a truly random number
 #
 # Generates multiple random numbers and computes statistics to verify
 # uniformity (mean should approach N/2, variance should be high).
 #
-# Requires: default_qubits = 16
-#
-# Exercises: QPREP (zero), QHADM (full mask), QOBSERVE (DIST),
-#            HREDUCE (mode, mean, variance, argmax), ISTR/ILDM memory,
-#            loop with JIF, IADD, ISUB, FADD, FDIV, CVTIF, CVTFI,
-#            register-indirect memory ISTRX.
+# All operations are register-level — no gate-level ops required.
 
 # --- Setup ---
 ILDI R0, 8           # R0 = number of random samples to generate
@@ -24,11 +18,6 @@ ILDI R2, 0           # R2 = sample counter
 ILDI R3, 0           # R3 = sum of random values (for computing mean)
 ILDI R4, 0           # R4 = memory write pointer (starts at address 0)
 
-# Build full 16-qubit mask
-ILDI R5, 255
-ISHL R6, R5, 8
-IOR  R7, R5, R6      # R7 = 0xFFFF (all 16 qubits)
-
 # Accumulator for average
 FLDI F0, 0           # F0 = running sum of means
 FLDI F1, 0           # F1 = running sum of variances
@@ -36,20 +25,17 @@ FLDI F1, 0           # F1 = running sum of variances
 # === Random number generation loop ===
 LABEL: rng_loop
 
-# Step 1: Prepare |0...0>
-QPREP Q0, 1
+# Step 1: Prepare uniform superposition (register-level)
+QPREP Q0, 0
 
-# Step 2: Hadamard on all qubits -> uniform superposition
-QHADM Q0, Q0, R7
-
-# Step 3: Measure (collapse to random basis state)
+# Step 2: Measure (collapse to random basis state)
 QOBSERVE H0, Q0      # H0 = distribution (single outcome after collapse)
 
-# Step 4: Extract the random number
+# Step 3: Extract the random number
 HREDUCE H0, R8, 11   # R8 = mode = the random number
 HREDUCE H0, F2, 10   # F2 = mean of single-shot distribution
 
-# Step 5: Store random number to memory using indirect addressing
+# Step 4: Store random number to memory using indirect addressing
 ISTRX R8, R4         # CMEM[R4] = random number
 IADD R4, R4, R1      # R4++ (advance memory pointer)
 
@@ -70,8 +56,8 @@ CVTIF F3, R3         # F3 = sum as float
 CVTIF F4, R2         # F4 = count as float
 FDIV F5, F3, F4      # F5 = empirical mean
 
-# Expected mean for uniform on [0, 65535] is ~32767.5
-ILDI R9, 32767       # Approximate expected mean (limited by i16)
+# Expected mean for uniform distribution
+ILDI R9, 32767       # Approximate expected mean
 CVTIF F6, R9         # F6 = expected mean
 
 # Deviation from expected

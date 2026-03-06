@@ -11,10 +11,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP (uniform), QKERNEL (grover_iter, fourier),
-#            QSAMPLE (PROB, DIST), QOBSERVE (AMP), QSTORE/QLOAD,
-#            HREDUCE (magnitude, phase, mean, argmax, conj_z),
-#            IMUL, ISHL, nested loops, ILDI, ISTR memory, ZLDI.
+# All operations are register-level — no gate-level ops required.
 
 # --- Setup ---
 ILDI R0, 7           # R0 = target state for Grover oracle

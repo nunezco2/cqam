@@ -14,9 +14,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP, QKERNELF (rotate with varying angles), QKERNEL (fourier),
-#            QSAMPLE (PROB mode), QOBSERVE, HREDUCE (mean, variance, real),
-#            FLDI, FMUL, FADD, FDIV, CVTFI, loop with JIF, FSTR memory.
+# All operations are register-level — no gate-level ops required.
 
 # --- Classical setup: define the target phase ---
 FLDI F0, 1           # F0 = base angle theta = 1.0 radian

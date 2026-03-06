@@ -15,10 +15,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP (GHZ, ZERO), QKERNEL (entangle), QENCODE (F-file),
-#            QSAMPLE (DIST, PROB, AMP), QOBSERVE (AMP), HREDUCE (all types),
-#            ILDI, ISHL, IOR (build masks), FEQ comparison, ZLDI, ZSTR,
-#            HCEXEC (conditional on entanglement flag), HFORK/HMERGE.
+# All operations are register-level — no gate-level ops required.
 
 # --- Constants ---
 ILDI R0, 0           # R0 = state |0...0> index = 0

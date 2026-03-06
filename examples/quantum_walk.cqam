@@ -4,22 +4,16 @@
 # Algorithm: Implement a discrete-time quantum walk on a cycle graph.
 # Each step consists of:
 #   1. Coin operation (Hadamard on coin qubit)
-#   2. Shift operation (conditional translation)
+#   2. Shift operation (diffusion kernel mixes position states)
 #
-# In CQAM, we approximate this using:
-#   - QHADM with partial mask as the coin operator
-#   - QKERNEL diffuse as the shift/mixing operator
-#   - Multiple steps in a loop
+# The quantum walk exhibits ballistic spreading (variance ~ t^2)
+# compared to classical random walk (variance ~ t).
 #
-# The quantum walk exhibits ballistic spreading (sqrt(t) vs classical t^{1/2})
-# which we verify by tracking the variance of the probability distribution.
-#
-# Requires: default_qubits = 16
-#
-# Exercises: QPREP (zero), QHADM (partial mask — coin), QKERNEL (diffuse),
-#            QSAMPLE (DIST, PROB), QOBSERVE, HREDUCE (mean, variance),
-#            FSTR/FLDM memory, FSUB, FMUL, loop with JIF, ISUB, IADD,
-#            QSTORE/QLOAD quantum memory snapshots.
+# Gate-level justification: QHADM with a partial mask (qubit 0 only)
+# is required for the coin operation. The coin must apply Hadamard to
+# a single qubit (the coin degree of freedom) without disturbing the
+# position register. No register-level kernel can target a single
+# qubit subsystem — kernels act on the full density matrix.
 
 # --- Walk parameters ---
 ILDI R0, 20          # R0 = number of walk steps
@@ -34,7 +28,9 @@ ILDI R4, 1           # R4 = mask 0b01 (coin qubit)
 QPREP Q0, 1          # Q0 = |0...0> (walker starts at origin)
 
 # --- Apply initial coin flip ---
-QHADM Q0, Q0, R4    # Hadamard on coin qubit (creates superposition)
+# QHADM on the coin qubit creates the initial superposition
+# for the walker's direction. This per-qubit gate is required.
+QHADM Q0, Q0, R4
 
 # --- Store initial state snapshot ---
 QSTORE Q0, 0         # QMEM[0] = initial state
@@ -47,22 +43,20 @@ FSTR F0, 0           # CMEM[0] = variance at t=0
 # === Quantum walk loop ===
 LABEL: walk_loop
 
-# Step 1: Coin operation — Hadamard on coin qubit
+# Step 1: Coin operation — Hadamard on coin qubit only.
+# Per-qubit gate required: the coin is a single-qubit subsystem.
 QHADM Q0, Q0, R4
 
-# Step 2: Shift operation — diffusion mixes position states
-QKERNEL Q0, Q0, 3, R3, R3   # Diffuse (acts as shift analog)
+# Step 2: Shift operation — diffusion mixes position states (register-level)
+QKERNEL Q0, Q0, 3, R3, R3   # Diffuse kernel acts as shift analog
 
 # Track variance at each step (non-destructive)
 QSAMPLE H1, Q0, 0, R3, R3
 HREDUCE H1, F1, 13   # F1 = variance at current step
 HREDUCE H1, F2, 10   # F2 = mean position at current step
 
-# Store variance in memory at address = step + 10
-IADD R5, R2, R1      # R5 = step + 1
-ILDI R6, 10
-IADD R6, R6, R2
-FSTR F1, 100         # Store at fixed address (limited by FSTR addr range)
+# Store variance
+FSTR F1, 100
 
 # Increment step, decrement remaining
 IADD R2, R2, R1
@@ -82,9 +76,6 @@ HREDUCE H2, R8, 12   # R8 = argmax
 QLOAD Q1, 0          # Q1 = initial state snapshot
 QSAMPLE H3, Q1, 0, R3, R3
 HREDUCE H3, F5, 13   # F5 = initial variance (for comparison)
-
-# Compute spreading ratio: final_var / initial_var
-# (Would need FDIV but initial variance may be 0 for delta state)
 
 # === Store final results ===
 FSTR F3, 200         # CMEM[200] = final mean

@@ -7,9 +7,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP, QKERNEL (grover_iter), JIF loop, ISUB, QOBSERVE,
-#            HREDUCE (mode, mean, argmax, variance), ISTR/ILDM memory,
-#            IEQ comparison, QSTORE/QLOAD quantum memory, FLDI, CVTIF.
+# All operations are register-level — no gate-level ops required.
 
 # --- Classical setup ---
 ILDI R0, 42          # R0 = target state to search for

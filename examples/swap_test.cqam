@@ -18,11 +18,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP (zero, uniform, bell, ghz), QKERNELF (rotate),
-#            QKERNELZ (phase_shift), QSAMPLE (DIST, PROB, AMP),
-#            QOBSERVE, HREDUCE (mean, variance, magnitude, phase, real, imag),
-#            FSUB, FMUL, FADD, FDIV, FLT, FEQ, complex arithmetic (ZADD, ZSUB, ZMUL),
-#            QSTORE/QLOAD, multiple Q registers, FSTR/FLDM memory.
+# All operations are register-level — no gate-level ops required.
 
 # --- Setup ---
 ILDI R0, 0           # R0 = state |0> / row index

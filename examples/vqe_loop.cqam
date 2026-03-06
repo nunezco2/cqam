@@ -12,10 +12,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QKERNELF (rotate — parameterized ansatz), QSAMPLE (PROB),
-#            QOBSERVE (DIST), HREDUCE (mean, variance, real), FLDI, FADD,
-#            FSUB, FMUL, FDIV, FLT comparison, CVTIF, JIF loop,
-#            FSTR/FLDM memory, QPREP, QKERNEL (entangle, diffuse).
+# All operations are register-level — no gate-level ops required.
 
 # --- VQE parameters ---
 FLDI F0, 0           # F0 = theta (current angle parameter)

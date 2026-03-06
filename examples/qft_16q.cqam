@@ -10,10 +10,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP (zero, uniform), QKERNEL (entangle, fourier),
-#            QSAMPLE (DIST + PROB modes), QOBSERVE (AMP mode),
-#            HREDUCE (mean, magnitude, phase, real, imag), ZADD, ZMUL,
-#            QKERNELZ (phase_shift), CVTFZ.
+# All operations are register-level — no gate-level ops required.
 
 # --- Classical setup ---
 ILDI R0, 0           # R0 = basis state index 0

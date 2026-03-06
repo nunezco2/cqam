@@ -15,11 +15,7 @@
 #
 # Requires: default_qubits = 16
 #
-# Exercises: QPREP (uniform), QKERNEL (grover_iter, fourier),
-#            QSAMPLE (DIST, PROB), QOBSERVE, HREDUCE (mean, argmax, variance),
-#            QSTORE/QLOAD quantum memory, IMUL, IDIV, ISUB, IADD,
-#            nested loops, FMUL, FSUB, FDIV, CVTIF, CVTFI,
-#            FSTR/FLDM memory, ILT/IGT comparison.
+# All operations are register-level — no gate-level ops required.
 
 # --- Setup ---
 ILDI R0, 5           # R0 = target state for oracle (search for state 5)
