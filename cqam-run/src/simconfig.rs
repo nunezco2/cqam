@@ -12,6 +12,7 @@
 //! fidelity_threshold = 0.95
 //! max_cycles         = 1000
 //! enable_interrupts  = true
+//! default_qubits     = 2
 //! ```
 
 use std::fs;
@@ -43,6 +44,13 @@ pub struct SimConfig {
     /// When `false`, all maskable traps are silently discarded.
     /// Default: `true`.
     pub enable_interrupts: Option<bool>,
+
+    /// Default number of qubits per quantum register (1-16).
+    ///
+    /// Controls the dimension of the density matrix allocated by `QPREP`.
+    /// A register with `n` qubits has a 2^n x 2^n density matrix.
+    /// Default: `2` (4-state).
+    pub default_qubits: Option<u8>,
 }
 
 impl Default for SimConfig {
@@ -51,6 +59,7 @@ impl Default for SimConfig {
             fidelity_threshold: Some(0.95),
             max_cycles: Some(1000),
             enable_interrupts: Some(true),
+            default_qubits: None, // use VM default (2 qubits)
         }
     }
 }

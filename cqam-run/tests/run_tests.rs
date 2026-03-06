@@ -134,6 +134,7 @@ fn test_max_cycles_enforcement() {
         fidelity_threshold: None,
         max_cycles: Some(10),
         enable_interrupts: Some(false),
+        default_qubits: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -158,6 +159,7 @@ fn test_max_cycles_allows_short_programs() {
         fidelity_threshold: None,
         max_cycles: Some(100),
         enable_interrupts: Some(false),
+        default_qubits: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -237,6 +239,7 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         fidelity_threshold: None,
         max_cycles: Some(100),
         enable_interrupts: Some(false),
+        default_qubits: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -284,6 +287,7 @@ fn test_fidelity_threshold_wiring() {
         fidelity_threshold: Some(0.85),
         max_cycles: Some(100),
         enable_interrupts: Some(true),
+        default_qubits: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();

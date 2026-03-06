@@ -49,6 +49,9 @@ pub fn run_program_with_config(
         ctx.config.min_superposition = threshold;
         ctx.config.min_entanglement = threshold;
     }
+    if let Some(qubits) = config.default_qubits {
+        ctx.config.default_qubits = qubits;
+    }
 
     while ctx.pc < ctx.program.len() {
         // Enforce max_cycles loop guard
