@@ -16,6 +16,9 @@ use crate::complex::{self, cx_exp_i, cx_mul};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
+use rayon::prelude::*;
+
+const PAR_THRESHOLD: usize = 256;
 
 /// Diagonal rotation kernel parameterized by angle theta.
 ///
@@ -45,13 +48,20 @@ impl Kernel for Rotate {
     }
 
     fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
-        // Diagonal unitary: just multiply each amplitude by exp(i*theta*k).
-        // O(2^n) with no matrix allocation.
+        let dim = input.dimension();
         let amps = input.amplitudes();
-        let result_amps: Vec<_> = amps.iter().enumerate().map(|(k, &amp)| {
-            let phase = cx_exp_i(self.theta * (k as f64));
-            cx_mul(phase, amp)
-        }).collect();
+        let theta = self.theta;
+        let result_amps: Vec<_> = if dim >= PAR_THRESHOLD {
+            amps.par_iter().enumerate().map(|(k, &amp)| {
+                let phase = cx_exp_i(theta * (k as f64));
+                cx_mul(phase, amp)
+            }).collect()
+        } else {
+            amps.iter().enumerate().map(|(k, &amp)| {
+                let phase = cx_exp_i(theta * (k as f64));
+                cx_mul(phase, amp)
+            }).collect()
+        };
         Ok(Statevector::from_amplitudes(result_amps)
             .expect("Rotate apply_sv produced invalid amplitudes"))
     }

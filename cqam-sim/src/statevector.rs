@@ -16,6 +16,10 @@ use crate::complex::{self, C64, cx_add, cx_mul, cx_scale, cx_norm_sq};
 use crate::density_matrix::DensityMatrix;
 use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
+use rayon::prelude::*;
+
+/// Minimum dimension to use parallel iteration.
+const PAR_THRESHOLD: usize = 256;
 
 /// Maximum qubits for statevector backend.
 pub const MAX_SV_QUBITS: u8 = 24;
@@ -160,14 +164,26 @@ impl Statevector {
         assert_eq!(unitary.len(), dim * dim,
             "Unitary size mismatch: expected {}, got {}", dim * dim, unitary.len());
 
-        let mut result = vec![complex::ZERO; dim];
-        for i in 0..dim {
-            let mut sum = complex::ZERO;
-            for k in 0..dim {
-                sum = cx_add(sum, cx_mul(unitary[i * dim + k], self.amplitudes[k]));
+        let amps = &self.amplitudes;
+        let result: Vec<C64> = if dim >= PAR_THRESHOLD {
+            (0..dim).into_par_iter().map(|i| {
+                let mut sum = complex::ZERO;
+                for k in 0..dim {
+                    sum = cx_add(sum, cx_mul(unitary[i * dim + k], amps[k]));
+                }
+                sum
+            }).collect()
+        } else {
+            let mut result = vec![complex::ZERO; dim];
+            for i in 0..dim {
+                let mut sum = complex::ZERO;
+                for k in 0..dim {
+                    sum = cx_add(sum, cx_mul(unitary[i * dim + k], amps[k]));
+                }
+                result[i] = sum;
             }
-            result[i] = sum;
-        }
+            result
+        };
         self.amplitudes = result;
     }
 
@@ -187,15 +203,32 @@ impl Statevector {
 
         let [g00, g01, g10, g11] = *gate;
 
-        for i0 in 0..dim {
-            if i0 & mask != 0 {
-                continue;
+        if dim >= PAR_THRESHOLD {
+            let pairs: Vec<usize> = (0..dim).filter(|&i0| i0 & mask == 0).collect();
+            let updates: Vec<(usize, C64, C64)> = pairs.par_iter().map(|&i0| {
+                let i1 = i0 | mask;
+                let a0 = self.amplitudes[i0];
+                let a1 = self.amplitudes[i1];
+                (i0,
+                 cx_add(cx_mul(g00, a0), cx_mul(g01, a1)),
+                 cx_add(cx_mul(g10, a0), cx_mul(g11, a1)))
+            }).collect();
+            for (i0, v0, v1) in updates {
+                let i1 = i0 | mask;
+                self.amplitudes[i0] = v0;
+                self.amplitudes[i1] = v1;
             }
-            let i1 = i0 | mask;
-            let a0 = self.amplitudes[i0];
-            let a1 = self.amplitudes[i1];
-            self.amplitudes[i0] = cx_add(cx_mul(g00, a0), cx_mul(g01, a1));
-            self.amplitudes[i1] = cx_add(cx_mul(g10, a0), cx_mul(g11, a1));
+        } else {
+            for i0 in 0..dim {
+                if i0 & mask != 0 {
+                    continue;
+                }
+                let i1 = i0 | mask;
+                let a0 = self.amplitudes[i0];
+                let a1 = self.amplitudes[i1];
+                self.amplitudes[i0] = cx_add(cx_mul(g00, a0), cx_mul(g01, a1));
+                self.amplitudes[i1] = cx_add(cx_mul(g10, a0), cx_mul(g11, a1));
+            }
         }
     }
 
@@ -216,29 +249,58 @@ impl Statevector {
         let ctrl_mask = 1usize << ctrl_bit;
         let tgt_mask = 1usize << tgt_bit;
 
-        for base in 0..dim {
-            if base & (ctrl_mask | tgt_mask) != 0 {
-                continue;
-            }
-            let i00 = base;
-            let i01 = base | tgt_mask;
-            let i10 = base | ctrl_mask;
-            let i11 = base | ctrl_mask | tgt_mask;
+        let bases: Vec<usize> = (0..dim)
+            .filter(|&base| base & (ctrl_mask | tgt_mask) == 0)
+            .collect();
 
-            let idxs = [i00, i01, i10, i11];
-            let orig: [C64; 4] = [
-                self.amplitudes[i00],
-                self.amplitudes[i01],
-                self.amplitudes[i10],
-                self.amplitudes[i11],
-            ];
-
-            for (a, &idx) in idxs.iter().enumerate() {
-                let mut sum = complex::ZERO;
-                for b in 0..4 {
-                    sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+        if dim >= PAR_THRESHOLD {
+            let updates: Vec<([usize; 4], [C64; 4])> = bases.par_iter().map(|&base| {
+                let i00 = base;
+                let i01 = base | tgt_mask;
+                let i10 = base | ctrl_mask;
+                let i11 = base | ctrl_mask | tgt_mask;
+                let idxs = [i00, i01, i10, i11];
+                let orig = [
+                    self.amplitudes[i00],
+                    self.amplitudes[i01],
+                    self.amplitudes[i10],
+                    self.amplitudes[i11],
+                ];
+                let mut results = [complex::ZERO; 4];
+                for a in 0..4 {
+                    let mut sum = complex::ZERO;
+                    for b in 0..4 {
+                        sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                    }
+                    results[a] = sum;
                 }
-                self.amplitudes[idx] = sum;
+                (idxs, results)
+            }).collect();
+            for (idxs, results) in updates {
+                for (i, &idx) in idxs.iter().enumerate() {
+                    self.amplitudes[idx] = results[i];
+                }
+            }
+        } else {
+            for &base in &bases {
+                let i00 = base;
+                let i01 = base | tgt_mask;
+                let i10 = base | ctrl_mask;
+                let i11 = base | ctrl_mask | tgt_mask;
+                let idxs = [i00, i01, i10, i11];
+                let orig = [
+                    self.amplitudes[i00],
+                    self.amplitudes[i01],
+                    self.amplitudes[i10],
+                    self.amplitudes[i11],
+                ];
+                for (a, &idx) in idxs.iter().enumerate() {
+                    let mut sum = complex::ZERO;
+                    for b in 0..4 {
+                        sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                    }
+                    self.amplitudes[idx] = sum;
+                }
             }
         }
     }
@@ -262,12 +324,20 @@ impl Statevector {
         let mask = 1usize << bit;
 
         // Compute p(0)
-        let mut p0: f64 = 0.0;
-        for k in 0..dim {
-            if k & mask == 0 {
-                p0 += cx_norm_sq(self.amplitudes[k]);
+        let mut p0: f64 = if dim >= PAR_THRESHOLD {
+            (0..dim).into_par_iter()
+                .filter(|&k| k & mask == 0)
+                .map(|k| cx_norm_sq(self.amplitudes[k]))
+                .sum()
+        } else {
+            let mut p0 = 0.0;
+            for k in 0..dim {
+                if k & mask == 0 {
+                    p0 += cx_norm_sq(self.amplitudes[k]);
+                }
             }
-        }
+            p0
+        };
         p0 = p0.clamp(0.0, 1.0);
         let p1 = 1.0 - p0;
 
@@ -279,18 +349,35 @@ impl Statevector {
 
         // Project and renormalize
         let outcome_bit = if outcome == 0 { 0 } else { mask };
-        let mut result = self.amplitudes.clone();
-        for (k, val) in result.iter_mut().enumerate().take(dim) {
-            if (k & mask) != outcome_bit {
-                *val = complex::ZERO;
+        let mut result = if dim >= PAR_THRESHOLD {
+            self.amplitudes.par_iter().enumerate().map(|(k, &val)| {
+                if (k & mask) != outcome_bit {
+                    complex::ZERO
+                } else {
+                    val
+                }
+            }).collect::<Vec<C64>>()
+        } else {
+            let mut result = self.amplitudes.clone();
+            for (k, val) in result.iter_mut().enumerate().take(dim) {
+                if (k & mask) != outcome_bit {
+                    *val = complex::ZERO;
+                }
             }
-        }
+            result
+        };
 
         // Renormalize
         if p_outcome > 1e-30 {
             let inv_norm = 1.0 / p_outcome.sqrt();
-            for amp in result.iter_mut() {
-                *amp = cx_scale(inv_norm, *amp);
+            if dim >= PAR_THRESHOLD {
+                result.par_iter_mut().for_each(|amp| {
+                    *amp = cx_scale(inv_norm, *amp);
+                });
+            } else {
+                for amp in result.iter_mut() {
+                    *amp = cx_scale(inv_norm, *amp);
+                }
             }
         }
 
@@ -338,7 +425,12 @@ impl Statevector {
 
     /// Extract diagonal probabilities: |alpha_k|^2 for each k.
     pub fn diagonal_probabilities(&self) -> Vec<f64> {
-        self.amplitudes.iter().map(|z| cx_norm_sq(*z)).collect()
+        let dim = self.dimension();
+        if dim >= PAR_THRESHOLD {
+            self.amplitudes.par_iter().map(|z| cx_norm_sq(*z)).collect()
+        } else {
+            self.amplitudes.iter().map(|z| cx_norm_sq(*z)).collect()
+        }
     }
 }
 
@@ -371,13 +463,24 @@ impl Statevector {
 
         let dim_a = self.dimension();
         let dim_b = other.dimension();
-        let mut amplitudes = Vec::with_capacity(dim_a * dim_b);
+        let total_dim = dim_a * dim_b;
 
-        for i in 0..dim_a {
-            for j in 0..dim_b {
-                amplitudes.push(cx_mul(self.amplitudes[i], other.amplitudes[j]));
+        let amplitudes: Vec<C64> = if total_dim >= PAR_THRESHOLD {
+            let self_amps = &self.amplitudes;
+            let other_amps = &other.amplitudes;
+            (0..dim_a).into_par_iter().flat_map(|i| {
+                let a_i = self_amps[i];
+                (0..dim_b).map(|j| cx_mul(a_i, other_amps[j])).collect::<Vec<_>>()
+            }).collect()
+        } else {
+            let mut amplitudes = Vec::with_capacity(total_dim);
+            for i in 0..dim_a {
+                for j in 0..dim_b {
+                    amplitudes.push(cx_mul(self.amplitudes[i], other.amplitudes[j]));
+                }
             }
-        }
+            amplitudes
+        };
 
         Statevector {
             num_qubits: n_total,

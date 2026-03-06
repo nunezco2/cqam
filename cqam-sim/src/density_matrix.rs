@@ -8,6 +8,10 @@
 use crate::complex::{self, C64, cx_add, cx_mul, cx_conj, cx_scale, cx_norm_sq};
 use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
+use rayon::prelude::*;
+
+/// Minimum dimension to use parallel iteration. Below this, sequential is faster.
+const PAR_THRESHOLD: usize = 256;
 
 /// Maximum number of qubits supported by the full density matrix.
 pub const MAX_QUBITS: u8 = 16;
@@ -265,30 +269,60 @@ impl DensityMatrix {
         assert_eq!(unitary.len(), dim * dim,
             "Unitary size mismatch: expected {}, got {}", dim * dim, unitary.len());
 
-        // Step 1: temp = U * rho
-        let mut temp = vec![complex::ZERO; dim * dim];
-        for i in 0..dim {
-            for j in 0..dim {
-                let mut sum = complex::ZERO;
-                for k in 0..dim {
-                    sum = cx_add(sum, cx_mul(unitary[i * dim + k], self.data[k * dim + j]));
+        // Step 1: temp = U * rho (parallelize outer row loop)
+        let rho = &self.data;
+        let temp: Vec<C64> = if dim >= PAR_THRESHOLD {
+            (0..dim).into_par_iter().flat_map(|i| {
+                let mut row = vec![complex::ZERO; dim];
+                for j in 0..dim {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim {
+                        sum = cx_add(sum, cx_mul(unitary[i * dim + k], rho[k * dim + j]));
+                    }
+                    row[j] = sum;
                 }
-                temp[i * dim + j] = sum;
+                row
+            }).collect()
+        } else {
+            let mut temp = vec![complex::ZERO; dim * dim];
+            for i in 0..dim {
+                for j in 0..dim {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim {
+                        sum = cx_add(sum, cx_mul(unitary[i * dim + k], rho[k * dim + j]));
+                    }
+                    temp[i * dim + j] = sum;
+                }
             }
-        }
+            temp
+        };
 
-        // Step 2: result = temp * U^dagger
-        // U^dagger[k][j] = conj(U[j][k])
-        for i in 0..dim {
-            for j in 0..dim {
-                let mut sum = complex::ZERO;
-                for k in 0..dim {
-                    // U^dagger[k][j] = conj(U[j][k])
-                    sum = cx_add(sum, cx_mul(temp[i * dim + k], cx_conj(unitary[j * dim + k])));
+        // Step 2: result = temp * U^dagger (parallelize outer row loop)
+        self.data = if dim >= PAR_THRESHOLD {
+            (0..dim).into_par_iter().flat_map(|i| {
+                let mut row = vec![complex::ZERO; dim];
+                for j in 0..dim {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim {
+                        sum = cx_add(sum, cx_mul(temp[i * dim + k], cx_conj(unitary[j * dim + k])));
+                    }
+                    row[j] = sum;
                 }
-                self.data[i * dim + j] = sum;
+                row
+            }).collect()
+        } else {
+            let mut result = vec![complex::ZERO; dim * dim];
+            for i in 0..dim {
+                for j in 0..dim {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim {
+                        sum = cx_add(sum, cx_mul(temp[i * dim + k], cx_conj(unitary[j * dim + k])));
+                    }
+                    result[i * dim + j] = sum;
+                }
             }
-        }
+            result
+        };
     }
 }
 
@@ -413,7 +447,11 @@ impl DensityMatrix {
     /// Extract the diagonal probabilities as a Vec.
     pub fn diagonal_probabilities(&self) -> Vec<f64> {
         let dim = self.dimension();
-        (0..dim).map(|k| self.data[k * dim + k].0).collect()
+        if dim >= PAR_THRESHOLD {
+            (0..dim).into_par_iter().map(|k| self.data[k * dim + k].0).collect()
+        } else {
+            (0..dim).map(|k| self.data[k * dim + k].0).collect()
+        }
     }
 }
 
@@ -427,7 +465,12 @@ impl DensityMatrix {
     /// Computed as sum_{i,j} |rho[i][j]|^2 (which equals Tr(rho^2) for
     /// Hermitian rho).
     pub fn purity(&self) -> f64 {
-        self.data.iter().map(|z| cx_norm_sq(*z)).sum()
+        let dim = self.dimension();
+        if dim >= PAR_THRESHOLD {
+            self.data.par_iter().map(|z| cx_norm_sq(*z)).sum()
+        } else {
+            self.data.iter().map(|z| cx_norm_sq(*z)).sum()
+        }
     }
 
     /// Shannon entropy of the diagonal probability distribution, normalized
@@ -485,10 +528,17 @@ impl DensityMatrix {
             return 0.0;
         }
         let eigenvalues = self.eigenvalues();
-        let raw_entropy: f64 = eigenvalues.iter()
-            .filter(|&&lam| lam > 1e-15)
-            .map(|&lam| -lam * lam.ln())
-            .sum();
+        let raw_entropy: f64 = if dim >= PAR_THRESHOLD {
+            eigenvalues.par_iter()
+                .filter(|&&lam| lam > 1e-15)
+                .map(|&lam| -lam * lam.ln())
+                .sum()
+        } else {
+            eigenvalues.iter()
+                .filter(|&&lam| lam > 1e-15)
+                .map(|&lam| -lam * lam.ln())
+                .sum()
+        };
         let max_entropy = (dim as f64).ln();
         if max_entropy > 0.0 {
             raw_entropy / max_entropy
@@ -523,20 +573,35 @@ impl DensityMatrix {
         let dim_b = 1usize << (self.num_qubits - num_qubits_a);
         let dim = self.dimension();
 
-        let mut rho_a = vec![complex::ZERO; dim_a * dim_a];
-
         // rho_A[i][j] = sum_k rho[i*dim_b + k][j*dim_b + k]
-        for i in 0..dim_a {
-            for j in 0..dim_a {
-                let mut sum = complex::ZERO;
-                for k in 0..dim_b {
-                    let row = i * dim_b + k;
-                    let col = j * dim_b + k;
-                    sum = cx_add(sum, self.data[row * dim + col]);
+        let rho_a: Vec<C64> = if dim >= PAR_THRESHOLD {
+            let data = &self.data;
+            (0..dim_a).into_par_iter().flat_map(|i| {
+                (0..dim_a).map(|j| {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim_b {
+                        let r = i * dim_b + k;
+                        let c = j * dim_b + k;
+                        sum = cx_add(sum, data[r * dim + c]);
+                    }
+                    sum
+                }).collect::<Vec<_>>()
+            }).collect()
+        } else {
+            let mut rho_a = vec![complex::ZERO; dim_a * dim_a];
+            for i in 0..dim_a {
+                for j in 0..dim_a {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim_b {
+                        let row = i * dim_b + k;
+                        let col = j * dim_b + k;
+                        sum = cx_add(sum, self.data[row * dim + col]);
+                    }
+                    rho_a[i * dim_a + j] = sum;
                 }
-                rho_a[i * dim_a + j] = sum;
             }
-        }
+            rho_a
+        };
 
         DensityMatrix {
             num_qubits: num_qubits_a,
@@ -633,65 +698,117 @@ impl DensityMatrix {
         let ctrl_mask = 1usize << ctrl_bit;
         let tgt_mask = 1usize << tgt_bit;
 
+        // Collect valid base indices (where both ctrl and tgt bits are 0)
+        let bases: Vec<usize> = (0..dim)
+            .filter(|&base| base & (ctrl_mask | tgt_mask) == 0)
+            .collect();
+
         // Step 1: Apply gate to rows: temp = G * rho
         let mut temp = self.data.clone();
-        for base in 0..dim {
-            // Skip indices that have any of the ctrl or tgt bits set;
-            // we process them via the base index where both bits are 0.
-            if base & (ctrl_mask | tgt_mask) != 0 {
-                continue;
-            }
-            // The 4 basis states for (ctrl_bit, tgt_bit) combinations:
-            let i00 = base;
-            let i01 = base | tgt_mask;
-            let i10 = base | ctrl_mask;
-            let i11 = base | ctrl_mask | tgt_mask;
-
-            let idxs = [i00, i01, i10, i11];
-
-            for j in 0..dim {
-                let orig = [
-                    self.data[i00 * dim + j],
-                    self.data[i01 * dim + j],
-                    self.data[i10 * dim + j],
-                    self.data[i11 * dim + j],
-                ];
-                for (a, &row_idx) in idxs.iter().enumerate() {
-                    let mut sum = complex::ZERO;
-                    for (b, &_col_idx) in idxs.iter().enumerate() {
-                        sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+        if dim >= PAR_THRESHOLD {
+            // Each base produces 4 rows of updates; collect (flat_idx, value) pairs
+            let updates: Vec<(usize, C64)> = bases.par_iter().flat_map(|&base| {
+                let i00 = base;
+                let i01 = base | tgt_mask;
+                let i10 = base | ctrl_mask;
+                let i11 = base | ctrl_mask | tgt_mask;
+                let idxs = [i00, i01, i10, i11];
+                let mut local: Vec<(usize, C64)> = Vec::with_capacity(4 * dim);
+                for j in 0..dim {
+                    let orig = [
+                        self.data[i00 * dim + j],
+                        self.data[i01 * dim + j],
+                        self.data[i10 * dim + j],
+                        self.data[i11 * dim + j],
+                    ];
+                    for (a, &row_idx) in idxs.iter().enumerate() {
+                        let mut sum = complex::ZERO;
+                        for b in 0..4 {
+                            sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                        }
+                        local.push((row_idx * dim + j, sum));
                     }
-                    temp[row_idx * dim + j] = sum;
+                }
+                local
+            }).collect();
+            for (idx, val) in updates {
+                temp[idx] = val;
+            }
+        } else {
+            for &base in &bases {
+                let i00 = base;
+                let i01 = base | tgt_mask;
+                let i10 = base | ctrl_mask;
+                let i11 = base | ctrl_mask | tgt_mask;
+                let idxs = [i00, i01, i10, i11];
+                for j in 0..dim {
+                    let orig = [
+                        self.data[i00 * dim + j],
+                        self.data[i01 * dim + j],
+                        self.data[i10 * dim + j],
+                        self.data[i11 * dim + j],
+                    ];
+                    for (a, &row_idx) in idxs.iter().enumerate() {
+                        let mut sum = complex::ZERO;
+                        for b in 0..4 {
+                            sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                        }
+                        temp[row_idx * dim + j] = sum;
+                    }
                 }
             }
         }
 
         // Step 2: Apply gate^dagger to columns: result = temp * G^dagger
-        for base in 0..dim {
-            if base & (ctrl_mask | tgt_mask) != 0 {
-                continue;
-            }
-            let j00 = base;
-            let j01 = base | tgt_mask;
-            let j10 = base | ctrl_mask;
-            let j11 = base | ctrl_mask | tgt_mask;
-
-            let jdxs = [j00, j01, j10, j11];
-
-            for i in 0..dim {
-                let orig = [
-                    temp[i * dim + j00],
-                    temp[i * dim + j01],
-                    temp[i * dim + j10],
-                    temp[i * dim + j11],
-                ];
-                for (a, &col_idx) in jdxs.iter().enumerate() {
-                    let mut sum = complex::ZERO;
-                    for (b, &_) in jdxs.iter().enumerate() {
-                        // G^dagger[b][a] = conj(G[a][b])
-                        sum = cx_add(sum, cx_mul(orig[b], cx_conj(gate[a * 4 + b])));
+        if dim >= PAR_THRESHOLD {
+            let updates: Vec<(usize, C64)> = bases.par_iter().flat_map(|&base| {
+                let j00 = base;
+                let j01 = base | tgt_mask;
+                let j10 = base | ctrl_mask;
+                let j11 = base | ctrl_mask | tgt_mask;
+                let jdxs = [j00, j01, j10, j11];
+                let mut local: Vec<(usize, C64)> = Vec::with_capacity(4 * dim);
+                for i in 0..dim {
+                    let orig = [
+                        temp[i * dim + j00],
+                        temp[i * dim + j01],
+                        temp[i * dim + j10],
+                        temp[i * dim + j11],
+                    ];
+                    for (a, &col_idx) in jdxs.iter().enumerate() {
+                        let mut sum = complex::ZERO;
+                        for b in 0..4 {
+                            sum = cx_add(sum, cx_mul(orig[b], cx_conj(gate[a * 4 + b])));
+                        }
+                        local.push((i * dim + col_idx, sum));
                     }
-                    self.data[i * dim + col_idx] = sum;
+                }
+                local
+            }).collect();
+            for (idx, val) in updates {
+                self.data[idx] = val;
+            }
+        } else {
+            for &base in &bases {
+                let j00 = base;
+                let j01 = base | tgt_mask;
+                let j10 = base | ctrl_mask;
+                let j11 = base | ctrl_mask | tgt_mask;
+                let jdxs = [j00, j01, j10, j11];
+                for i in 0..dim {
+                    let orig = [
+                        temp[i * dim + j00],
+                        temp[i * dim + j01],
+                        temp[i * dim + j10],
+                        temp[i * dim + j11],
+                    ];
+                    for (a, &col_idx) in jdxs.iter().enumerate() {
+                        let mut sum = complex::ZERO;
+                        for b in 0..4 {
+                            sum = cx_add(sum, cx_mul(orig[b], cx_conj(gate[a * 4 + b])));
+                        }
+                        self.data[i * dim + col_idx] = sum;
+                    }
                 }
             }
         }
@@ -774,22 +891,44 @@ impl DensityMatrix {
         let dim_a = self.dimension();
         let dim_b = other.dimension();
         let dim_ab = dim_a * dim_b;
-        let mut data = vec![complex::ZERO; dim_ab * dim_ab];
 
         // Kronecker product: result[i*dim_b + j][k*dim_b + l] = self[i][k] * other[j][l]
-        for i in 0..dim_a {
-            for j in 0..dim_b {
-                let row = i * dim_b + j;
-                for k in 0..dim_a {
-                    let a_ik = self.data[i * dim_a + k];
-                    for l in 0..dim_b {
-                        let col = k * dim_b + l;
-                        let b_jl = other.data[j * dim_b + l];
-                        data[row * dim_ab + col] = cx_mul(a_ik, b_jl);
+        let data: Vec<C64> = if dim_ab >= PAR_THRESHOLD {
+            let self_data = &self.data;
+            let other_data = &other.data;
+            (0..dim_a).into_par_iter().flat_map(|i| {
+                let mut block = vec![complex::ZERO; dim_b * dim_ab];
+                for j in 0..dim_b {
+                    let row = i * dim_b + j;
+                    for k in 0..dim_a {
+                        let a_ik = self_data[i * dim_a + k];
+                        for l in 0..dim_b {
+                            let col = k * dim_b + l;
+                            let b_jl = other_data[j * dim_b + l];
+                            block[j * dim_ab + col] = cx_mul(a_ik, b_jl);
+                        }
+                    }
+                    let _ = row; // used for clarity
+                }
+                block
+            }).collect()
+        } else {
+            let mut data = vec![complex::ZERO; dim_ab * dim_ab];
+            for i in 0..dim_a {
+                for j in 0..dim_b {
+                    let row = i * dim_b + j;
+                    for k in 0..dim_a {
+                        let a_ik = self.data[i * dim_a + k];
+                        for l in 0..dim_b {
+                            let col = k * dim_b + l;
+                            let b_jl = other.data[j * dim_b + l];
+                            data[row * dim_ab + col] = cx_mul(a_ik, b_jl);
+                        }
                     }
                 }
             }
-        }
+            data
+        };
 
         DensityMatrix {
             num_qubits: n_total,
@@ -884,19 +1023,37 @@ fn jacobi_eigenvalues(
 
     for _sweep in 0..max_sweeps {
         // Find the off-diagonal element with largest magnitude
-        let mut max_val = 0.0_f64;
-        let mut p = 0;
-        let mut q = 1;
-        for i in 0..dim {
-            for j in (i + 1)..dim {
-                let mag = cx_norm_sq(matrix[i * dim + j]);
-                if mag > max_val {
-                    max_val = mag;
-                    p = i;
-                    q = j;
+        let (max_val, p, q) = if dim >= PAR_THRESHOLD {
+            (0..dim).into_par_iter().map(|i| {
+                let mut local_max = 0.0_f64;
+                let mut local_p = i;
+                let mut local_q = if i + 1 < dim { i + 1 } else { i };
+                for j in (i + 1)..dim {
+                    let mag = cx_norm_sq(matrix[i * dim + j]);
+                    if mag > local_max {
+                        local_max = mag;
+                        local_p = i;
+                        local_q = j;
+                    }
+                }
+                (local_max, local_p, local_q)
+            }).reduce(|| (0.0_f64, 0, 1), |a, b| if a.0 >= b.0 { a } else { b })
+        } else {
+            let mut max_val = 0.0_f64;
+            let mut p = 0;
+            let mut q = 1;
+            for i in 0..dim {
+                for j in (i + 1)..dim {
+                    let mag = cx_norm_sq(matrix[i * dim + j]);
+                    if mag > max_val {
+                        max_val = mag;
+                        p = i;
+                        q = j;
+                    }
                 }
             }
-        }
+            (max_val, p, q)
+        };
 
         // Check convergence
         if max_val.sqrt() < tolerance {
@@ -943,30 +1100,48 @@ fn jacobi_eigenvalues(
         matrix[q * dim + p] = (0.0, 0.0);
 
         // Update the rest of rows/columns p and q
-        for r in 0..dim {
-            if r == p || r == q {
-                continue;
+        if dim >= PAR_THRESHOLD {
+            let updates: Vec<(usize, C64, C64)> = (0..dim).into_par_iter()
+                .filter(|&r| r != p && r != q)
+                .map(|r| {
+                    let arp = matrix[r * dim + p];
+                    let arq = matrix[r * dim + q];
+                    let new_rp = cx_add(
+                        cx_scale(c, arp),
+                        cx_scale(-s, cx_mul(phase_conj, arq)),
+                    );
+                    let new_rq = cx_add(
+                        cx_scale(s, cx_mul(phase, arp)),
+                        cx_scale(c, arq),
+                    );
+                    (r, new_rp, new_rq)
+                }).collect();
+            for (r, new_rp, new_rq) in updates {
+                matrix[r * dim + p] = new_rp;
+                matrix[r * dim + q] = new_rq;
+                matrix[p * dim + r] = cx_conj(new_rp);
+                matrix[q * dim + r] = cx_conj(new_rq);
             }
-
-            let arp = matrix[r * dim + p];
-            let arq = matrix[r * dim + q];
-
-            // a'[r][p] = c * a[r][p] - s * e^{-i*phi} * a[r][q]
-            let new_rp = cx_add(
-                cx_scale(c, arp),
-                cx_scale(-s, cx_mul(phase_conj, arq)),
-            );
-            // a'[r][q] = s * e^{i*phi} * a[r][p] + c * a[r][q]
-            let new_rq = cx_add(
-                cx_scale(s, cx_mul(phase, arp)),
-                cx_scale(c, arq),
-            );
-
-            matrix[r * dim + p] = new_rp;
-            matrix[r * dim + q] = new_rq;
-            // Hermitian: a[p][r] = conj(a[r][p]), a[q][r] = conj(a[r][q])
-            matrix[p * dim + r] = cx_conj(new_rp);
-            matrix[q * dim + r] = cx_conj(new_rq);
+        } else {
+            for r in 0..dim {
+                if r == p || r == q {
+                    continue;
+                }
+                let arp = matrix[r * dim + p];
+                let arq = matrix[r * dim + q];
+                let new_rp = cx_add(
+                    cx_scale(c, arp),
+                    cx_scale(-s, cx_mul(phase_conj, arq)),
+                );
+                let new_rq = cx_add(
+                    cx_scale(s, cx_mul(phase, arp)),
+                    cx_scale(c, arq),
+                );
+                matrix[r * dim + p] = new_rp;
+                matrix[r * dim + q] = new_rq;
+                matrix[p * dim + r] = cx_conj(new_rp);
+                matrix[q * dim + r] = cx_conj(new_rq);
+            }
         }
     }
 

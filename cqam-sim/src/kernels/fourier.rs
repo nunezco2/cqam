@@ -6,6 +6,9 @@ use crate::complex::{self, C64, cx_scale, cx_exp_i, cx_mul};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
+use rayon::prelude::*;
+
+const PAR_THRESHOLD: usize = 256;
 
 /// Quantum Fourier Transform kernel (kernel_id = 2).
 ///
@@ -67,9 +70,17 @@ impl Kernel for Fourier {
                 let phase = cx_exp_i(angle);
                 // Apply phase only when both qubit j and qubit k are |1>
                 let mask = bit_j | bit_k;
-                for (state, amp) in amps.iter_mut().enumerate() {
-                    if (state & mask) == mask {
-                        *amp = cx_mul(phase, *amp);
+                if dim >= PAR_THRESHOLD {
+                    amps.par_iter_mut().enumerate().for_each(|(state, amp)| {
+                        if (state & mask) == mask {
+                            *amp = cx_mul(phase, *amp);
+                        }
+                    });
+                } else {
+                    for (state, amp) in amps.iter_mut().enumerate() {
+                        if (state & mask) == mask {
+                            *amp = cx_mul(phase, *amp);
+                        }
                     }
                 }
             }

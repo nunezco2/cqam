@@ -13,6 +13,9 @@ use crate::complex::{self, cx_exp_i, cx_mul, cx_norm};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
+use rayon::prelude::*;
+
+const PAR_THRESHOLD: usize = 256;
 
 /// Phase shift kernel parameterized by a complex amplitude.
 ///
@@ -43,14 +46,20 @@ impl Kernel for PhaseShift {
     }
 
     fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
-        // Diagonal unitary: just multiply each amplitude by exp(i*|z|*k).
-        // O(2^n) with no matrix allocation.
+        let dim = input.dimension();
         let rate = cx_norm(self.amplitude);
         let amps = input.amplitudes();
-        let result_amps: Vec<_> = amps.iter().enumerate().map(|(k, &amp)| {
-            let phase = cx_exp_i(rate * (k as f64));
-            cx_mul(phase, amp)
-        }).collect();
+        let result_amps: Vec<_> = if dim >= PAR_THRESHOLD {
+            amps.par_iter().enumerate().map(|(k, &amp)| {
+                let phase = cx_exp_i(rate * (k as f64));
+                cx_mul(phase, amp)
+            }).collect()
+        } else {
+            amps.iter().enumerate().map(|(k, &amp)| {
+                let phase = cx_exp_i(rate * (k as f64));
+                cx_mul(phase, amp)
+            }).collect()
+        };
         Ok(Statevector::from_amplitudes(result_amps)
             .expect("PhaseShift apply_sv produced invalid amplitudes"))
     }

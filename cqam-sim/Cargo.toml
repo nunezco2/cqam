@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 cqam-core = { path = "../cqam-core" }
 rand = "0.8"
+rayon = "1.10"

@@ -5,6 +5,9 @@ use crate::complex::{self, C64, cx_add, cx_scale};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
+use rayon::prelude::*;
+
+const PAR_THRESHOLD: usize = 256;
 
 /// One Grover iteration kernel (kernel_id = 4).
 ///
@@ -97,20 +100,39 @@ impl Kernel for GroverIter {
 
         // Step 1: Oracle - flip sign of target amplitudes (O(dim))
         let mut amps: Vec<C64> = input.amplitudes().to_vec();
-        for &t in &target_set {
-            amps[t] = (-amps[t].0, -amps[t].1);
+        if dim >= PAR_THRESHOLD {
+            amps.par_iter_mut().enumerate().for_each(|(k, amp)| {
+                if target_set.contains(&k) {
+                    *amp = (-amp.0, -amp.1);
+                }
+            });
+        } else {
+            for &t in &target_set {
+                amps[t] = (-amps[t].0, -amps[t].1);
+            }
         }
 
         // Step 2: Diffusion - D|psi> = 2*mean - psi_k (O(dim))
-        let mut mean = complex::ZERO;
-        for amp in amps.iter().take(dim) {
-            mean = cx_add(mean, *amp);
-        }
-        mean = cx_scale(1.0 / n_f64, mean);
+        let mean = if dim >= PAR_THRESHOLD {
+            let sum = amps.par_iter().copied().reduce(|| complex::ZERO, cx_add);
+            cx_scale(1.0 / n_f64, sum)
+        } else {
+            let mut m = complex::ZERO;
+            for amp in amps.iter().take(dim) {
+                m = cx_add(m, *amp);
+            }
+            cx_scale(1.0 / n_f64, m)
+        };
 
-        for amp in amps.iter_mut().take(dim) {
-            let two_mean = cx_scale(2.0, mean);
-            *amp = (two_mean.0 - amp.0, two_mean.1 - amp.1);
+        let two_mean = cx_scale(2.0, mean);
+        if dim >= PAR_THRESHOLD {
+            amps = amps.par_iter().map(|amp| {
+                (two_mean.0 - amp.0, two_mean.1 - amp.1)
+            }).collect();
+        } else {
+            for amp in amps.iter_mut().take(dim) {
+                *amp = (two_mean.0 - amp.0, two_mean.1 - amp.1);
+            }
         }
 
         Ok(Statevector::from_amplitudes(amps)
