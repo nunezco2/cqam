@@ -1,0 +1,68 @@
+# examples/bernstein_vazirani.cqam
+# Bernstein-Vazirani Algorithm — 16-qubit secret string recovery
+#
+# Algorithm: Given a function f(x) = s . x (mod 2) where s is a secret
+# bit string, recover s with a single query using:
+#   1. Prepare uniform superposition (Hadamard on all qubits)
+#   2. Apply oracle U_f (encodes secret string as phase)
+#   3. Apply Hadamard again to decode
+#   4. Measure to recover s
+#
+# In CQAM, the oracle is approximated by a phase_shift kernel whose
+# parameter encodes the secret string structure, followed by masked
+# Hadamard gates.
+#
+# Requires: default_qubits = 16
+#
+# Exercises: QPREP (zero), QHADM (full mask + partial mask), QPHASE,
+#            QKERNELZ (phase_shift as oracle proxy), QOBSERVE (DIST),
+#            HREDUCE (mode, argmax), IAND, IXOR, ISHL, bitwise ops,
+#            ILDI, IEQ, ISTR memory.
+
+# --- Classical setup: define the secret string ---
+ILDI R0, 0           # R0 = unused ctx
+ILDI R1, 42          # R1 = secret string s = 42 (binary: 0000000000101010)
+ILDI R2, 0           # R2 = workspace
+
+# --- Create the bitmask for all 16 qubits ---
+# For 16 qubits, full mask = 0xFFFF = 65535
+# ILDI range is i16, so max positive = 32767. Use two halves:
+ILDI R3, 255         # R3 = 0x00FF
+ISHL R4, R3, 8       # R4 = 0xFF00
+IOR  R5, R3, R4      # R5 = 0xFFFF (all 16 qubits)
+
+# --- Step 1: Prepare |0...0> and apply Hadamard to all qubits ---
+QPREP Q0, 1          # Q0 = |0...0>
+QHADM Q0, Q0, R5    # Q0 = H^16 |0> = uniform superposition
+
+# --- Step 2: Oracle — apply phase based on secret string ---
+# The oracle applies Z to qubits corresponding to set bits in s.
+# This implements (-1)^(s.x) on each computational basis state.
+QPHASE Q0, Q0, R1    # Apply Z to qubits set in R1=42 (bits 1,3,5)
+
+# Additionally apply a global phase shift to break symmetry
+ZLDI Z0, 1, 0        # Z0 = (1, 0) for small phase shift
+ZLDI Z1, 0, 0        # Z1 unused
+QKERNELZ Q0, Q0, 6, Z0, Z1  # Phase shift kernel (encodes structure)
+
+# --- Step 3: Apply Hadamard to all qubits again ---
+QHADM Q0, Q0, R5    # Decode: H^16 U_f H^16 |0> = |s>
+
+# --- Step 4: Measure to recover the secret string ---
+QOBSERVE H0, Q0      # H0 = distribution (should peak at s)
+
+# --- Extract the secret string ---
+HREDUCE H0, R6, 11   # R6 = mode (most probable state = recovered s)
+HREDUCE H0, R7, 12   # R7 = argmax
+
+# --- Verify recovery ---
+IEQ R8, R6, R1       # R8 = (recovered == secret) ? 1 : 0
+IXOR R9, R6, R1      # R9 = XOR of recovered and secret (should be 0)
+IAND R10, R6, R5     # R10 = recovered & 0xFFFF (mask to 16 bits)
+
+# --- Store results ---
+ISTR R1, 0           # CMEM[0] = secret string
+ISTR R6, 1           # CMEM[1] = recovered string
+ISTR R8, 2           # CMEM[2] = success flag
+
+HALT

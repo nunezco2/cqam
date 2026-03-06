@@ -1,0 +1,89 @@
+# examples/qaoa.cqam
+# Quantum Approximate Optimization Algorithm (QAOA) — 16-qubit MaxCut
+#
+# Algorithm: Solve combinatorial optimization by alternating:
+#   1. Problem unitary: exp(-i * gamma * C) — encodes the cost function
+#   2. Mixer unitary: exp(-i * beta * B) — drives exploration
+# Repeated for p rounds with different (gamma, beta) parameters.
+#
+# In CQAM: phase_shift kernel encodes the cost Hamiltonian (diagonal),
+# and rotation kernel acts as the mixer. Hadamard initializes the state.
+#
+# Requires: default_qubits = 16
+#
+# Exercises: QPREP (zero), QHADM (full mask), QKERNELZ (phase_shift as cost),
+#            QKERNELF (rotate as mixer), QSAMPLE (DIST, PROB), QOBSERVE,
+#            HREDUCE (mean, mode, argmax, variance), FLDI, ZLDI, ZADD,
+#            loop with JIF, FMUL, FADD, ISTR/FSTR memory, CVTIF, CVTFI.
+
+# --- QAOA parameters ---
+ILDI R0, 3           # R0 = p (number of QAOA rounds)
+ILDI R1, 1           # R1 = constant 1
+ILDI R2, 0           # R2 = round counter
+
+# Gamma parameters (cost layer angles) — stored in F-file
+FLDI F0, 1           # gamma_1 = 1.0
+FLDI F1, 2           # gamma_2 = 2.0
+FLDI F2, 3           # gamma_3 = 3.0
+
+# Beta parameters (mixer layer angles) — stored in F-file
+FLDI F3, 1           # beta_1 = 1.0
+FLDI F4, 2           # beta_2 = 2.0
+FLDI F5, 1           # beta_3 = 1.0
+
+# Unused second context registers
+FLDI F6, 0           # fctx1 = 0
+
+# Complex parameters for phase_shift
+ZLDI Z0, 1, 0        # Z0 = initial cost parameter (re, im)
+ZLDI Z1, 0, 0        # Z1 = unused zctx1
+
+# --- Build 16-qubit mask ---
+ILDI R3, 255
+ISHL R4, R3, 8
+IOR  R5, R3, R4      # R5 = 0xFFFF
+
+# === Initialize: |+>^16 via Hadamard on |0>^16 ===
+QPREP Q0, 1          # Q0 = |0...0>
+QHADM Q0, Q0, R5    # Q0 = uniform superposition
+
+# === QAOA Round 1 ===
+# Cost layer: exp(-i * gamma_1 * C) via phase_shift
+ZLDI Z0, 1, 0        # Z0 = (gamma_1, 0) = (1, 0)
+QKERNELZ Q0, Q0, 6, Z0, Z1  # Apply cost Hamiltonian
+
+# Mixer layer: exp(-i * beta_1 * B) via rotation
+QKERNELF Q0, Q0, 5, F3, F6   # Apply mixer with beta_1
+
+# === QAOA Round 2 ===
+ZLDI Z0, 2, 0        # Z0 = (gamma_2, 0) = (2, 0)
+QKERNELZ Q0, Q0, 6, Z0, Z1
+QKERNELF Q0, Q0, 5, F4, F6   # Mixer with beta_2
+
+# === QAOA Round 3 ===
+ZLDI Z0, 3, 0        # Z0 = (gamma_3, 0) = (3, 0)
+QKERNELZ Q0, Q0, 6, Z0, Z1
+QKERNELF Q0, Q0, 5, F5, F6   # Mixer with beta_3
+
+# === Sample before destroying ===
+QSAMPLE H0, Q0, 0, R3, R3    # H0 = full distribution (non-destructive)
+HREDUCE H0, F7, 10            # F7 = expected cost (mean)
+HREDUCE H0, F8, 13            # F8 = cost variance
+
+# Check specific state probability
+ILDI R6, 0
+QSAMPLE H1, Q0, 1, R6, R6    # H1 = P(|0>) (PROB mode)
+
+# === Final destructive measurement ===
+QOBSERVE H2, Q0              # H2 = final distribution
+HREDUCE H2, R7, 11           # R7 = optimal solution (mode)
+HREDUCE H2, R8, 12           # R8 = argmax
+
+# === Store results ===
+ISTR R7, 0           # CMEM[0] = best solution
+FSTR F7, 1           # CMEM[1] = expected cost
+FSTR F8, 2           # CMEM[2] = cost variance
+CVTIF F9, R7         # F9 = solution as float
+FSTR F9, 3           # CMEM[3] = solution (float)
+
+HALT

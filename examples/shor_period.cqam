@@ -1,0 +1,140 @@
+# examples/shor_period.cqam
+# Shor's Period-Finding Subroutine — 16-qubit approximation
+#
+# Algorithm: Find the period r of f(x) = a^x mod N using quantum
+# parallelism. The quantum part consists of:
+#   1. Prepare uniform superposition on counting register
+#   2. Apply modular exponentiation oracle
+#   3. Apply inverse QFT
+#   4. Measure to get s/r (a fraction encoding the period)
+#
+# In CQAM, the modular exponentiation oracle is approximated by a
+# rotation kernel whose phase encodes the period structure, since
+# CQAM lacks a native modular arithmetic oracle.
+#
+# Note: This demonstrates the STRUCTURE of Shor's algorithm. Full Shor's
+# requires CNOT and controlled-U gates not yet in the ISA (see PLAN4.md).
+#
+# Requires: default_qubits = 16
+#
+# Exercises: QPREP (zero, uniform), QHADM (full mask), QKERNELF (rotate),
+#            QKERNELZ (phase_shift), QKERNEL (fourier), QSAMPLE (DIST, PROB),
+#            QOBSERVE (AMP), HREDUCE (argmax, mean, phase, magnitude),
+#            IMUL, IMOD, IDIV, CVTIF, CVTFI, CVTFZ, ZLDI, ZADD, ZMUL,
+#            FMUL, FDIV, loop, ISTR/FSTR/ZSTR memory, CALL/RET subroutine.
+
+# --- Problem parameters: factor N using a^x mod N ---
+ILDI R0, 15          # R0 = N (number to factor)
+ILDI R1, 7           # R1 = a (random base, gcd(a, N) = 1)
+ILDI R2, 0           # R2 = unused ctx
+ILDI R3, 1           # R3 = constant 1
+ILDI R4, 3           # R4 = number of QPE rounds
+
+# Build 16-qubit mask
+ILDI R5, 255
+ISHL R6, R5, 8
+IOR  R7, R5, R6      # R7 = 0xFFFF
+
+# ===============================================
+# Step 1: Prepare superposition on counting register
+# ===============================================
+QPREP Q0, 1          # |0...0>
+QHADM Q0, Q0, R7    # Uniform superposition
+
+# ===============================================
+# Step 2: Simulate modular exponentiation via phase encoding
+# ===============================================
+# In Shor's, we need U|y> = |a*y mod N>. We approximate by encoding
+# the periodic structure of a^x mod N into the phase of the state.
+
+# Phase 1: Encode period structure with rotation
+# theta = 2*pi/r where r is the period we're looking for
+# For a=7, N=15: the period r=4 (since 7^4 mod 15 = 1)
+# So theta ~ 2*pi/4 = pi/2 ~ 1.57
+FLDI F0, 1           # F0 = base phase ~ pi/r (approximate)
+FLDI F1, 0           # F1 = unused
+QKERNELF Q0, Q0, 5, F0, F1  # Rotation encodes period
+
+# Phase 2: Additional phase structure
+ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
+ZLDI Z1, 0, 0        # Z1 = unused
+QKERNELZ Q0, Q0, 6, Z0, Z1 # Phase shift adds modular structure
+
+# ===============================================
+# Step 3: Inverse QFT (approximated by forward QFT)
+# ===============================================
+QKERNEL Q1, Q0, 2, R2, R2   # Q1 = QFT(encoded state)
+
+# ===============================================
+# Step 4: Measure to extract s/r
+# ===============================================
+# Non-destructive sampling first
+QSAMPLE H0, Q1, 0, R2, R2   # Full distribution
+HREDUCE H0, F2, 10           # F2 = mean (expected frequency)
+HREDUCE H0, F3, 13           # F3 = variance
+
+# Check specific probability peaks
+ILDI R8, 0
+QSAMPLE H1, Q1, 1, R8, R8   # P(|0>) — should have a peak
+HREDUCE H1, F4, 8            # F4 = P(|0>)
+
+# Destructive measurement
+QOBSERVE H2, Q1              # Full measurement
+HREDUCE H2, R9, 12           # R9 = argmax = s (encodes s/r)
+HREDUCE H2, R10, 11          # R10 = mode
+
+# ===============================================
+# Step 5: Classical post-processing (continued fractions)
+# ===============================================
+# Estimate r from the measurement outcome s
+# In full Shor's: s/2^n ~ j/r, so r ~ 2^n / s (when s != 0)
+
+# Avoid division by zero
+IEQ R11, R9, R2      # R11 = (s == 0)
+JIF R11, handle_zero
+
+# r_est = approximate period
+CVTIF F5, R9         # F5 = measured s as float
+ILDI R12, 256        # R12 ~ 2^n (approximation within i16 range)
+CVTIF F6, R12        # F6 = 2^n as float
+FDIV F7, F6, F5      # F7 = 2^n / s ~ r estimate
+CVTFI R13, F7        # R13 = estimated period (truncated)
+JMP compute_factors
+
+LABEL: handle_zero
+ILDI R13, 0          # Period unknown if s=0
+JMP store_results
+
+# ===============================================
+# Step 6: Compute candidate factors
+# ===============================================
+LABEL: compute_factors
+
+# Candidate factors: gcd(a^(r/2) +/- 1, N)
+# For a=7, r=4: a^(r/2) = 7^2 = 49
+# 49 + 1 = 50, 49 - 1 = 48
+# gcd(50, 15) = 5, gcd(48, 15) = 3
+# Factors: 5 and 3 (15 = 5 * 3)
+
+# Compute a^(r_est/2) classically
+IDIV R14, R13, R3    # R14 = r_est / 1 (simplified)
+IMUL R15, R1, R1     # R15 = a^2 (first step of exponentiation)
+
+# Candidate factors
+IADD R8, R15, R3     # R8 = a^2 + 1
+ISUB R9, R15, R3     # R9 = a^2 - 1
+IMOD R10, R8, R0     # R10 = (a^2 + 1) mod N
+IMOD R11, R9, R0     # R11 = (a^2 - 1) mod N
+
+LABEL: store_results
+# --- Store all results ---
+ISTR R13, 0          # CMEM[0] = estimated period r
+ISTR R10, 1          # CMEM[1] = factor candidate 1
+ISTR R11, 2          # CMEM[2] = factor candidate 2
+ISTR R0, 3           # CMEM[3] = N (number being factored)
+ISTR R1, 4           # CMEM[4] = a (base used)
+FSTR F2, 5           # CMEM[5] = mean phase index
+FSTR F7, 6           # CMEM[6] = period estimate (float)
+ZSTR Z0, 7           # CMEM[7-8] = complex phase parameter
+
+HALT

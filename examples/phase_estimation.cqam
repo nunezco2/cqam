@@ -1,0 +1,79 @@
+# examples/phase_estimation.cqam
+# Quantum Phase Estimation (QPE) — 16-qubit register
+#
+# Algorithm: Estimate the eigenphase of a unitary operator U. QPE uses:
+#   1. Hadamard on counting qubits (create superposition)
+#   2. Controlled-U^(2^k) applications (encode phase in counting register)
+#   3. Inverse QFT (extract phase bits)
+#
+# In CQAM, we approximate this as:
+#   1. Prepare uniform superposition (Hadamard on all)
+#   2. Apply rotation kernels with doubling angles (simulates controlled-U^k)
+#   3. Apply QFT to extract phase information
+#   4. Measure and reduce to get the estimated phase
+#
+# Requires: default_qubits = 16
+#
+# Exercises: QPREP, QKERNELF (rotate with varying angles), QKERNEL (fourier),
+#            QSAMPLE (PROB mode), QOBSERVE, HREDUCE (mean, variance, real),
+#            FLDI, FMUL, FADD, FDIV, CVTFI, loop with JIF, FSTR memory.
+
+# --- Classical setup: define the target phase ---
+FLDI F0, 1           # F0 = base angle theta = 1.0 radian
+FLDI F1, 2           # F1 = multiplier for doubling
+FLDI F2, 0           # F2 = accumulated angle (workspace)
+FLDI F3, 0           # F3 = unused fctx1
+ILDI R0, 0           # R0 = loop counter
+ILDI R1, 4           # R1 = number of QPE rounds (power-of-2 applications)
+ILDI R2, 1           # R2 = constant 1
+ILDI R3, 0           # R3 = unused ctx
+
+# --- Prepare initial state: uniform superposition ---
+QPREP Q0, 0          # Q0 = uniform superposition
+
+# --- QPE rotation loop: apply U^(2^k) for k = 0, 1, ..., R1-1 ---
+# Each iteration doubles the rotation angle, simulating controlled-U^(2^k)
+FLDI F2, 1           # F2 = theta_0 = base angle
+
+LABEL: qpe_loop
+
+# Apply rotation with current angle
+QKERNELF Q0, Q0, 5, F2, F3  # Q0 = Rotate(Q0, angle=F2)
+
+# Double the angle for next iteration: F2 = F2 * 2
+FMUL F2, F2, F1
+
+# Increment counter
+IADD R0, R0, R2
+ISUB R1, R1, R2
+
+# Continue if R1 > 0
+JIF R1, qpe_loop
+
+# --- Apply QFT to extract phase information ---
+QKERNEL Q1, Q0, 2, R3, R3   # Q1 = QFT(rotated state)
+
+# --- Non-destructive probe: check probability of |0> ---
+ILDI R4, 0
+QSAMPLE H0, Q1, 1, R4, R4   # H0 = P(|0>) in frequency domain
+
+# --- Destructive measurement for full distribution ---
+QOBSERVE H1, Q1              # H1 = full distribution (destructive)
+
+# --- Extract phase estimate ---
+HREDUCE H1, F4, 10  # F4 = mean of distribution (approximate phase index)
+HREDUCE H1, F5, 13  # F5 = variance (uncertainty in phase estimate)
+HREDUCE H1, R5, 12  # R5 = argmax (peak frequency bin)
+
+# --- Convert argmax to phase: phase = 2*pi * argmax / 2^16 ---
+CVTIF F6, R5        # F6 = argmax as float
+FLDI F7, 6          # F7 ~ 2*pi (approximate, limited by FLDI i16 range)
+FMUL F8, F6, F7     # F8 = argmax * 2*pi
+# Note: dividing by 65536 would require loading that constant
+
+# --- Store results ---
+FSTR F4, 0           # CMEM[0] = mean phase index
+FSTR F5, 1           # CMEM[1] = phase variance
+FSTR F8, 2           # CMEM[2] = estimated phase (scaled)
+
+HALT

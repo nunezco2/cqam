@@ -1,0 +1,96 @@
+# examples/deutsch_jozsa.cqam
+# Deutsch-Jozsa Algorithm — 16-qubit constant vs. balanced function test
+#
+# Algorithm: Determine if a Boolean function f: {0,1}^n -> {0,1} is
+# constant (all 0 or all 1) or balanced (exactly half 0, half 1).
+# Uses a single query:
+#   1. Prepare uniform superposition
+#   2. Apply oracle U_f
+#   3. Apply Hadamard
+#   4. Measure: |0...0> => constant, anything else => balanced
+#
+# We test TWO functions:
+#   - f_constant (no phase applied) -> should measure |0>
+#   - f_balanced (phase on half the qubits) -> should NOT measure |0>
+#
+# Requires: default_qubits = 16
+#
+# Exercises: QPREP (zero), QHADM, QPHASE (as oracle), QSAMPLE (PROB),
+#            QOBSERVE (DIST), HREDUCE (mode, real), FLT comparison,
+#            JIF conditional, LABEL, JMP, two Q registers.
+
+# --- Build full 16-qubit mask ---
+ILDI R0, 255
+ISHL R1, R0, 8
+IOR  R2, R0, R1      # R2 = 0xFFFF (all qubits)
+ILDI R3, 0           # R3 = unused ctx
+ILDI R4, 0           # R4 = basis state |0> index
+
+# ===============================================
+# Test 1: CONSTANT function (f(x) = 0 for all x)
+# ===============================================
+
+# Step 1: Prepare |0> and apply H to all
+QPREP Q0, 1          # Q0 = |0...0>
+QHADM Q0, Q0, R2    # Q0 = uniform superposition
+
+# Step 2: Oracle for constant function — do NOTHING (identity)
+NOP                   # f_constant is the identity
+
+# Step 3: Apply H again
+QHADM Q0, Q0, R2    # Decode
+
+# Step 4: Check P(|0>)
+QSAMPLE H0, Q0, 1, R4, R4   # H0 = P(|0>) — should be ~1.0 for constant
+
+# Extract probability
+HREDUCE H0, F0, 8    # F0 = P(|0>) as real value
+
+# Destroy Q0 to free register
+QOBSERVE H1, Q0      # Consume Q0
+
+# ===============================================
+# Test 2: BALANCED function (f(x) = x_0, parity of first bit)
+# ===============================================
+
+# Step 1: Prepare |0> and apply H
+QPREP Q1, 1          # Q1 = |0...0>
+QHADM Q1, Q1, R2    # Uniform superposition
+
+# Step 2: Oracle for balanced function — Z on qubit 0 (LSB)
+# This implements (-1)^f(x) where f(x) = x_0
+ILDI R5, 1           # R5 = mask 0b01 (qubit 0 only)
+QPHASE Q1, Q1, R5   # Z on qubit 0 -> balanced oracle
+
+# Step 3: Apply H again
+QHADM Q1, Q1, R2
+
+# Step 4: Check P(|0>)
+QSAMPLE H2, Q1, 1, R4, R4   # H2 = P(|0>) — should be ~0.0 for balanced
+
+HREDUCE H2, F1, 8    # F1 = P(|0>) for balanced case
+
+# Measure full distribution
+QOBSERVE H3, Q1      # H3 = full distribution
+HREDUCE H3, R6, 11   # R6 = mode of balanced result (should NOT be 0)
+
+# ===============================================
+# Classical post-processing: decide constant vs balanced
+# ===============================================
+
+# Threshold: if P(|0>) > 0.5, classify as constant
+FLDI F2, 0           # F2 = 0.0 threshold (ideally 0.5, but FLDI is integer)
+
+# For constant test:
+FGT R7, F0, F2       # R7 = (P_constant(|0>) > 0) ? 1 : 0  -> 1 (constant)
+
+# For balanced test:
+FGT R8, F1, F2       # R8 = (P_balanced(|0>) > 0) ? 1 : 0
+
+# Store verdicts
+ISTR R7, 0           # CMEM[0] = constant test result (expect 1)
+ISTR R8, 1           # CMEM[1] = balanced test result (expect 0 ideally)
+FSTR F0, 2           # CMEM[2] = P(|0>) for constant function
+FSTR F1, 3           # CMEM[3] = P(|0>) for balanced function
+
+HALT

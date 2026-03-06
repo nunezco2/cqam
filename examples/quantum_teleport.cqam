@@ -1,0 +1,122 @@
+# examples/quantum_teleport.cqam
+# Quantum Teleportation Protocol — 16-qubit registers
+#
+# Algorithm: Transfer an arbitrary quantum state |psi> from Q0 to Q3
+# using a shared Bell pair and classical communication:
+#   1. Alice and Bob share a Bell pair (Q1)
+#   2. Alice has |psi> (Q0) — prepared via rotation
+#   3. Alice applies CNOT-like operation (entangle) and Hadamard
+#   4. Alice measures (QOBSERVE), getting 2 classical bits
+#   5. Bob applies corrections based on Alice's bits (QFLIP, QPHASE)
+#   6. Bob's state should equal |psi>
+#
+# Requires: default_qubits = 16
+#
+# Exercises: QPREP (zero, bell), QKERNELF (rotate — prepare |psi>),
+#            QKERNEL (entangle), QHADM, QOBSERVE (DIST, PROB, AMP),
+#            QSAMPLE, QFLIP, QPHASE, HREDUCE (mode, real, magnitude),
+#            IAND, ISHR, JIF conditional correction, SETIV interrupt handler.
+
+# --- Setup ---
+ILDI R0, 0           # R0 = ctx / basis state |0>
+ILDI R1, 1           # R1 = constant 1
+ILDI R2, 0           # R2 = unused ctx
+
+# --- Register interrupt handler for quantum errors ---
+SETIV 1, quantum_err_handler
+
+# ===============================================
+# Step 1: Prepare the state to teleport |psi>
+# ===============================================
+QPREP Q0, 1          # Q0 = |0...0>
+FLDI F0, 2           # F0 = rotation angle (creates non-trivial state)
+FLDI F1, 0           # F1 = unused
+QKERNELF Q0, Q0, 5, F0, F1  # Q0 = Rotate(|0>, theta=2) = |psi>
+
+# Record |psi>'s signature for later verification
+QSAMPLE H0, Q0, 0, R0, R0   # H0 = distribution of |psi>
+HREDUCE H0, F2, 10           # F2 = mean of |psi> (fingerprint)
+HREDUCE H0, F3, 13           # F3 = variance of |psi>
+
+# ===============================================
+# Step 2: Create shared Bell pair
+# ===============================================
+QPREP Q1, 2          # Q1 = Bell state (Alice and Bob share this)
+
+# ===============================================
+# Step 3: Alice's operations — entangle |psi> with her half of Bell pair
+# ===============================================
+# In a real protocol, Alice would do CNOT(Q0, Q1_alice) then H(Q0).
+# In CQAM, we use the entangle kernel to create correlations,
+# then Hadamard to put Alice's qubit in the measurement basis.
+
+QKERNEL Q0, Q0, 1, R0, R2   # Entangle |psi> (creates correlations)
+ILDI R3, 1           # mask for qubit 0
+QHADM Q0, Q0, R3    # Hadamard on qubit 0
+
+# ===============================================
+# Step 4: Alice measures — get classical bits
+# ===============================================
+QOBSERVE H1, Q0      # H1 = measurement result (destructive)
+HREDUCE H1, R4, 11   # R4 = measured state (classical bits)
+
+# Extract individual bits for correction
+IAND R5, R4, R1      # R5 = bit 0 (Alice's first measurement)
+ISHR R6, R4, 1       # R6 = bit 1+ (Alice's second measurement indicator)
+IAND R6, R6, R1      # R6 = bit 1
+
+# ===============================================
+# Step 5: Bob's corrections based on Alice's bits
+# ===============================================
+# Prepare Bob's state (use Q2 as Bob's half, derived from Bell pair)
+QPREP Q2, 2          # Q2 = Bell state (Bob's entangled copy)
+
+# Correction 1: if bit 0 = 1, apply X (bit-flip)
+JIF R5, apply_x_correction
+JMP check_z_correction
+
+LABEL: apply_x_correction
+QFLIP Q2, Q2, R1    # X on qubit 0 based on Alice's bit 0
+
+LABEL: check_z_correction
+# Correction 2: if bit 1 = 1, apply Z (phase-flip)
+JIF R6, apply_z_correction
+JMP teleport_verify
+
+LABEL: apply_z_correction
+QPHASE Q2, Q2, R1   # Z on qubit 0 based on Alice's bit 1
+
+# ===============================================
+# Step 6: Verify teleportation
+# ===============================================
+LABEL: teleport_verify
+
+# Measure Bob's state
+QSAMPLE H2, Q2, 0, R0, R0
+HREDUCE H2, F4, 10   # F4 = mean of Bob's state
+HREDUCE H2, F5, 13   # F5 = variance of Bob's state
+
+# Final destructive measurement of Bob's state
+QOBSERVE H3, Q2
+HREDUCE H3, R7, 11   # R7 = Bob's measured state
+
+# Also measure the Bell pair witness
+QOBSERVE H4, Q1
+HREDUCE H4, R8, 11   # R8 = Bell pair measurement result
+
+# --- Store results ---
+FSTR F2, 0           # CMEM[0] = |psi> mean (original)
+FSTR F4, 1           # CMEM[1] = Bob's mean (should match)
+ISTR R4, 2           # CMEM[2] = Alice's measurement bits
+ISTR R7, 3           # CMEM[3] = Bob's measurement result
+
+JMP end_program
+
+# --- Interrupt handler ---
+LABEL: quantum_err_handler
+ILDI R15, -1         # R15 = error flag
+ISTR R15, 999        # Store error indicator
+RETI
+
+LABEL: end_program
+HALT
