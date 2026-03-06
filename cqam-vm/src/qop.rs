@@ -166,6 +166,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             };
             ctx.qregs[*dst as usize] = Some(qr);
+            ctx.psw.qf = true;
             Ok(())
         }
 
@@ -409,6 +410,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QLoad { dst_q, addr } => {
             if let Some(qr) = ctx.qmem.load(*addr) {
                 ctx.qregs[*dst_q as usize] = Some(qr.clone());
+                ctx.psw.qf = true;
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -444,6 +446,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             };
             ctx.qregs[*dst as usize] = Some(qr);
+            ctx.psw.qf = true;
             Ok(())
         }
 
@@ -519,6 +522,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             })?;
 
             ctx.qregs[*dst as usize] = Some(qr);
+            ctx.psw.qf = true;
             Ok(())
         }
 
@@ -617,6 +621,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 ctx.psw.mark_measured();
+                ctx.psw.zf = outcome == 0;
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -818,6 +823,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             })?;
 
             ctx.qregs[*dst as usize] = Some(QuantumRegister::Mixed(dm));
+            ctx.psw.qf = true;
+            ctx.psw.sf = true; // mixed state
             Ok(())
         }
 
@@ -850,6 +857,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             };
             ctx.qregs[*dst as usize] = Some(qr);
+            ctx.psw.qf = true;
             Ok(())
         }
 

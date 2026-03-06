@@ -246,6 +246,32 @@ pub fn execute_hybrid(
                 }
             }
 
+            // Update PSW flags from the reduction result
+            match *func {
+                reduce_fn::ROUND | reduce_fn::FLOOR | reduce_fn::CEIL
+                | reduce_fn::TRUNC | reduce_fn::ABS | reduce_fn::NEGATE
+                | reduce_fn::MODE | reduce_fn::ARGMAX => {
+                    if let Ok(val) = ctx.iregs.get(*dst) {
+                        ctx.psw.zf = val == 0;
+                        ctx.psw.nf = val < 0;
+                    }
+                }
+                reduce_fn::MAGNITUDE | reduce_fn::PHASE | reduce_fn::REAL
+                | reduce_fn::IMAG | reduce_fn::MEAN | reduce_fn::VARIANCE
+                | reduce_fn::EXPECT => {
+                    if let Ok(val) = ctx.fregs.get(*dst) {
+                        ctx.psw.zf = val == 0.0;
+                        ctx.psw.nf = val < 0.0;
+                    }
+                }
+                reduce_fn::CONJ_Z | reduce_fn::NEGATE_Z => {
+                    if let Ok((re, im)) = ctx.zregs.get(*dst) {
+                        ctx.psw.zf = re == 0.0 && im == 0.0;
+                    }
+                }
+                _ => {}
+            }
+
             Ok(false)
         }
 

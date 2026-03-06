@@ -74,7 +74,28 @@ impl ProgramStateWord {
     pub fn update_from_arithmetic(&mut self, value: i64) {
         self.zf = value == 0;
         self.nf = value < 0;
-        self.of = false; // overflow detection is not implemented; OF is always cleared on arithmetic updates
+        self.of = false;
+    }
+
+    /// Update arithmetic flags from an integer result with overflow info.
+    pub fn update_from_arithmetic_with_overflow(&mut self, value: i64, overflowed: bool) {
+        self.zf = value == 0;
+        self.nf = value < 0;
+        self.of = overflowed;
+    }
+
+    /// Update arithmetic flags from a float result value.
+    pub fn update_from_float_arithmetic(&mut self, value: f64) {
+        self.zf = value == 0.0;
+        self.nf = value < 0.0;
+        self.of = value.is_infinite();
+    }
+
+    /// Update arithmetic flags from a complex result value.
+    pub fn update_from_complex_arithmetic(&mut self, re: f64, im: f64) {
+        self.zf = re == 0.0 && im == 0.0;
+        self.nf = false; // complex numbers have no total ordering
+        self.of = re.is_infinite() || im.is_infinite();
     }
 
     /// Update the predicate flag from a boolean result.
