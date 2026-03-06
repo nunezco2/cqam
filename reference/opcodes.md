@@ -9,7 +9,7 @@ bits [31:24] contain the 8-bit opcode.
 
 | Format | Layout | Used By |
 |--------|--------|---------|
-| N | `[opcode:8][_:24]` | NOP, RET, HALT, HFORK, HMERGE |
+| N | `[opcode:8][_:24]` | NOP, RET, HALT, HFORK, HMERGE, RETI |
 | RRR | `[opcode:8][dst:4][lhs:4][rhs:4][_:12]` | Arithmetic, comparison |
 | RR | `[opcode:8][dst:4][src:4][_:16]` | INOT, CVTxx |
 | RRS | `[opcode:8][dst:4][src:4][amt:6][_:10]` | ISHL, ISHR |
@@ -17,12 +17,15 @@ bits [31:24] contain the 8-bit opcode.
 | ZI | `[opcode:8][dst:4][_:4][re:8][im:8]` | ZLDI |
 | RA | `[opcode:8][reg:4][_:4][addr16:16]` | Memory load/store |
 | J | `[opcode:8][addr24:24]` | JMP, CALL |
-| JR | `[opcode:8][pred:4][_:4][addr16:16]` | JIF, HCEXEC |
+| JR | `[opcode:8][pred:4][_:4][addr16:16]` | JIF, HCEXEC, SETIV |
 | QP | `[opcode:8][dst_q:3][dist:3][_:18]` | QPREP |
 | Q | `[opcode:8][dst:3][src:3][kern:5][c0:4][c1:4][_:5]` | QKERNEL |
-| QO | `[opcode:8][dst_h:3][src_q:3][_:18]` | QOBSERVE |
+| QO_EXT | `[opcode:8][dst_h:3][src_q:3][mode:2][ctx0:4][ctx1:4][_:8]` | QOBSERVE, QSAMPLE |
 | QS | `[opcode:8][qreg:3][_:5][addr:8][_:8]` | QLOAD, QSTORE |
 | HR | `[opcode:8][src:4][dst:4][func:4][_:12]` | HREDUCE |
+| QR | `[opcode:8][dst_q:3][_:1][dist_reg:4][_:16]` | QPREPR |
+| QE | `[opcode:8][dst_q:3][_:1][src_base:4][count:4][file_sel:2][_:10]` | QENCODE |
+| QMK | `[opcode:8][dst_q:3][src_q:3][_:4][mask_reg:4][_:10]` | QHADM, QFLIP, QPHASE |
 | L | `[opcode:8][label_id:16][_:8]` | LABEL pseudo |
 
 ## 3. Opcode Table
@@ -76,15 +79,32 @@ bits [31:24] contain the 8-bit opcode.
 | 0x2C | LABEL    | L      | Pseudo: label_id marker |
 | 0x30 | QPREP    | QP     | Q[dst] = new_dist(dist_id) |
 | 0x31 | QKERNEL  | Q      | Q[dst] = kernel(Q[src], R[c0], R[c1]) |
-| 0x32 | QOBSERVE | QO     | H[dst] = measure(Q[src]) |
+| 0x32 | QOBSERVE | QO_EXT | H[dst] = observe(Q[src], mode, ctx0, ctx1); destructive |
 | 0x33 | QLOAD    | QS     | Q[dst] = QMEM[addr] |
 | 0x34 | QSTORE   | QS     | QMEM[addr] = Q[src] |
 | 0x38 | HFORK    | N      | Set hybrid fork flags |
 | 0x39 | HMERGE   | N      | Set hybrid merge flags |
 | 0x3A | HCEXEC   | JR     | if PSW.flag: PC = addr16 |
 | 0x3B | HREDUCE  | HR     | dst = reduce(H[src], func) |
+| 0x35 | ILDX     | RR     | R[dst] = CMEM[R[addr_reg]] |
+| 0x36 | ISTRX    | RR     | CMEM[R[addr_reg]] = R[src] |
+| 0x37 | FLDX     | RR     | F[dst] = f64::from_bits(CMEM[R[addr_reg]]) |
+| 0x3C | FSTRX    | RR     | CMEM[R[addr_reg]] = F[src].to_bits() |
+| 0x3D | ZLDX     | RR     | Z[dst] from CMEM[R[addr_reg]]..+1 |
+| 0x3E | ZSTRX    | RR     | CMEM[R[addr_reg]]..+1 = Z[src] |
+| 0x40 | QSAMPLE  | QO_EXT | H[dst] = sample(Q[src], mode, ctx0, ctx1); non-destructive |
+| 0x41 | QKERNELF | Q      | Q[dst] = kernel(Q[src], F[fctx0], F[fctx1]) |
+| 0x42 | QKERNELZ | Q      | Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1]) |
+| 0x43 | QPREPR   | QR     | Q[dst] = new_dist(R[dist_reg]) |
+| 0x44 | QENCODE  | QE     | Q[dst] = from_statevector(regs[base..+count]) |
+| 0x45 | QHADM    | QMK    | Apply H to qubits per R[mask] bitmask |
+| 0x46 | QFLIP    | QMK    | Apply X to qubits per R[mask] bitmask |
+| 0x47 | QPHASE   | QMK    | Apply Z to qubits per R[mask] bitmask |
 
-Reserved ranges: 0x2D-0x2F (control flow), 0x35-0x37 (quantum), 0x3C-0xFF (future).
+| 0x2D | RETI     | N      | Pop saved PC, clear maskable traps, resume |
+| 0x2E | SETIV    | JR     | Register handler for trap_id at label |
+
+Reserved ranges: 0x2F (interrupt), 0x48-0xFF (future).
 
 ## 4. Distribution IDs (QPREP dist field)
 
@@ -104,6 +124,8 @@ Reserved ranges: 0x2D-0x2F (control flow), 0x35-0x37 (quantum), 0x3C-0xFF (futur
 | 2  | fourier    | DFT-like phase transformation |
 | 3  | diffuse    | Grover diffusion operator |
 | 4  | grover_iter| Oracle + diffusion step |
+| 5  | rotate     | Diagonal rotation: exp(i * theta * k) |
+| 6  | phase_shift| Phase shift: exp(i * |z| * k) |
 
 ## 6. PSW Flag IDs (HCEXEC flag field)
 
@@ -136,3 +158,26 @@ Reserved ranges: 0x2D-0x2F (control flow), 0x35-0x37 (quantum), 0x3C-0xFF (futur
 | 11 | mode      | R (i64) | Distribution mode (most probable) |
 | 12 | argmax    | R (i64) | Index of most probable state |
 | 13 | variance  | F (f64) | Distribution variance |
+| 14 | conj_z    | Z (f64,f64) | Complex conjugate: (re, -im) |
+| 15 | negate_z  | Z (f64,f64) | Complex negation: (-re, -im) |
+
+Output register file depends on the function ID:
+- IDs 0-5: result written to integer register file (R).
+- IDs 6-13: result written to float register file (F).
+- IDs 14-15: result written to complex register file (Z).
+
+## 8. Observation Mode IDs (QOBSERVE/QSAMPLE mode field)
+
+| ID | Name | Output Type | Description |
+|----|------|-------------|-------------|
+| 0  | DIST | Dist(Vec<(u16,f64)>) | Full diagonal distribution |
+| 1  | PROB | Float(f64) | Single probability at R[ctx0] |
+| 2  | AMP  | Complex(f64,f64) | Density matrix element dm[R[ctx0]][R[ctx1]] |
+
+## 9. File Selector IDs (QENCODE file_sel field)
+
+| ID | Name   | Register File | Conversion |
+|----|--------|---------------|------------|
+| 0  | R_FILE | R (integer)   | (val as f64, 0.0) |
+| 1  | F_FILE | F (float)     | (val, 0.0) |
+| 2  | Z_FILE | Z (complex)   | (re, im) used directly |

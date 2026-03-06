@@ -113,9 +113,17 @@ Complex operations are lowered to paired float operations:
 |------|------|
 | `QPREP Q0, 0` | `reset q0;` followed by distribution comment |
 | `QKERNEL Q1, Q0, 2, R0, R1` | Kernel header comment + gate call or expanded template |
-| `QOBSERVE H0, Q1` | `H0 = measure q1;` |
+| `QOBSERVE H0, Q1, 0, R0, R0` | `H0 = measure q1;` (mode=DIST). PROB and AMP modes emit annotation comments. |
 | `QLOAD Q0, 10` | Comment (no QASM equivalent) |
 | `QSTORE Q0, 10` | Comment (no QASM equivalent) |
+| `QSAMPLE H0, Q0, 0, R0, R0` | `// @cqam.qsample: H0 = sample(q0, dist)` (no QASM equivalent) |
+| `QKERNELF Q1, Q0, 5, F0, F1` | Kernel header comment + gate call (same as QKERNEL but params from F-file) |
+| `QKERNELZ Q1, Q0, 6, Z0, Z1` | Kernel header comment + gate call (params from Z-file) |
+| `QPREPR Q0, R0` | `reset q0;` followed by distribution comment (same as QPREP, dist ID from register) |
+| `QENCODE Q0, F0, 4, 1` | `// @cqam.qencode: q0 = encode(F0..F3, file=F)` (no QASM equivalent) |
+| `QHADM Q1, Q0, R2` | `// @cqam.qhadm: apply H to q0 masked by R2, result in q1` |
+| `QFLIP Q1, Q0, R2` | `// @cqam.qflip: apply X to q0 masked by R2, result in q1` |
+| `QPHASE Q1, Q0, R2` | `// @cqam.qphase: apply Z to q0 masked by R2, result in q1` |
 
 ### 4.10 Hybrid Operations
 
@@ -156,6 +164,11 @@ Templates are loaded from `{template_dir}/{kernel_name}.qasm` where
 | fourier (ID 2) | `fourier.qasm` | QFT circuit with controlled-phase gates |
 | diffuse (ID 3) | `diffuse.qasm` | Grover diffusion (inversion about the mean) |
 | grover_iter (ID 4) | `grover_iter.qasm` | Oracle phase-flip + diffusion |
+| rotate (ID 5) | `rotate.qasm` | Diagonal rotation gate |
+| phase_shift (ID 6) | `phase_shift.qasm` | Phase shift gate |
+
+Note: Template files for rotate and phase_shift are optional extensions.
+When no template is found, the emitter generates a stub or annotation comment.
 
 ## 6. Kernel Gate Stubs
 

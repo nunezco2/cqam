@@ -169,7 +169,7 @@ hybrid reduction operations.
   after partial trace, measures bipartite entanglement.
 - Thresholds are configurable; violations trigger QuantumError interrupt.
 
-### 6.4 Kernels (5 implemented)
+### 6.4 Kernels (7 implemented)
 
 | ID | Name | Description |
 |----|------|-------------|
@@ -178,6 +178,39 @@ hybrid reduction operations.
 | 2 | fourier | DFT-like phase transformation |
 | 3 | diffuse | Grover diffusion (inversion about the mean) |
 | 4 | grover_iter | Complete Grover iteration (oracle + diffusion) |
+| 5 | rotate | Diagonal rotation: U[k][k] = exp(i * theta * k); theta from F-file |
+| 6 | phase_shift | Phase shift: U[k][k] = exp(i * |z| * k); amplitude from Z-file |
+
+### 6.5 Observation Modes
+
+QOBSERVE and QSAMPLE support three extraction modes, selected by the `mode`
+field:
+
+| Mode | ID | Output Type | Semantics |
+|------|----|-------------|-----------|
+| DIST | 0 | Dist(Vec<(u16, f64)>) | Full diagonal probability distribution. Default and backward-compatible with Phase 1 behavior. |
+| PROB | 1 | Float(f64) | Probability of a single basis state at index R[ctx0]. Returns rho[k][k]. |
+| AMP  | 2 | Complex(f64, f64) | Density matrix element rho[row][col] where row=R[ctx0], col=R[ctx1]. |
+
+QOBSERVE is destructive: it consumes Q[src] (sets to None) and marks PSW.DF.
+QSAMPLE is non-destructive: Q[src] remains available for further operations.
+
+### 6.6 Masked Gate Operations
+
+Three masked gate instructions apply single-qubit Pauli gates to selected
+qubits of a quantum register. The selection mask is read from an integer
+register R[mask_reg]. For each bit i (0-indexed from LSB) that is set in the
+mask, the corresponding gate is applied to qubit i of the density matrix.
+Bits beyond num_qubits are silently ignored.
+
+| Instruction | Gate | Matrix |
+|-------------|------|--------|
+| QHADM | Hadamard | (1/sqrt(2)) [[1,1],[1,-1]] |
+| QFLIP | Pauli-X | [[0,1],[1,0]] |
+| QPHASE | Pauli-Z | [[1,0],[0,-1]] |
+
+Gate matrices are private to `cqam-vm/src/qop.rs`. There is no public gate
+module; the ISA instruction mnemonic determines the gate type.
 
 ## 7. Hybrid Execution Model
 
@@ -194,13 +227,14 @@ PSW and jumps to the target label if the flag is set.
 
 ### 7.3 HREDUCE
 
-14 reduction functions organized into three categories:
+16 reduction functions organized into four categories:
 
 | IDs | Category | Output | Functions |
 |-----|----------|--------|-----------|
 | 0-5 | Float-to-Int | R[dst] (i64) | round, floor, ceil, trunc, abs, negate |
 | 6-9 | Complex-to-Float | F[dst] (f64) | magnitude, phase, real, imag |
 | 10-13 | Distribution | F[dst] or R[dst] | mean, mode, argmax, variance |
+| 14-15 | Complex-to-Complex | Z[dst] (f64, f64) | conj_z, negate_z |
 
 ## 8. Resource Tracking
 
@@ -327,6 +361,72 @@ Notation: `sigma' = sigma[field := value]` denotes a state identical to
   -------------------------------------------------------
   sigma --HALT--> sigma[PSW.trap_halt := true]
 ```
+
+**Non-destructive Sample (QSAMPLE):**
+```
+    Q[src] != NULL     probs = diagonal(Q[src])
+  -------------------------------------------------------
+  sigma --QSAMPLE(dst_h, src_q, mode, ctx0, ctx1)-->
+    sigma[H[dst_h] := extract(Q[src], mode, R[ctx0], R[ctx1]),
+          PC := PC + 1]
+```
+
+Note: Q[src_q] is NOT consumed.
+
+**Quantum Kernel with Float Context (QKERNELF):**
+```
+    Q[src] != NULL     dm' = kernel_k.apply(Q[src])
+  -------------------------------------------------------
+  sigma --QKERNELF(dst, src, k, fctx0, fctx1)-->
+    sigma[Q[dst] := dm',
+          PSW := update_qmeta(PSW, dm'),
+          PC := PC + 1]
+```
+
+Context parameters are read from the F-file: F[fctx0], F[fctx1].
+
+**Quantum Kernel with Complex Context (QKERNELZ):**
+
+Same form as QKERNELF, context from Z-file: Z[zctx0], Z[zctx1].
+
+**Register-Parameterized Preparation (QPREPR):**
+```
+                  dist_id = R[dist_reg] as u8
+                  dm = init_density_matrix(dist_id)
+  -------------------------------------------------------
+  sigma --QPREPR(dst, dist_reg)--> sigma[Q[dst] := dm,
+                                          PC := PC + 1]
+```
+
+**Amplitude Encoding (QENCODE):**
+```
+    psi = read_regs(file_sel, src_base, count)
+    dm = |psi><psi| / <psi|psi>
+  -------------------------------------------------------
+  sigma --QENCODE(dst, src_base, count, file_sel)-->
+    sigma[Q[dst] := dm,
+          PC := PC + 1]
+```
+
+count must be a power of 2. file_sel selects R (0), F (1), or Z (2).
+
+**Masked Hadamard (QHADM):**
+```
+    Q[src] != NULL     mask = R[mask_reg]
+    dm' = apply_H_to_selected_qubits(Q[src], mask)
+  -------------------------------------------------------
+  sigma --QHADM(dst, src, mask_reg)--> sigma[Q[dst] := dm',
+                                              PSW := update_qmeta(PSW, dm'),
+                                              PC := PC + 1]
+```
+
+**Masked Bit Flip (QFLIP):**
+
+Same form as QHADM, applying Pauli-X instead of Hadamard.
+
+**Masked Phase Flip (QPHASE):**
+
+Same form as QHADM, applying Pauli-Z instead of Hadamard.
 
 ### 9.4 Execution Semantics
 

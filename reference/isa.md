@@ -120,9 +120,17 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 |----------|----------|-----------|----------|
 | `QPREP` | dst, dist_id | Q[dst] = new quantum state with distribution dist_id | QP |
 | `QKERNEL` | dst, src, kernel_id, ctx0, ctx1 | Q[dst] = kernel(Q[src], R[ctx0], R[ctx1]) | Q |
-| `QOBSERVE` | dst_h, src_q | H[dst_h] = measure(Q[src_q]); Q[src_q] = None | QO |
+| `QOBSERVE` | dst_h, src_q, mode, ctx0, ctx1 | H[dst_h] = observe(Q[src_q], mode, R[ctx0], R[ctx1]); Q[src_q] = None | QO_EXT |
 | `QLOAD` | dst_q, addr8 | Q[dst_q] = QMEM[addr8] (clone) | QS |
 | `QSTORE` | src_q, addr8 | QMEM[addr8] = Q[src_q] (clone) | QS |
+| `QSAMPLE` | dst_h, src_q, mode, ctx0, ctx1 | H[dst_h] = sample(Q[src_q], mode, R[ctx0], R[ctx1]); non-destructive | QO_EXT |
+| `QKERNELF` | dst, src, kernel_id, fctx0, fctx1 | Q[dst] = kernel(Q[src], F[fctx0], F[fctx1]) | Q |
+| `QKERNELZ` | dst, src, kernel_id, zctx0, zctx1 | Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1]) | Q |
+| `QPREPR` | dst, dist_reg | Q[dst] = new_qdist(R[dist_reg] as u8) | QR |
+| `QENCODE` | dst, src_base, count, file_sel | Q[dst] = from_statevector(regs[src_base..+count]) | QE |
+| `QHADM` | dst, src, mask_reg | Apply H to qubits selected by R[mask_reg] bitmask | QMK |
+| `QFLIP` | dst, src, mask_reg | Apply X to qubits selected by R[mask_reg] bitmask | QMK |
+| `QPHASE` | dst, src, mask_reg | Apply Z to qubits selected by R[mask_reg] bitmask | QMK |
 
 ### 1.10 Hybrid operations (H-file: 8 x HybridValue)
 
@@ -149,8 +157,8 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | Integer | R0-R15 | 16 | `i64` | I-prefix, comparison results |
 | Float | F0-F15 | 16 | `f64` | F-prefix, CVTIF output |
 | Complex | Z0-Z15 | 16 | `(f64, f64)` | Z-prefix |
-| Quantum | Q0-Q7 | 8 | `Option<DensityMatrix>` | QPREP, QKERNEL, QOBSERVE |
-| Hybrid | H0-H7 | 8 | `HybridValue` | QOBSERVE output, HREDUCE input |
+| Quantum | Q0-Q7 | 8 | `Option<DensityMatrix>` | QPREP, QKERNEL, QKERNELF, QKERNELZ, QPREPR, QENCODE, QOBSERVE, QSAMPLE, QHADM, QFLIP, QPHASE |
+| Hybrid | H0-H7 | 8 | `HybridValue` | QOBSERVE output, QSAMPLE output, HREDUCE input |
 
 `HybridValue` is a tagged union: `Empty`, `Int(i64)`, `Float(f64)`,
 `Complex(f64, f64)`, or `Dist(Vec<(u16, f64)>)` (measurement outcome).
@@ -178,9 +186,12 @@ following formats.
 | **JR** | opcode[8] | pred[4] _[4] addr16[16] | JIF, HCEXEC, SETIV |
 | **QP** | opcode[8] | dst[3] dist[3] _[18] | QPREP |
 | **Q** | opcode[8] | dst[3] src[3] kernel[5] ctx0[4] ctx1[4] _[5] | QKERNEL |
-| **QO** | opcode[8] | dst_h[3] src_q[3] _[18] | QOBSERVE |
+| **QO_EXT** | opcode[8] | dst_h[3] src_q[3] mode[2] ctx0[4] ctx1[4] _[8] | QOBSERVE, QSAMPLE |
 | **QS** | opcode[8] | qreg[3] _[5] addr8[8] _[8] | QLOAD, QSTORE |
 | **HR** | opcode[8] | src[4] dst[4] func[4] _[12] | HREDUCE |
+| **QR** | opcode[8] | dst_q[3] _[1] dist_reg[4] _[16] | QPREPR |
+| **QE** | opcode[8] | dst_q[3] _[1] src_base[4] count[4] file_sel[2] _[10] | QENCODE |
+| **QMK** | opcode[8] | dst_q[3] src_q[3] _[4] mask_reg[4] _[10] | QHADM, QFLIP, QPHASE |
 | **L** | opcode[8] | label_id[16] _[8] | LABEL pseudo-instruction |
 
 ### 3.2 Opcode byte assignments
@@ -196,6 +207,7 @@ following formats.
 | 0x2D-0x2E | Interrupt handling (RETI, SETIV) |
 | 0x30-0x34 | Quantum operations (QPREP..QSTORE) |
 | 0x35-0x3E | Register-indirect memory + hybrid operations |
+| 0x40-0x47 | PLAN3 quantum extensions (QSAMPLE..QPHASE) |
 
 ---
 
@@ -219,6 +231,8 @@ following formats.
 | `FOURIER` | 2 | QFT | Quantum Fourier Transform: QFT[j][k] = exp(2pi i jk/N)/sqrt(N) |
 | `DIFFUSE` | 3 | D = 2\|s><s\| - I | Grover diffusion operator; D[j][k] = 2/N - delta(j,k) |
 | `GROVER_ITER` | 4 | D * O | One Grover iteration: oracle phase-flip at ctx0, then diffusion |
+| `ROTATE` | 5 | exp(i*theta*k) | Diagonal rotation; theta from F-file via QKERNELF |
+| `PHASE_SHIFT` | 6 | exp(i*|z|*k) | Phase shift; amplitude from Z-file via QKERNELZ |
 
 ### 4.3 PSW Flag IDs (`flag_id` module, used by `HCEXEC`)
 
@@ -249,6 +263,7 @@ overridden with `SETIV`.
 Output register file depends on the function ID:
 - IDs 0-5: result written to integer register file (R).
 - IDs 6-13: result written to float register file (F).
+- IDs 14-15: result written to complex register file (Z).
 
 | Name | ID | Input | Output | Formula |
 |------|----|-------|--------|---------|
@@ -266,6 +281,24 @@ Output register file depends on the function ID:
 | `MODE` | 11 | Dist H value | R | most probable basis state |
 | `ARGMAX` | 12 | Dist H value | R | index of most probable state |
 | `VARIANCE` | 13 | Dist H value | F | sum(p_k * (x_k - mean)^2) |
+| `CONJ_Z` | 14 | Complex H value | Z | Z[dst] = (re, -im) |
+| `NEGATE_Z` | 15 | Complex H value | Z | Z[dst] = (-re, -im) |
+
+### 4.6 Observation Mode IDs (`observe_mode` module)
+
+| Name | Value | Output Type | Description |
+|------|-------|-------------|-------------|
+| `DIST` | 0 | Dist(Vec<(u16, f64)>) | Full diagonal probability distribution |
+| `PROB` | 1 | Float(f64) | Single basis-state probability at index R[ctx0] |
+| `AMP` | 2 | Complex(f64, f64) | Density matrix element dm[R[ctx0], R[ctx1]] |
+
+### 4.7 File Selector IDs (`file_sel` module, used by `QENCODE`)
+
+| Name | Value | Register File | Element Type |
+|------|-------|---------------|-------------|
+| `R_FILE` | 0 | R (integer) | i64 cast to (f64, 0.0) |
+| `F_FILE` | 1 | F (float) | f64 as (val, 0.0) |
+| `Z_FILE` | 2 | Z (complex) | (f64, f64) used directly |
 
 ---
 
