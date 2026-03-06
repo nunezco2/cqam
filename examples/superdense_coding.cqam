@@ -3,83 +3,94 @@
 #
 # Algorithm: Using a pre-shared Bell pair, Alice encodes 2 classical bits
 # by applying one of {I, X, Z, XZ} to her qubit, then sends it to Bob.
-# Bob applies the Fourier kernel to decode both bits.
+# Bob performs a Bell measurement (CNOT + Hadamard) to decode both bits.
 #
 # Message encoding:
-#   00 -> I (identity, do nothing)
-#   01 -> X (bit-flip)
-#   10 -> Z (phase-flip)
-#   11 -> XZ (both)
+#   00 -> I (identity)  -> Bob measures |00> = 0
+#   01 -> X (bit-flip)  -> Bob measures |01> = 1
+#   10 -> Z (phase-flip)-> Bob measures |10> = 2
+#   11 -> XZ (both)     -> Bob measures |11> = 3
 #
 # Gate-level justification: QFLIP and QPHASE are required for Alice's
 # message encoding — they apply X/Z to a specific qubit in the Bell
-# pair, which is inherently a per-qubit operation. No register-level
-# kernel can selectively bit-flip or phase-flip a single qubit
-# within an entangled register.
+# pair. QCNOT and QHADM are required for Bell measurement decoding.
+#
+#! qubits 2
 
 # --- Setup ---
-    ILDI R0, 0           # R0 = ctx
-    ILDI R1, 1           # R1 = mask for qubit 0
+    ILDI R0, 0           # R0 = qubit 0 index / ctx
+    ILDI R1, 1           # R1 = qubit 1 index / mask for qubit 0
+    ILDI R2, 2           # R2 = mask for qubit 1
 
 # ===============================================
 # Message 00: Identity (no operation)
 # ===============================================
-    QPREP Q0, 2          # Shared Bell pair (register-level)
+    QPREP Q0, 2          # Shared Bell pair |Phi+> = (|00>+|11>)/sqrt(2)
 # Alice does nothing (identity encoding)
     NOP
-# Bob decodes with Fourier kernel (register-level)
-    QKERNEL Q0, Q0, 2, R0, R0
+# Bob decodes: Bell measurement = CNOT(q0,q1) + H(q0)
+    QCNOT Q0, Q0, R0, R1    # CNOT ctrl=q0, tgt=q1
+    QHADM Q0, Q0, R1        # Hadamard on qubit 0 (mask=1)
     QOBSERVE H0, Q0
-    HREDUCE H0, R3, 11   # R3 = decoded message for 00
+    HREDUCE H0, R3, 11      # R3 = decoded message for 00 (expect 0)
 
 # ===============================================
-# Message 01: Bit-flip (X)
+# Message 01: Bit-flip (X on Alice's qubit = q0)
 # ===============================================
-    QPREP Q1, 2          # Fresh Bell pair (register-level)
-# Alice applies X to encode bit 1 (gate-level, required)
-    QFLIP Q1, Q1, R1
-# Bob decodes with Fourier kernel (register-level)
-    QKERNEL Q1, Q1, 2, R0, R0
+    QPREP Q1, 2          # Fresh Bell pair
+# Alice applies X to her qubit (q0)
+    QFLIP Q1, Q1, R1     # X on qubit 0 (mask=1)
+# Bob decodes: Bell measurement
+    QCNOT Q1, Q1, R0, R1
+    QHADM Q1, Q1, R1
     QOBSERVE H1, Q1
-    HREDUCE H1, R4, 11   # R4 = decoded message for 01
+    HREDUCE H1, R4, 11      # R4 = decoded message for 01 (expect 1)
 
 # ===============================================
-# Message 10: Phase-flip (Z)
+# Message 10: Phase-flip (Z on Alice's qubit = q0)
 # ===============================================
-    QPREP Q2, 2          # Fresh Bell pair (register-level)
-# Alice applies Z to encode phase info (gate-level, required)
-    QPHASE Q2, Q2, R1
-# Bob decodes with Fourier kernel (register-level)
-    QKERNEL Q2, Q2, 2, R0, R0
+    QPREP Q2, 2          # Fresh Bell pair
+# Alice applies Z to her qubit (q0)
+    QPHASE Q2, Q2, R1    # Z on qubit 0 (mask=1)
+# Bob decodes: Bell measurement
+    QCNOT Q2, Q2, R0, R1
+    QHADM Q2, Q2, R1
     QOBSERVE H2, Q2
-    HREDUCE H2, R5, 11   # R5 = decoded message for 10
+    HREDUCE H2, R5, 11      # R5 = decoded message for 10 (expect 2)
 
 # ===============================================
-# Message 11: XZ (bit-flip + phase-flip)
+# Message 11: XZ (bit-flip + phase-flip on q0)
 # ===============================================
-    QPREP Q3, 2          # Fresh Bell pair (register-level)
-# Alice applies both X and Z (gate-level, required)
+    QPREP Q3, 2          # Fresh Bell pair
+# Alice applies both X and Z to her qubit (q0)
     QFLIP Q3, Q3, R1
     QPHASE Q3, Q3, R1
-# Bob decodes with Fourier kernel (register-level)
-    QKERNEL Q3, Q3, 2, R0, R0
+# Bob decodes: Bell measurement
+    QCNOT Q3, Q3, R0, R1
+    QHADM Q3, Q3, R1
     QOBSERVE H3, Q3
-    HREDUCE H3, R6, 11   # R6 = decoded message for 11
+    HREDUCE H3, R6, 11      # R6 = decoded message for 11 (expect 3)
 
 # ===============================================
 # Verify all messages decoded correctly
 # ===============================================
     ILDI R7, 0
-    IEQ R8, R3, R7       # Message 00: should decode to something specific
+    IEQ R8, R3, R7       # Message 00: should decode to 0
     ILDI R7, 1
-    IEQ R9, R4, R7       # Message 01: expected decode
+    IEQ R9, R4, R7       # Message 01: should decode to 1
+    ILDI R7, 2
+    IEQ R10, R5, R7      # Message 10: should decode to 2
+    ILDI R7, 3
+    IEQ R11, R6, R7      # Message 11: should decode to 3
 
 # --- Store all decoded messages ---
-    ISTR R3, 0           # CMEM[0] = decoded 00
-    ISTR R4, 1           # CMEM[1] = decoded 01
-    ISTR R5, 2           # CMEM[2] = decoded 10
-    ISTR R6, 3           # CMEM[3] = decoded 11
+    ISTR R3, 0           # CMEM[0] = decoded 00 (expect 0)
+    ISTR R4, 1           # CMEM[1] = decoded 01 (expect 1)
+    ISTR R5, 2           # CMEM[2] = decoded 10 (expect 2)
+    ISTR R6, 3           # CMEM[3] = decoded 11 (expect 3)
     ISTR R8, 4           # CMEM[4] = verification flag for msg 00
     ISTR R9, 5           # CMEM[5] = verification flag for msg 01
+    ISTR R10, 6          # CMEM[6] = verification flag for msg 10
+    ISTR R11, 7          # CMEM[7] = verification flag for msg 11
 
     HALT
