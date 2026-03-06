@@ -1,7 +1,7 @@
 //! Entanglement kernel: applies a CNOT gate between qubit 0 and qubit 1.
 
 use cqam_core::error::CqamError;
-use crate::complex;
+use crate::complex::{C64, ZERO, ONE};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -26,24 +26,16 @@ impl Kernel for Entangle {
             });
         }
 
-        let dim = input.dimension();
-        let mut unitary = vec![complex::ZERO; dim * dim];
-
-        // CNOT on qubits 0,1 (big-endian ordering):
-        // qubit 0 = control (MSB), qubit 1 = target
-        // If control qubit is 1: flip target qubit
-        for basis_state in 0..dim {
-            let q0 = (basis_state >> (n - 1)) & 1; // control (MSB)
-            let output_state = if q0 == 1 {
-                basis_state ^ (1 << (n - 2)) // flip qubit 1
-            } else {
-                basis_state // identity
-            };
-            unitary[output_state * dim + basis_state] = complex::ONE;
-        }
+        // CNOT 4x4 matrix: |00>->|00>, |01>->|01>, |10>->|11>, |11>->|10>
+        let cnot: [C64; 16] = [
+            ONE,  ZERO, ZERO, ZERO,
+            ZERO, ONE,  ZERO, ZERO,
+            ZERO, ZERO, ZERO, ONE,
+            ZERO, ZERO, ONE,  ZERO,
+        ];
 
         let mut result = input.clone();
-        result.apply_unitary(&unitary);
+        result.apply_two_qubit_gate(0, 1, &cnot);
         Ok(result)
     }
 

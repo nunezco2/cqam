@@ -324,6 +324,40 @@ impl DensityMatrix {
             result
         };
     }
+
+    /// Apply a diagonal unitary in-place: rho'[i][j] = phases[i] * conj(phases[j]) * rho[i][j].
+    ///
+    /// This is O(dim^2) instead of O(dim^3) for the general apply_unitary path.
+    /// The `phases` slice must have exactly `dim` elements, where phases[k] is
+    /// the diagonal entry U[k][k] of the unitary.
+    ///
+    /// # Panics
+    /// Panics if `phases.len() != dim`.
+    pub fn apply_diagonal_unitary(&mut self, phases: &[C64]) {
+        let dim = self.dimension();
+        assert_eq!(phases.len(), dim,
+            "Diagonal unitary size mismatch: expected {}, got {}", dim, phases.len());
+
+        if dim >= PAR_THRESHOLD {
+            let data = &mut self.data;
+            // Process each row in parallel
+            data.par_chunks_mut(dim).enumerate().for_each(|(i, row)| {
+                let pi = phases[i];
+                for (j, entry) in row.iter_mut().enumerate() {
+                    // rho'[i][j] = phases[i] * conj(phases[j]) * rho[i][j]
+                    let pj_conj = cx_conj(phases[j]);
+                    *entry = cx_mul(pi, cx_mul(pj_conj, *entry));
+                }
+            });
+        } else {
+            for (i, &pi) in phases.iter().enumerate() {
+                for (j, &pj) in phases.iter().enumerate() {
+                    let pj_conj = cx_conj(pj);
+                    self.data[i * dim + j] = cx_mul(pi, cx_mul(pj_conj, self.data[i * dim + j]));
+                }
+            }
+        }
+    }
 }
 
 // =============================================================================
@@ -345,7 +379,7 @@ impl DensityMatrix {
     ///
     /// # Panics
     /// Panics if `target >= self.num_qubits`.
-    pub fn measure_qubit(&self, target: u8) -> (u8, DensityMatrix) {
+    pub fn measure_qubit_with_rng(&self, target: u8, rng: &mut impl Rng) -> (u8, DensityMatrix) {
         let n = self.num_qubits as usize;
         let dim = self.dimension();
         assert!(
@@ -369,7 +403,6 @@ impl DensityMatrix {
         let p1 = 1.0 - p0;
 
         // Step 2: Sample outcome
-        let mut rng = rand::thread_rng();
         let r: f64 = rng.r#gen();
         let outcome: u8 = if r < p0 { 0 } else { 1 };
         let p_outcome = if outcome == 0 { p0 } else { p1 };
@@ -397,6 +430,11 @@ impl DensityMatrix {
         }
 
         (outcome, result)
+    }
+
+    /// Measure a single qubit using thread-local RNG (non-reproducible).
+    pub fn measure_qubit(&self, target: u8) -> (u8, DensityMatrix) {
+        self.measure_qubit_with_rng(target, &mut rand::thread_rng())
     }
 
     /// Stochastic measurement of all qubits using the Born rule.
@@ -837,34 +875,72 @@ impl DensityMatrix {
 
         let [g00, g01, g10, g11] = *gate;
 
+        // Collect valid paired indices (where the target bit is 0)
+        let pairs: Vec<usize> = (0..dim).filter(|&i0| i0 & mask == 0).collect();
+
         // Step 1: Apply gate to rows (temp = G * rho)
-        let mut temp = self.data.clone();
-        for i0 in 0..dim {
-            if i0 & mask != 0 {
-                continue;
+        let temp = if dim >= PAR_THRESHOLD {
+            let data = &self.data;
+            let mut temp = data.to_vec();
+            let updates: Vec<(usize, usize, C64, C64)> = pairs.par_iter().flat_map(|&i0| {
+                let i1 = i0 | mask;
+                (0..dim).map(move |j| {
+                    let r0 = data[i0 * dim + j];
+                    let r1 = data[i1 * dim + j];
+                    (i0, j,
+                     cx_add(cx_mul(g00, r0), cx_mul(g01, r1)),
+                     cx_add(cx_mul(g10, r0), cx_mul(g11, r1)))
+                }).collect::<Vec<_>>()
+            }).collect();
+            for (i0, j, v0, v1) in updates {
+                let i1 = i0 | mask;
+                temp[i0 * dim + j] = v0;
+                temp[i1 * dim + j] = v1;
             }
-            let i1 = i0 | mask;
-            for j in 0..dim {
-                let r0 = self.data[i0 * dim + j];
-                let r1 = self.data[i1 * dim + j];
-                temp[i0 * dim + j] = cx_add(cx_mul(g00, r0), cx_mul(g01, r1));
-                temp[i1 * dim + j] = cx_add(cx_mul(g10, r0), cx_mul(g11, r1));
+            temp
+        } else {
+            let mut temp = self.data.clone();
+            for &i0 in &pairs {
+                let i1 = i0 | mask;
+                for j in 0..dim {
+                    let r0 = self.data[i0 * dim + j];
+                    let r1 = self.data[i1 * dim + j];
+                    temp[i0 * dim + j] = cx_add(cx_mul(g00, r0), cx_mul(g01, r1));
+                    temp[i1 * dim + j] = cx_add(cx_mul(g10, r0), cx_mul(g11, r1));
+                }
             }
-        }
+            temp
+        };
 
         // Step 2: Apply gate^dagger to columns (result = temp * G^dagger)
-        for j0 in 0..dim {
-            if j0 & mask != 0 {
-                continue;
+        if dim >= PAR_THRESHOLD {
+            let temp_ref = &temp;
+            let updates: Vec<(usize, usize, C64, C64)> = pairs.par_iter().flat_map(|&j0| {
+                let j1 = j0 | mask;
+                (0..dim).map(move |i| {
+                    let c0 = temp_ref[i * dim + j0];
+                    let c1 = temp_ref[i * dim + j1];
+                    (i, j0,
+                     cx_add(cx_mul(c0, cx_conj(g00)), cx_mul(c1, cx_conj(g01))),
+                     cx_add(cx_mul(c0, cx_conj(g10)), cx_mul(c1, cx_conj(g11))))
+                }).collect::<Vec<_>>()
+            }).collect();
+            for (i, j0, v0, v1) in updates {
+                let j1 = j0 | mask;
+                self.data[i * dim + j0] = v0;
+                self.data[i * dim + j1] = v1;
             }
-            let j1 = j0 | mask;
-            for i in 0..dim {
-                let c0 = temp[i * dim + j0];
-                let c1 = temp[i * dim + j1];
-                self.data[i * dim + j0] =
-                    cx_add(cx_mul(c0, cx_conj(g00)), cx_mul(c1, cx_conj(g01)));
-                self.data[i * dim + j1] =
-                    cx_add(cx_mul(c0, cx_conj(g10)), cx_mul(c1, cx_conj(g11)));
+        } else {
+            for &j0 in &pairs {
+                let j1 = j0 | mask;
+                for i in 0..dim {
+                    let c0 = temp[i * dim + j0];
+                    let c1 = temp[i * dim + j1];
+                    self.data[i * dim + j0] =
+                        cx_add(cx_mul(c0, cx_conj(g00)), cx_mul(c1, cx_conj(g01)));
+                    self.data[i * dim + j1] =
+                        cx_add(cx_mul(c0, cx_conj(g10)), cx_mul(c1, cx_conj(g11)));
+                }
             }
         }
     }

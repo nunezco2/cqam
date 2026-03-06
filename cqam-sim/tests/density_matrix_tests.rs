@@ -394,7 +394,7 @@ fn test_grover_2q_target3_probability_one() {
     use cqam_sim::kernel::Kernel;
 
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 3, extra_targets: Vec::new() };
+    let grover = GroverIter::single(3);
     let output = grover.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
@@ -411,7 +411,7 @@ fn test_grover_3q_multi_iteration() {
     use cqam_sim::kernel::Kernel;
 
     let mut dm = DensityMatrix::new_uniform(3);
-    let grover = GroverIter { target: 5, extra_targets: Vec::new() };
+    let grover = GroverIter::single(5);
 
     // For N=8, optimal is ~2 iterations
     for _ in 0..2 {

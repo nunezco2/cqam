@@ -9,7 +9,7 @@
 //! - Preserves diagonal probabilities.
 
 use cqam_core::error::CqamError;
-use crate::complex::{self, cx_exp_i, cx_mul, cx_norm};
+use crate::complex::{cx_exp_i, cx_mul, cx_norm};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -36,12 +36,9 @@ impl Kernel for PhaseShift {
     fn apply(&self, input: &DensityMatrix) -> Result<DensityMatrix, CqamError> {
         let rate = cx_norm(self.amplitude);
         let dim = input.dimension();
-        let mut unitary = vec![complex::ZERO; dim * dim];
-        for k in 0..dim {
-            unitary[k * dim + k] = cx_exp_i(rate * (k as f64));
-        }
+        let phases: Vec<_> = (0..dim).map(|k| cx_exp_i(rate * (k as f64))).collect();
         let mut result = input.clone();
-        result.apply_unitary(&unitary);
+        result.apply_diagonal_unitary(&phases);
         Ok(result)
     }
 

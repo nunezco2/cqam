@@ -11,6 +11,7 @@ use crate::statevector::Statevector;
 use crate::complex::{cx_mul, cx_conj};
 use cqam_core::error::CqamError;
 use cqam_core::quantum_state::QuantumState;
+use rand::Rng;
 
 /// A quantum register that can hold either a pure statevector or a
 /// mixed-state density matrix.
@@ -179,18 +180,23 @@ impl QuantumRegister {
 // =============================================================================
 
 impl QuantumRegister {
-    /// Measure a single qubit, returning (outcome, post-measurement register).
-    pub fn measure_qubit(&self, target: u8) -> (u8, QuantumRegister) {
+    /// Measure a single qubit using a caller-supplied RNG, returning (outcome, post-measurement register).
+    pub fn measure_qubit_with_rng(&self, target: u8, rng: &mut impl Rng) -> (u8, QuantumRegister) {
         match self {
             QuantumRegister::Pure(sv) => {
-                let (out, sv2) = sv.measure_qubit(target);
+                let (out, sv2) = sv.measure_qubit_with_rng(target, rng);
                 (out, QuantumRegister::Pure(sv2))
             }
             QuantumRegister::Mixed(dm) => {
-                let (out, dm2) = dm.measure_qubit(target);
+                let (out, dm2) = dm.measure_qubit_with_rng(target, rng);
                 (out, QuantumRegister::Mixed(dm2))
             }
         }
+    }
+
+    /// Measure a single qubit using thread-local RNG (non-reproducible).
+    pub fn measure_qubit(&self, target: u8) -> (u8, QuantumRegister) {
+        self.measure_qubit_with_rng(target, &mut rand::thread_rng())
     }
 }
 

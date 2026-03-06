@@ -13,6 +13,8 @@ use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMem, QMem};
 use cqam_core::register::{IntRegFile, FloatRegFile, ComplexRegFile, HybridRegFile};
 use cqam_sim::quantum_register::QuantumRegister;
+use rand::SeedableRng;
+use rand_chacha::ChaCha8Rng;
 use crate::isr::IsrTable;
 use crate::resource::ResourceTracker;
 use crate::psw::ProgramStateWord;
@@ -72,6 +74,10 @@ pub struct ExecutionContext {
     /// Label resolution cache: label name -> instruction index.
     /// Populated once during construction by `resolve_labels()`.
     pub labels: HashMap<String, usize>,
+
+    /// Seedable random number generator for reproducible measurements.
+    /// Use `set_rng_seed` to make measurement sequences deterministic.
+    pub rng: ChaCha8Rng,
 }
 
 impl ExecutionContext {
@@ -95,10 +101,16 @@ impl ExecutionContext {
             isr_table: IsrTable::new(),
             resource_tracker: ResourceTracker::new(),
             labels: HashMap::new(),
+            rng: ChaCha8Rng::from_entropy(),
             program,
         };
         ctx.resolve_labels();
         ctx
+    }
+
+    /// Set a deterministic seed for reproducible measurement sequences.
+    pub fn set_rng_seed(&mut self, seed: u64) {
+        self.rng = ChaCha8Rng::seed_from_u64(seed);
     }
 
     /// Advance the program counter by one.

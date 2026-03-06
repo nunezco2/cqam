@@ -19,32 +19,30 @@ const PAR_THRESHOLD: usize = 256;
 /// Grover iteration. When `extra_targets` contains additional values,
 /// applies the oracle phase flip to ALL marked states simultaneously.
 pub struct GroverIter {
-    /// The primary marked (target) basis state whose phase is flipped by the oracle.
-    pub target: u16,
-    /// Additional marked basis states (for multi-target mode).
-    pub extra_targets: Vec<u16>,
+    /// All marked basis states, precomputed as a set for O(1) lookup.
+    target_set: std::collections::HashSet<usize>,
+    /// All marked basis states as a vec (for external access).
+    targets: Vec<u16>,
 }
 
 impl GroverIter {
     /// Single-target constructor (backward compatible).
     pub fn single(target: u16) -> Self {
-        GroverIter { target, extra_targets: Vec::new() }
+        let targets = vec![target];
+        let target_set = targets.iter().map(|&t| t as usize).collect();
+        GroverIter { target_set, targets }
     }
 
     /// Multi-target constructor.
     pub fn multi(targets: Vec<u16>) -> Self {
         assert!(!targets.is_empty(), "multi-target Grover requires at least one target");
-        GroverIter {
-            target: targets[0],
-            extra_targets: targets[1..].to_vec(),
-        }
+        let target_set = targets.iter().map(|&t| t as usize).collect();
+        GroverIter { target_set, targets }
     }
 
     /// Return all target states.
-    pub fn all_targets(&self) -> Vec<u16> {
-        let mut all = vec![self.target];
-        all.extend_from_slice(&self.extra_targets);
-        all
+    pub fn all_targets(&self) -> &[u16] {
+        &self.targets
     }
 }
 
@@ -53,21 +51,19 @@ impl Kernel for GroverIter {
         let dim = input.dimension();
         let n_f64 = dim as f64;
 
-        // Validate and build target set for O(1) lookup
-        let mut target_set = std::collections::HashSet::new();
-        for &t in &self.all_targets() {
-            let t_usize = t as usize;
-            if t_usize >= dim {
+        // Validate targets against dimension
+        for &t in &self.targets {
+            if (t as usize) >= dim {
                 return Err(CqamError::TypeMismatch {
                     instruction: "QKERNEL/GROVER".to_string(),
                     detail: format!(
                         "Grover target {} exceeds dimension {}",
-                        t_usize, dim
+                        t, dim
                     ),
                 });
             }
-            target_set.insert(t_usize);
         }
+        let target_set = &self.target_set;
 
         // Compose G = D * O
         let mut g = vec![complex::ZERO; dim * dim];
@@ -89,14 +85,12 @@ impl Kernel for GroverIter {
         let n_f64 = dim as f64;
 
         // Validate targets
-        let target_set: std::collections::HashSet<usize> =
-            self.all_targets().iter().map(|&t| {
-                let t_usize = t as usize;
-                if t_usize >= dim {
-                    panic!("Grover target {} exceeds dimension {}", t_usize, dim);
-                }
-                t_usize
-            }).collect();
+        for &t in &self.targets {
+            if (t as usize) >= dim {
+                return Err(format!("Grover target {} exceeds dimension {}", t, dim));
+            }
+        }
+        let target_set = &self.target_set;
 
         // Step 1: Oracle - flip sign of target amplitudes (O(dim))
         let mut amps: Vec<C64> = input.amplitudes().to_vec();
@@ -107,7 +101,7 @@ impl Kernel for GroverIter {
                 }
             });
         } else {
-            for &t in &target_set {
+            for &t in target_set {
                 amps[t] = (-amps[t].0, -amps[t].1);
             }
         }

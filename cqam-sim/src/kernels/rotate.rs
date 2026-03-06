@@ -12,7 +12,7 @@
 //! - theta = 2*pi/dim => primitive dim-th root of unity ramp.
 
 use cqam_core::error::CqamError;
-use crate::complex::{self, cx_exp_i, cx_mul};
+use crate::complex::{cx_exp_i, cx_mul};
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -37,13 +37,9 @@ impl Kernel for Rotate {
     /// DensityMatrix::apply_unitary.
     fn apply(&self, input: &DensityMatrix) -> Result<DensityMatrix, CqamError> {
         let dim = input.dimension();
-        let mut unitary = vec![complex::ZERO; dim * dim];
-        for k in 0..dim {
-            let angle = self.theta * (k as f64);
-            unitary[k * dim + k] = cx_exp_i(angle);
-        }
+        let phases: Vec<_> = (0..dim).map(|k| cx_exp_i(self.theta * (k as f64))).collect();
         let mut result = input.clone();
-        result.apply_unitary(&unitary);
+        result.apply_diagonal_unitary(&phases);
         Ok(result)
     }
 

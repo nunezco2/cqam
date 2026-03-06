@@ -600,20 +600,21 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QMeas { dst_r, src_q, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 
-            if let Some(ref qr) = ctx.qregs[*src_q as usize] {
+            if let Some(qr) = ctx.qregs[*src_q as usize].take() {
                 if qubit >= qr.num_qubits() {
+                    ctx.qregs[*src_q as usize] = Some(qr);
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QMEAS".to_string(),
                         address: qubit as i64,
                     });
                 }
 
-                let (outcome, post_qr) = qr.measure_qubit(qubit);
+                let (outcome, post_qr) = qr.measure_qubit_with_rng(qubit, &mut ctx.rng);
 
+                let purity = post_qr.purity();
                 ctx.iregs.set(*dst_r, outcome as i64)?;
                 ctx.qregs[*src_q as usize] = Some(post_qr);
 
-                let purity = ctx.qregs[*src_q as usize].as_ref().unwrap().purity();
                 ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
                 ctx.psw.mark_measured();
                 Ok(())
@@ -668,6 +669,33 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     let re = f64::from_bits(ctx.cmem.load(addr) as u64);
                     let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
                     unitary.push((re, im));
+                }
+
+                // Validate unitarity: U^dagger * U ~= I
+                let tol = 1e-6;
+                for i in 0..dim_val {
+                    for j in 0..dim_val {
+                        // (U^dagger * U)[i][j] = sum_k conj(U[k][i]) * U[k][j]
+                        let mut re_sum = 0.0_f64;
+                        let mut im_sum = 0.0_f64;
+                        for k in 0..dim_val {
+                            let (a_re, a_im) = unitary[k * dim_val + i];
+                            let (b_re, b_im) = unitary[k * dim_val + j];
+                            // conj(a) * b = (a_re - a_im*i)(b_re + b_im*i)
+                            re_sum += a_re * b_re + a_im * b_im;
+                            im_sum += a_re * b_im - a_im * b_re;
+                        }
+                        let expected_re = if i == j { 1.0 } else { 0.0 };
+                        if (re_sum - expected_re).abs() > tol || im_sum.abs() > tol {
+                            return Err(CqamError::TypeMismatch {
+                                instruction: "QCUSTOM".to_string(),
+                                detail: format!(
+                                    "matrix is not unitary: (U^dagger*U)[{}][{}] = ({:.6}, {:.6}), expected ({:.1}, 0.0)",
+                                    i, j, re_sum, im_sum, expected_re
+                                ),
+                            });
+                        }
+                    }
                 }
 
                 let mut result = qr.clone();
@@ -859,15 +887,16 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QReset { dst, src, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
+            if let Some(qr) = ctx.qregs[*src as usize].take() {
                 if qubit >= qr.num_qubits() {
+                    ctx.qregs[*src as usize] = Some(qr);
                     return Err(CqamError::AddressOutOfRange {
                         instruction: "QRESET".to_string(),
                         address: qubit as i64,
                     });
                 }
 
-                let (outcome, mut post_qr) = qr.measure_qubit(qubit);
+                let (outcome, mut post_qr) = qr.measure_qubit_with_rng(qubit, &mut ctx.rng);
 
                 if outcome == 1 {
                     let x_gate = pauli_x();

@@ -311,8 +311,8 @@ impl Statevector {
 // =============================================================================
 
 impl Statevector {
-    /// Measure a single qubit, returning (outcome, post-measurement state).
-    pub fn measure_qubit(&self, target: u8) -> (u8, Statevector) {
+    /// Measure a single qubit using a caller-supplied RNG, returning (outcome, post-measurement state).
+    pub fn measure_qubit_with_rng(&self, target: u8, rng: &mut impl Rng) -> (u8, Statevector) {
         let n = self.num_qubits as usize;
         let dim = self.dimension();
         assert!(
@@ -342,7 +342,6 @@ impl Statevector {
         let p1 = 1.0 - p0;
 
         // Sample outcome
-        let mut rng = rand::thread_rng();
         let r: f64 = rng.r#gen();
         let outcome: u8 = if r < p0 { 0 } else { 1 };
         let p_outcome = if outcome == 0 { p0 } else { p1 };
@@ -382,6 +381,11 @@ impl Statevector {
         }
 
         (outcome, Statevector { num_qubits: self.num_qubits, amplitudes: result })
+    }
+
+    /// Measure a single qubit using thread-local RNG (non-reproducible).
+    pub fn measure_qubit(&self, target: u8) -> (u8, Statevector) {
+        self.measure_qubit_with_rng(target, &mut rand::thread_rng())
     }
 
     /// Measure all qubits, returning (outcome, collapsed state).

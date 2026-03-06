@@ -7,4 +7,6 @@ edition = "2024"
 cqam-core = { path = "../cqam-core" }
 cqam-sim = { path = "../cqam-sim" }
 log = "0.4"
+rand = "0.8"
+rand_chacha = "0.3"
 rayon = "1.10"

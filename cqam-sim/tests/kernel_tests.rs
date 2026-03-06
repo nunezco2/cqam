@@ -135,7 +135,7 @@ fn test_diffuse_preserves_purity() {
 fn test_grover_2q_target3_exact() {
     // Key verification: 1 iteration on N=4, target=3 -> probability 1.0
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 3, extra_targets: Vec::new() };
+    let grover = GroverIter::single(3);
     let output = grover.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
@@ -149,7 +149,7 @@ fn test_grover_2q_target3_exact() {
 #[test]
 fn test_grover_amplifies_target() {
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 2, extra_targets: Vec::new() };
+    let grover = GroverIter::single(2);
     let output = grover.apply(&input).unwrap();
 
     let probs = output.diagonal_probabilities();
@@ -163,7 +163,7 @@ fn test_grover_amplifies_target() {
 #[test]
 fn test_grover_preserves_normalization() {
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 1, extra_targets: Vec::new() };
+    let grover = GroverIter::single(1);
     let output = grover.apply(&input).unwrap();
 
     let tr = output.trace();
@@ -178,7 +178,7 @@ fn test_grover_preserves_normalization() {
 fn test_grover_4q_3_iterations() {
     // 3 iterations on 16 states should give high probability for the target
     let mut dm = DensityMatrix::new_uniform(4);
-    let grover = GroverIter { target: 7, extra_targets: Vec::new() };
+    let grover = GroverIter::single(7);
 
     for _ in 0..3 {
         dm = grover.apply(&dm).unwrap();
@@ -630,7 +630,7 @@ fn test_grover_multi_target_backward_compat() {
     // Single target via single() should match old behavior
     let input = DensityMatrix::new_uniform(2);
     let g1 = GroverIter::single(3);
-    let g2 = GroverIter { target: 3, extra_targets: Vec::new() };
+    let g2 = GroverIter::single(3);
 
     let out1 = g1.apply(&input).unwrap();
     let out2 = g2.apply(&input).unwrap();
@@ -689,7 +689,7 @@ fn test_grover_multi_target_preserves_trace() {
 #[test]
 fn test_grover_multi_all_targets() {
     // The all_targets() method should return primary + extra
-    let g = GroverIter { target: 5, extra_targets: vec![10, 15] };
+    let g = GroverIter::multi(vec![5, 10, 15]);
     let all = g.all_targets();
     assert_eq!(all, vec![5, 10, 15]);
 }
