@@ -8,6 +8,10 @@ use cqam_core::instruction::{Instruction, reduce_fn};
 use cqam_core::register::HybridValue;
 use crate::context::ExecutionContext;
 use crate::fork::ForkManager;
+use rayon::prelude::*;
+
+/// Minimum distribution size to use parallel iteration.
+const PAR_THRESHOLD: usize = 256;
 
 /// Execute a hybrid instruction with fork/merge support.
 ///
@@ -70,9 +74,15 @@ pub fn execute_hybrid(
                             $ctx.iregs.set($dst, ($body)(re))?;
                         }
                         HybridValue::Dist(ref entries) => {
-                            let mean: f64 = entries.iter()
-                                .map(|(val, prob)| *val as f64 * prob)
-                                .sum();
+                            let mean: f64 = if entries.len() >= PAR_THRESHOLD {
+                                entries.par_iter()
+                                    .map(|(val, prob)| *val as f64 * prob)
+                                    .sum()
+                            } else {
+                                entries.iter()
+                                    .map(|(val, prob)| *val as f64 * prob)
+                                    .sum()
+                            };
                             $ctx.iregs.set($dst, ($body)(mean))?;
                         }
                         _ => {
@@ -138,23 +148,43 @@ pub fn execute_hybrid(
                 reduce_fn::IMAG      => hreduce_complex_to_float!(hybrid_val, "IMAG",      |_re: f64, im: f64| im,                        ctx, *dst),
 
                 reduce_fn::MEAN => hreduce_dist_to_float!(hybrid_val, "MEAN", |e: &[(u16, f64)]| {
-                    e.iter().map(|(val, prob)| *val as f64 * prob).sum::<f64>()
+                    if e.len() >= PAR_THRESHOLD {
+                        e.par_iter().map(|(val, prob)| *val as f64 * prob).sum::<f64>()
+                    } else {
+                        e.iter().map(|(val, prob)| *val as f64 * prob).sum::<f64>()
+                    }
                 }, ctx, *dst),
 
                 reduce_fn::VARIANCE => hreduce_dist_to_float!(hybrid_val, "VARIANCE", |e: &[(u16, f64)]| {
-                    let mean: f64 = e.iter().map(|(val, prob)| *val as f64 * prob).sum();
-                    e.iter().map(|(val, prob)| { let d = *val as f64 - mean; d * d * prob }).sum::<f64>()
+                    if e.len() >= PAR_THRESHOLD {
+                        let mean: f64 = e.par_iter().map(|(val, prob)| *val as f64 * prob).sum();
+                        e.par_iter().map(|(val, prob)| { let d = *val as f64 - mean; d * d * prob }).sum::<f64>()
+                    } else {
+                        let mean: f64 = e.iter().map(|(val, prob)| *val as f64 * prob).sum();
+                        e.iter().map(|(val, prob)| { let d = *val as f64 - mean; d * d * prob }).sum::<f64>()
+                    }
                 }, ctx, *dst),
 
                 reduce_fn::MODE => hreduce_dist_to_int!(hybrid_val, "MODE", |e: &[(u16, f64)]| {
-                    e.iter().max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
-                        .map(|(val, _)| *val as i64).unwrap_or(0)
+                    if e.len() >= PAR_THRESHOLD {
+                        e.par_iter().max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                            .map(|(val, _)| *val as i64).unwrap_or(0)
+                    } else {
+                        e.iter().max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                            .map(|(val, _)| *val as i64).unwrap_or(0)
+                    }
                 }, ctx, *dst),
 
                 reduce_fn::ARGMAX => hreduce_dist_to_int!(hybrid_val, "ARGMAX", |e: &[(u16, f64)]| {
-                    e.iter().enumerate()
-                        .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
-                        .map(|(idx, _)| idx as i64).unwrap_or(0)
+                    if e.len() >= PAR_THRESHOLD {
+                        e.par_iter().enumerate()
+                            .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
+                            .map(|(idx, _)| idx as i64).unwrap_or(0)
+                    } else {
+                        e.iter().enumerate()
+                            .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
+                            .map(|(idx, _)| idx as i64).unwrap_or(0)
+                    }
                 }, ctx, *dst),
 
                 reduce_fn::CONJ_Z => {
@@ -183,12 +213,22 @@ pub fn execute_hybrid(
                     if let HybridValue::Dist(ref entries) = hybrid_val {
                         let base_addr = ctx.iregs.get(*dst)? as u16;
 
-                        let mut expectation = 0.0f64;
-                        for (val, prob) in entries {
-                            let eigenvalue_addr = base_addr.wrapping_add(*val);
-                            let eigenvalue = f64::from_bits(ctx.cmem.load(eigenvalue_addr) as u64);
-                            expectation += eigenvalue * prob;
-                        }
+                        let expectation = if entries.len() >= PAR_THRESHOLD {
+                            let cmem = &ctx.cmem;
+                            entries.par_iter().map(|(val, prob)| {
+                                let eigenvalue_addr = base_addr.wrapping_add(*val);
+                                let eigenvalue = f64::from_bits(cmem.load(eigenvalue_addr) as u64);
+                                eigenvalue * prob
+                            }).sum::<f64>()
+                        } else {
+                            let mut exp = 0.0f64;
+                            for (val, prob) in entries {
+                                let eigenvalue_addr = base_addr.wrapping_add(*val);
+                                let eigenvalue = f64::from_bits(ctx.cmem.load(eigenvalue_addr) as u64);
+                                exp += eigenvalue * prob;
+                            }
+                            exp
+                        };
 
                         ctx.fregs.set(*dst, expectation)?;
                     } else {
