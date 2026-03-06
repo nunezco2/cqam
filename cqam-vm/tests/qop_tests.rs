@@ -2321,3 +2321,552 @@ fn test_qhadm_involution_3_qubit() {
     assert!((probs[0] - 1.0).abs() < 1e-8,
         "H*H should return to |000>, P(000) = {}", probs[0]);
 }
+
+// =============================================================================
+// QCNOT tests
+// =============================================================================
+
+/// QCNOT on |00> should leave state unchanged.
+#[test]
+fn test_qcnot_zero_state_unchanged() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // ctrl=qubit 0, tgt=qubit 1
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QCnot {
+        dst: 1, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // |00> -> |00>: P(00) = 1.0
+    assert!((probs[0] - 1.0).abs() < 1e-8,
+        "CNOT|00> should stay |00>, got P(00)={}", probs[0]);
+}
+
+/// QCNOT on |10> -> |11> (ctrl=qubit 0, bit ordering: qubit 0 is MSB).
+/// We prepare |10> by starting from |00> and flipping qubit 0.
+#[test]
+fn test_qcnot_flips_target() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // Flip qubit 0 using QFLIP with mask=0b01
+    ctx.iregs.set(0, 0b01).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Now in |01> (qubit 0 flipped). Apply CNOT ctrl=0, tgt=1
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QCnot {
+        dst: 0, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // |01> with CNOT(0,1) should flip tgt -> |11>
+    assert!((probs[3] - 1.0).abs() < 1e-8,
+        "CNOT on |01> should give |11>, got probs={:?}", probs);
+}
+
+/// QCNOT with ctrl == tgt should return an error.
+#[test]
+fn test_qcnot_same_qubit_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 0).unwrap(); // same qubit
+
+    let result = execute_qop(&mut ctx, &Instruction::QCnot {
+        dst: 1, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 1,
+    });
+    assert!(result.is_err(), "QCNOT with ctrl==tgt should fail");
+}
+
+/// QCNOT on uninitialized register should return an error.
+#[test]
+fn test_qcnot_uninit_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QCnot {
+        dst: 1, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 1,
+    });
+    assert!(result.is_err(), "QCNOT on uninitialized Q should fail");
+}
+
+/// QCNOT with out-of-range qubit index should return an error.
+#[test]
+fn test_qcnot_out_of_range_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 99).unwrap(); // out of range
+
+    let result = execute_qop(&mut ctx, &Instruction::QCnot {
+        dst: 1, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 1,
+    });
+    assert!(result.is_err(), "QCNOT with out-of-range qubit should fail");
+}
+
+// =============================================================================
+// QROT tests
+// =============================================================================
+
+/// QROT Rx(pi) on |0> should flip to |1>.
+#[test]
+fn test_qrot_rx_pi_flips() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // qubit index in R0, angle in F0
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.fregs.set(0, std::f64::consts::PI).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QRot {
+        dst: 0, src: 0, qubit_reg: 0, axis: rot_axis::X, angle_freg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // Rx(pi)|00> = -i|10>; qubit 0 is MSB so flipping it gives index 2 (binary 10)
+    assert!((probs[2] - 1.0).abs() < 1e-8,
+        "Rx(pi)|00> should flip qubit 0, got probs={:?}", probs);
+}
+
+/// QROT Rz(2pi) on |0> should be identity (up to global phase).
+#[test]
+fn test_qrot_rz_2pi_identity() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.fregs.set(0, 2.0 * std::f64::consts::PI).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QRot {
+        dst: 0, src: 0, qubit_reg: 0, axis: rot_axis::Z, angle_freg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // Rz(2pi)|00> = -|00>, density matrix unchanged
+    assert!((probs[0] - 1.0).abs() < 1e-8,
+        "Rz(2pi) should preserve |00>, got probs={:?}", probs);
+}
+
+/// QROT Ry(pi) on |0> should flip to |1>.
+#[test]
+fn test_qrot_ry_pi_flips() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.fregs.set(0, std::f64::consts::PI).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QRot {
+        dst: 0, src: 0, qubit_reg: 0, axis: rot_axis::Y, angle_freg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    let probs = dm.diagonal_probabilities();
+    // Ry(pi)|00> flips qubit 0; qubit 0 is MSB so result is index 2 (binary 10)
+    assert!((probs[2] - 1.0).abs() < 1e-8,
+        "Ry(pi)|00> should flip qubit 0, got probs={:?}", probs);
+}
+
+/// QROT with invalid axis should return an error.
+#[test]
+fn test_qrot_invalid_axis_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.fregs.set(0, 1.0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QRot {
+        dst: 0, src: 0, qubit_reg: 0, axis: 5, angle_freg: 0,
+    });
+    assert!(result.is_err(), "QROT with invalid axis should fail");
+}
+
+/// QROT on uninitialized register should return an error.
+#[test]
+fn test_qrot_uninit_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.fregs.set(0, 1.0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QRot {
+        dst: 0, src: 0, qubit_reg: 0, axis: rot_axis::X, angle_freg: 0,
+    });
+    assert!(result.is_err(), "QROT on uninitialized Q should fail");
+}
+
+// =============================================================================
+// QMEAS tests
+// =============================================================================
+
+/// QMEAS on |00> should always measure 0 for qubit 0.
+#[test]
+fn test_qmeas_zero_state_deterministic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // Measure qubit 0
+    ctx.iregs.set(0, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QMeas {
+        dst_r: 1, src_q: 0, qubit_reg: 0,
+    }).unwrap();
+
+    let outcome = ctx.iregs.get(1).unwrap();
+    assert_eq!(outcome, 0, "Measuring |00> qubit 0 should always give 0");
+
+    // Post-measurement state should still be valid
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert!(dm.is_valid(1e-6));
+}
+
+/// QMEAS on |11> should always measure 1 for any qubit.
+#[test]
+fn test_qmeas_one_state_deterministic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // Flip both qubits to get |11>
+    ctx.iregs.set(0, 0b11).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Measure qubit 0
+    ctx.iregs.set(0, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QMeas {
+        dst_r: 1, src_q: 0, qubit_reg: 0,
+    }).unwrap();
+
+    let outcome = ctx.iregs.get(1).unwrap();
+    assert_eq!(outcome, 1, "Measuring |11> qubit 0 should always give 1");
+}
+
+/// QMEAS on uninitialized register should return an error.
+#[test]
+fn test_qmeas_uninit_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QMeas {
+        dst_r: 1, src_q: 0, qubit_reg: 0,
+    });
+    assert!(result.is_err(), "QMEAS on uninitialized Q should fail");
+}
+
+/// QMEAS with out-of-range qubit index should return an error.
+#[test]
+fn test_qmeas_out_of_range_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 99).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QMeas {
+        dst_r: 1, src_q: 0, qubit_reg: 0,
+    });
+    assert!(result.is_err(), "QMEAS with out-of-range qubit should fail");
+}
+
+/// QMEAS on Bell state produces valid post-measurement state.
+#[test]
+fn test_qmeas_bell_state_valid_post() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+
+    // Measure qubit 0
+    ctx.iregs.set(0, 0).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QMeas {
+        dst_r: 1, src_q: 0, qubit_reg: 0,
+    }).unwrap();
+
+    let outcome = ctx.iregs.get(1).unwrap();
+    assert!(outcome == 0 || outcome == 1, "Outcome should be 0 or 1");
+
+    // Post-measurement state should be valid density matrix
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert!(dm.is_valid(1e-6));
+
+    // Post-measurement: Bell state collapses to either |00> or |11>
+    let probs = dm.diagonal_probabilities();
+    if outcome == 0 {
+        assert!((probs[0] - 1.0).abs() < 1e-6, "After measuring 0, should be in |00>");
+    } else {
+        assert!((probs[3] - 1.0).abs() < 1e-6, "After measuring 1, should be in |11>");
+    }
+}
+
+// =============================================================================
+// P2.1: QMIXED — mixed state preparation
+// =============================================================================
+
+/// QMIXED loads a mixture of pure states from CMEM and produces a density matrix.
+/// We prepare a mixture of |0> (weight 0.5) and |1> (weight 0.5), which should
+/// give the maximally mixed 1-qubit state.
+#[test]
+fn test_qmixed_maximally_mixed() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Layout in CMEM:
+    // addr 0: weight_0 = 0.5
+    // addr 1: dim_0 = 2
+    // addr 2: re(|0>[0]) = 1.0
+    // addr 3: im(|0>[0]) = 0.0
+    // addr 4: re(|0>[1]) = 0.0
+    // addr 5: im(|0>[1]) = 0.0
+    // addr 6: weight_1 = 0.5
+    // addr 7: dim_1 = 2
+    // addr 8: re(|1>[0]) = 0.0
+    // addr 9: im(|1>[0]) = 0.0
+    // addr 10: re(|1>[1]) = 1.0
+    // addr 11: im(|1>[1]) = 0.0
+
+    let w = 0.5f64.to_bits() as i64;
+    let one = 1.0f64.to_bits() as i64;
+    let zero = 0.0f64.to_bits() as i64;
+
+    ctx.cmem.store(0, w);     // weight 0.5
+    ctx.cmem.store(1, 2);     // dim 2
+    ctx.cmem.store(2, one);   // re(1.0)
+    ctx.cmem.store(3, zero);  // im(0.0)
+    ctx.cmem.store(4, zero);  // re(0.0)
+    ctx.cmem.store(5, zero);  // im(0.0)
+    ctx.cmem.store(6, w);     // weight 0.5
+    ctx.cmem.store(7, 2);     // dim 2
+    ctx.cmem.store(8, zero);  // re(0.0)
+    ctx.cmem.store(9, zero);  // im(0.0)
+    ctx.cmem.store(10, one);  // re(1.0)
+    ctx.cmem.store(11, zero); // im(0.0)
+
+    // R0 = base_addr = 0, R1 = count = 2
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 2).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QMixed {
+        dst: 0, base_addr_reg: 0, count_reg: 1,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    // Maximally mixed 1-qubit: diagonal probs are [0.5, 0.5]
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 0.5).abs() < 1e-6);
+    assert!((probs[1] - 0.5).abs() < 1e-6);
+}
+
+// =============================================================================
+// P2.3: QPREPN — variable qubit count
+// =============================================================================
+
+#[test]
+fn test_qprepn_zero_state_3_qubits() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // R0 = 3 (qubit count)
+    ctx.iregs.set(0, 3).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QPrepN {
+        dst: 0, dist: dist_id::ZERO, qubit_count_reg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 3);
+    assert_eq!(dm.dimension(), 8);
+    // |000>: prob[0] = 1.0, all others 0
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-6);
+    for i in 1..8 {
+        assert!(probs[i].abs() < 1e-6);
+    }
+}
+
+#[test]
+fn test_qprepn_uniform_4_qubits() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 4).unwrap();
+
+    execute_qop(&mut ctx, &Instruction::QPrepN {
+        dst: 1, dist: dist_id::UNIFORM, qubit_count_reg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 4);
+    let probs = dm.diagonal_probabilities();
+    let expected = 1.0 / 16.0;
+    for &p in &probs {
+        assert!((p - expected).abs() < 1e-6);
+    }
+}
+
+#[test]
+fn test_qprepn_zero_count_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 0).unwrap();
+
+    let result = execute_qop(&mut ctx, &Instruction::QPrepN {
+        dst: 0, dist: dist_id::ZERO, qubit_count_reg: 0,
+    });
+    assert!(result.is_err(), "QPREPN with 0 qubits should fail");
+}
+
+// =============================================================================
+// P2.5: QPTRACE — partial trace
+// =============================================================================
+
+#[test]
+fn test_qptrace_bell_state() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Prepare Bell state (2 qubits)
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+
+    // Trace out subsystem B (qubit 1), keep subsystem A (qubit 0)
+    ctx.iregs.set(0, 1).unwrap(); // num_qubits_a = 1
+
+    execute_qop(&mut ctx, &Instruction::QPtrace {
+        dst: 1, src: 0, num_qubits_a_reg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    // Partial trace of Bell state over one qubit gives maximally mixed state
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 0.5).abs() < 1e-6, "Bell partial trace should be maximally mixed");
+    assert!((probs[1] - 0.5).abs() < 1e-6, "Bell partial trace should be maximally mixed");
+}
+
+#[test]
+fn test_qptrace_separable_state() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Prepare |00> (separable 2-qubit state)
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 1).unwrap(); // num_qubits_a = 1
+
+    execute_qop(&mut ctx, &Instruction::QPtrace {
+        dst: 1, src: 0, num_qubits_a_reg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[1].as_ref().unwrap();
+    assert_eq!(dm.num_qubits(), 1);
+    // Partial trace of |00> should be |0>
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-6, "Partial trace of |00> should be |0>");
+}
+
+#[test]
+fn test_qptrace_invalid_count_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    // num_qubits_a = 0 (invalid)
+    ctx.iregs.set(0, 0).unwrap();
+    let result = execute_qop(&mut ctx, &Instruction::QPtrace {
+        dst: 1, src: 0, num_qubits_a_reg: 0,
+    });
+    assert!(result.is_err(), "QPTRACE with num_qubits_a=0 should fail");
+}
+
+#[test]
+fn test_qptrace_uninit_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 1).unwrap();
+    let result = execute_qop(&mut ctx, &Instruction::QPtrace {
+        dst: 1, src: 0, num_qubits_a_reg: 0,
+    });
+    assert!(result.is_err(), "QPTRACE on uninitialized Q should fail");
+}
+
+// =============================================================================
+// P2.6: QRESET — qubit reset
+// =============================================================================
+
+#[test]
+fn test_qreset_zero_state_noop() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // |00>: qubit 0 is already 0, reset should be a no-op
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 0).unwrap(); // qubit 0
+
+    execute_qop(&mut ctx, &Instruction::QReset {
+        dst: 0, src: 0, qubit_reg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert!(dm.is_valid(1e-6));
+    let probs = dm.diagonal_probabilities();
+    // Should still be |00>
+    assert!((probs[0] - 1.0).abs() < 1e-6, "Reset on |00> should remain |00>");
+}
+
+#[test]
+fn test_qreset_flipped_state() {
+    let mut ctx = ExecutionContext::new(vec![]);
+
+    // Prepare |00>, flip qubit 0 to get |01>
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+    ctx.iregs.set(0, 0b01).unwrap();
+    execute_qop(&mut ctx, &Instruction::QFlip { dst: 0, src: 0, mask_reg: 0 }).unwrap();
+
+    // Now state is |01>; reset qubit 0 should bring back to |00>
+    ctx.iregs.set(0, 0).unwrap();
+    execute_qop(&mut ctx, &Instruction::QReset {
+        dst: 0, src: 0, qubit_reg: 0,
+    }).unwrap();
+
+    let dm = ctx.qregs[0].as_ref().unwrap();
+    assert!(dm.is_valid(1e-6));
+    let probs = dm.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-6, "Reset should bring |01> back to |00>");
+}
+
+#[test]
+fn test_qreset_out_of_range_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::ZERO }).unwrap();
+
+    ctx.iregs.set(0, 99).unwrap(); // invalid qubit
+    let result = execute_qop(&mut ctx, &Instruction::QReset {
+        dst: 0, src: 0, qubit_reg: 0,
+    });
+    assert!(result.is_err(), "QRESET with out-of-range qubit should fail");
+}
+
+#[test]
+fn test_qreset_uninit_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    ctx.iregs.set(0, 0).unwrap();
+    let result = execute_qop(&mut ctx, &Instruction::QReset {
+        dst: 0, src: 0, qubit_reg: 0,
+    });
+    assert!(result.is_err(), "QRESET on uninitialized Q should fail");
+}

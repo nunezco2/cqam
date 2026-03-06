@@ -895,7 +895,8 @@ fn error_shift_overflow() {
 #[test]
 fn error_reduce_func_overflow() {
     let labels = HashMap::new();
-    let instr = Instruction::HReduce { src: 0, dst: 0, func: 16 };
+    // MAX_FUNC is now 31 (5 bits), so func=32 should overflow
+    let instr = Instruction::HReduce { src: 0, dst: 0, func: 32 };
     assert!(encode(&instr, &labels).is_err());
 }
 
@@ -1123,7 +1124,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2F_u8, 0x3F, 0x49, 0x80, 0xFE, 0xFF] {
+    for code in &[0x2F_u8, 0x3F, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,
@@ -1528,4 +1529,248 @@ fn mnemonic_masked_ops() {
     assert_eq!(mnemonic(op::QHADM), Some("QHADM"));
     assert_eq!(mnemonic(op::QFLIP), Some("QFLIP"));
     assert_eq!(mnemonic(op::QPHASE), Some("QPHASE"));
+}
+
+// =============================================================================
+// Phase 5a: QCNOT, QROT, QMEAS roundtrip tests
+// =============================================================================
+
+#[test]
+fn roundtrip_qcnot() {
+    let instr = Instruction::QCnot { dst: 0, src: 1, ctrl_qubit_reg: 2, tgt_qubit_reg: 3 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qcnot_max_values() {
+    let instr = Instruction::QCnot { dst: 7, src: 7, ctrl_qubit_reg: 15, tgt_qubit_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qcnot_zero_values() {
+    let instr = Instruction::QCnot { dst: 0, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qrot_x() {
+    let instr = Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 0, angle_freg: 3 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qrot_y() {
+    let instr = Instruction::QRot { dst: 3, src: 4, qubit_reg: 5, axis: 1, angle_freg: 6 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qrot_z() {
+    let instr = Instruction::QRot { dst: 7, src: 7, qubit_reg: 15, axis: 2, angle_freg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qrot_zero_values() {
+    let instr = Instruction::QRot { dst: 0, src: 0, qubit_reg: 0, axis: 0, angle_freg: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qmeas() {
+    let instr = Instruction::QMeas { dst_r: 0, src_q: 1, qubit_reg: 2 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qmeas_max_values() {
+    let instr = Instruction::QMeas { dst_r: 15, src_q: 7, qubit_reg: 15 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qmeas_zero_values() {
+    let instr = Instruction::QMeas { dst_r: 0, src_q: 0, qubit_reg: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn mnemonic_phase5a_ops() {
+    assert_eq!(mnemonic(op::QCNOT), Some("QCNOT"));
+    assert_eq!(mnemonic(op::QROT), Some("QROT"));
+    assert_eq!(mnemonic(op::QMEAS), Some("QMEAS"));
+}
+
+#[test]
+fn error_qcnot_dst_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QCnot { dst: 8, src: 0, ctrl_qubit_reg: 0, tgt_qubit_reg: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qrot_axis_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QRot { dst: 0, src: 0, qubit_reg: 0, axis: 3, angle_freg: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qmeas_dst_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QMeas { dst_r: 16, src_q: 0, qubit_reg: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+// ===========================================================================
+// P1 round-trip tests: QTENSOR, QCUSTOM, QCZ, QSWAP
+// ===========================================================================
+
+#[test]
+fn roundtrip_qtensor() {
+    let labels = HashMap::new();
+    let instr = Instruction::QTensor { dst: 3, src0: 5, src1: 7 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_qcustom() {
+    let labels = HashMap::new();
+    let instr = Instruction::QCustom { dst: 2, src: 4, base_addr_reg: 8, dim_reg: 12 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_qcz() {
+    let labels = HashMap::new();
+    let instr = Instruction::QCz { dst: 1, src: 3, ctrl_qubit_reg: 5, tgt_qubit_reg: 9 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_qswap() {
+    let labels = HashMap::new();
+    let instr = Instruction::QSwap { dst: 0, src: 6, qubit_a_reg: 10, qubit_b_reg: 14 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn mnemonic_new_opcodes() {
+    assert_eq!(mnemonic(op::QTENSOR), Some("QTENSOR"));
+    assert_eq!(mnemonic(op::QCUSTOM), Some("QCUSTOM"));
+    assert_eq!(mnemonic(op::QCZ), Some("QCZ"));
+    assert_eq!(mnemonic(op::QSWAP), Some("QSWAP"));
+}
+
+#[test]
+fn error_qtensor_q_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QTensor { dst: 8, src0: 0, src1: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+// =============================================================================
+// PLAN4 P2 opcode roundtrip tests
+// =============================================================================
+
+#[test]
+fn roundtrip_qmixed() {
+    let labels = HashMap::new();
+    let instr = Instruction::QMixed { dst: 3, base_addr_reg: 7, count_reg: 12 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_qprepn() {
+    let labels = HashMap::new();
+    let instr = Instruction::QPrepN { dst: 5, dist: 3, qubit_count_reg: 10 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_fsin() {
+    let labels = HashMap::new();
+    let instr = Instruction::FSin { dst: 4, src: 9 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_fcos() {
+    let labels = HashMap::new();
+    let instr = Instruction::FCos { dst: 0, src: 15 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_fatan2() {
+    let labels = HashMap::new();
+    let instr = Instruction::FAtan2 { dst: 2, lhs: 6, rhs: 11 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_fsqrt() {
+    let labels = HashMap::new();
+    let instr = Instruction::FSqrt { dst: 7, src: 3 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_qptrace() {
+    let labels = HashMap::new();
+    let instr = Instruction::QPtrace { dst: 2, src: 4, num_qubits_a_reg: 8 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn roundtrip_qreset() {
+    let labels = HashMap::new();
+    let instr = Instruction::QReset { dst: 1, src: 6, qubit_reg: 14 };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
+}
+
+#[test]
+fn mnemonic_p2_opcodes() {
+    assert_eq!(mnemonic(op::QMIXED), Some("QMIXED"));
+    assert_eq!(mnemonic(op::QPREPN), Some("QPREPN"));
+    assert_eq!(mnemonic(op::FSIN), Some("FSIN"));
+    assert_eq!(mnemonic(op::FCOS), Some("FCOS"));
+    assert_eq!(mnemonic(op::FATAN2), Some("FATAN2"));
+    assert_eq!(mnemonic(op::FSQRT), Some("FSQRT"));
+    assert_eq!(mnemonic(op::QPTRACE), Some("QPTRACE"));
+    assert_eq!(mnemonic(op::QRESET), Some("QRESET"));
+}
+
+#[test]
+fn roundtrip_hreduce_expect() {
+    let labels = HashMap::new();
+    let instr = Instruction::HReduce { src: 3, dst: 5, func: cqam_core::instruction::reduce_fn::EXPECT };
+    let word = encode(&instr, &labels).unwrap();
+    let decoded = decode(word).unwrap();
+    assert_eq!(decoded, instr);
 }

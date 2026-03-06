@@ -848,6 +848,59 @@ fn test_imul_wrapping_overflow() {
     assert_eq!(ctx.iregs.get(2).unwrap(), i64::MAX.wrapping_mul(2));
 }
 
+// ===========================================================================
+// P2: Trig / float math
+// ===========================================================================
+
+#[test]
+fn test_fsin() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let pi_half = std::f64::consts::FRAC_PI_2;
+    ctx.fregs.set(0, pi_half).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSin { dst: 1, src: 0 }, &mut fm).unwrap();
+    assert!((ctx.fregs.get(1).unwrap() - 1.0).abs() < 1e-10, "sin(pi/2) = 1");
+}
+
+#[test]
+fn test_fcos() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.fregs.set(0, 0.0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FCos { dst: 1, src: 0 }, &mut fm).unwrap();
+    assert!((ctx.fregs.get(1).unwrap() - 1.0).abs() < 1e-10, "cos(0) = 1");
+}
+
+#[test]
+fn test_fatan2() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.fregs.set(0, 1.0).unwrap();
+    ctx.fregs.set(1, 1.0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FAtan2 { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    let expected = std::f64::consts::FRAC_PI_4;
+    assert!((ctx.fregs.get(2).unwrap() - expected).abs() < 1e-10, "atan2(1,1) = pi/4");
+}
+
+#[test]
+fn test_fsqrt() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.fregs.set(0, 9.0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSqrt { dst: 1, src: 0 }, &mut fm).unwrap();
+    assert!((ctx.fregs.get(1).unwrap() - 3.0).abs() < 1e-10, "sqrt(9) = 3");
+}
+
+#[test]
+fn test_fsqrt_negative_sets_trap() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.fregs.set(0, -1.0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSqrt { dst: 1, src: 0 }, &mut fm).unwrap();
+    assert!(ctx.fregs.get(1).unwrap().is_nan(), "sqrt(-1) should be NaN");
+    assert!(ctx.psw.trap_arith, "sqrt of negative should set trap_arith");
+}
+
 #[test]
 fn test_isub_wrapping_underflow() {
     let mut ctx = ExecutionContext::new(vec![]);

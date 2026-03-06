@@ -7,31 +7,61 @@ use crate::kernel::Kernel;
 /// One Grover iteration kernel (kernel_id = 4).
 ///
 /// G = D * O where:
-/// - Oracle O: diagonal with -1 at target state, +1 elsewhere
+/// - Oracle O: diagonal with -1 at each target state, +1 elsewhere
 /// - Diffusion D: 2|s><s| - I
 ///
-/// Combined: G[j][k] = (2/N - delta_{j,k}) * (if k == target { -1 } else { 1 })
+/// When `extra_targets` is empty, behaves as a standard single-target
+/// Grover iteration. When `extra_targets` contains additional values,
+/// applies the oracle phase flip to ALL marked states simultaneously.
 pub struct GroverIter {
-    /// The marked (target) basis state whose phase is flipped by the oracle.
+    /// The primary marked (target) basis state whose phase is flipped by the oracle.
     pub target: u16,
+    /// Additional marked basis states (for multi-target mode).
+    pub extra_targets: Vec<u16>,
+}
+
+impl GroverIter {
+    /// Single-target constructor (backward compatible).
+    pub fn single(target: u16) -> Self {
+        GroverIter { target, extra_targets: Vec::new() }
+    }
+
+    /// Multi-target constructor.
+    pub fn multi(targets: Vec<u16>) -> Self {
+        assert!(!targets.is_empty(), "multi-target Grover requires at least one target");
+        GroverIter {
+            target: targets[0],
+            extra_targets: targets[1..].to_vec(),
+        }
+    }
+
+    /// Return all target states.
+    pub fn all_targets(&self) -> Vec<u16> {
+        let mut all = vec![self.target];
+        all.extend_from_slice(&self.extra_targets);
+        all
+    }
 }
 
 impl Kernel for GroverIter {
     fn apply(&self, input: &DensityMatrix) -> DensityMatrix {
         let dim = input.dimension();
-        let t = self.target as usize;
-        assert!(t < dim, "Grover target {} exceeds dimension {}", t, dim);
         let n_f64 = dim as f64;
 
+        // Build target set for O(1) lookup
+        let target_set: std::collections::HashSet<usize> =
+            self.all_targets().iter().map(|&t| {
+                let t_usize = t as usize;
+                assert!(t_usize < dim, "Grover target {} exceeds dimension {}", t_usize, dim);
+                t_usize
+            }).collect();
+
         // Compose G = D * O
-        // D[j][m] = 2/N - delta_{j,m}
-        // O[m][k] = delta_{m,k} * (if k == t { -1 } else { 1 })
-        // G[j][k] = D[j][k] * O[k][k]  (since O is diagonal)
         let mut g = vec![complex::ZERO; dim * dim];
         for j in 0..dim {
             for k in 0..dim {
                 let d_jk = 2.0 / n_f64 - if j == k { 1.0 } else { 0.0 };
-                let o_kk = if k == t { -1.0 } else { 1.0 };
+                let o_kk = if target_set.contains(&k) { -1.0 } else { 1.0 };
                 g[j * dim + k] = (d_jk * o_kk, 0.0);
             }
         }

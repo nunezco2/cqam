@@ -270,6 +270,114 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             interference: 0.0,
         },
 
+        // Two-qubit CNOT gate: 4 cycles, creates entanglement
+        Instruction::QCnot { .. } => ResourceDelta {
+            time: 4,
+            space: 2,
+            superposition: 0.5,
+            entanglement: 1.0,
+            interference: 0.0,
+        },
+
+        // Parameterized rotation: 3 cycles (trig computation + gate application)
+        Instruction::QRot { .. } => ResourceDelta {
+            time: 3,
+            space: 1,
+            superposition: 0.5,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
+        // Partial measurement: 2 cycles, collapses one qubit
+        Instruction::QMeas { .. } => ResourceDelta {
+            time: 2,
+            space: 1,
+            superposition: 0.0,
+            entanglement: 0.0,
+            interference: 0.5,
+        },
+
+        // Tensor product: 4 cycles, space grows quadratically
+        Instruction::QTensor { .. } => ResourceDelta {
+            time: 4,
+            space: 4,
+            superposition: 0.0,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
+        // Custom unitary: expensive -- 5 cycles + heavy memory reads
+        Instruction::QCustom { .. } => ResourceDelta {
+            time: 5,
+            space: 2,
+            superposition: 0.5,
+            entanglement: 0.7,
+            interference: 0.0,
+        },
+
+        // CZ: same cost as CNOT
+        Instruction::QCz { .. } => ResourceDelta {
+            time: 4,
+            space: 2,
+            superposition: 0.5,
+            entanglement: 1.0,
+            interference: 0.0,
+        },
+
+        // SWAP: slightly cheaper (no entanglement creation in isolation)
+        Instruction::QSwap { .. } => ResourceDelta {
+            time: 4,
+            space: 2,
+            superposition: 0.0,
+            entanglement: 0.5,
+            interference: 0.0,
+        },
+
+        // QMIXED: mixed state preparation -- expensive
+        Instruction::QMixed { .. } => ResourceDelta {
+            time: 5,
+            space: 4,
+            superposition: 1.0,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
+        // QPREPN: variable qubit count preparation
+        Instruction::QPrepN { .. } => ResourceDelta {
+            time: 2,
+            space: 2,
+            superposition: 1.0,
+            ..Default::default()
+        },
+
+        // Trig functions: 2 cycles (more expensive than basic float ops)
+        Instruction::FSin { .. }
+        | Instruction::FCos { .. }
+        | Instruction::FAtan2 { .. }
+        | Instruction::FSqrt { .. } => ResourceDelta {
+            time: 2,
+            space: 1,
+            ..Default::default()
+        },
+
+        // Partial trace: 3 cycles
+        Instruction::QPtrace { .. } => ResourceDelta {
+            time: 3,
+            space: 2,
+            superposition: 0.0,
+            entanglement: -0.5,
+            interference: 0.3,
+        },
+
+        // Reset = measure + conditional X: 3 cycles
+        Instruction::QReset { .. } => ResourceDelta {
+            time: 3,
+            space: 1,
+            superposition: 0.0,
+            entanglement: 0.0,
+            interference: 0.5,
+        },
+
         // Quantum load/store: 1 cycle
         Instruction::QLoad { .. }
         | Instruction::QStore { .. } => ResourceDelta {

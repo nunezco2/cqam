@@ -201,6 +201,27 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::QPhase { dst, src, mask_reg } => {
             format!("QPHASE Q{}, Q{}, R{}", dst, src, mask_reg)
         }
+        Instruction::QCnot { dst, src, ctrl_qubit_reg, tgt_qubit_reg } => {
+            format!("QCNOT Q{}, Q{}, R{}, R{}", dst, src, ctrl_qubit_reg, tgt_qubit_reg)
+        }
+        Instruction::QRot { dst, src, qubit_reg, axis, angle_freg } => {
+            format!("QROT Q{}, Q{}, R{}, {}, F{}", dst, src, qubit_reg, axis, angle_freg)
+        }
+        Instruction::QMeas { dst_r, src_q, qubit_reg } => {
+            format!("QMEAS R{}, Q{}, R{}", dst_r, src_q, qubit_reg)
+        }
+        Instruction::QTensor { dst, src0, src1 } => {
+            format!("QTENSOR Q{}, Q{}, Q{}", dst, src0, src1)
+        }
+        Instruction::QCustom { dst, src, base_addr_reg, dim_reg } => {
+            format!("QCUSTOM Q{}, Q{}, R{}, R{}", dst, src, base_addr_reg, dim_reg)
+        }
+        Instruction::QCz { dst, src, ctrl_qubit_reg, tgt_qubit_reg } => {
+            format!("QCZ Q{}, Q{}, R{}, R{}", dst, src, ctrl_qubit_reg, tgt_qubit_reg)
+        }
+        Instruction::QSwap { dst, src, qubit_a_reg, qubit_b_reg } => {
+            format!("QSWAP Q{}, Q{}, R{}, R{}", dst, src, qubit_a_reg, qubit_b_reg)
+        }
         Instruction::QEncode { dst, src_base, count, file_sel } => {
             let file_prefix = match file_sel {
                 0 => "R",
@@ -209,6 +230,24 @@ fn format_instruction(instr: &Instruction) -> String {
                 _ => "?",
             };
             format!("QENCODE Q{}, {}{}, {}, {}", dst, file_prefix, src_base, count, file_sel)
+        }
+
+        // P2 instructions
+        Instruction::QMixed { dst, base_addr_reg, count_reg } => {
+            format!("QMIXED Q{}, R{}, R{}", dst, base_addr_reg, count_reg)
+        }
+        Instruction::QPrepN { dst, dist, qubit_count_reg } => {
+            format!("QPREPN Q{}, {}, R{}", dst, dist, qubit_count_reg)
+        }
+        Instruction::FSin { dst, src } => format!("FSIN F{}, F{}", dst, src),
+        Instruction::FCos { dst, src } => format!("FCOS F{}, F{}", dst, src),
+        Instruction::FAtan2 { dst, lhs, rhs } => format!("FATAN2 F{}, F{}, F{}", dst, lhs, rhs),
+        Instruction::FSqrt { dst, src } => format!("FSQRT F{}, F{}", dst, src),
+        Instruction::QPtrace { dst, src, num_qubits_a_reg } => {
+            format!("QPTRACE Q{}, Q{}, R{}", dst, src, num_qubits_a_reg)
+        }
+        Instruction::QReset { dst, src, qubit_reg } => {
+            format!("QRESET Q{}, Q{}, R{}", dst, src, qubit_reg)
         }
 
         // Hybrid

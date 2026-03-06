@@ -395,6 +395,162 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             "QPHASE",
             line_num,
         ),
+        "QCNOT" => {
+            if ops.len() != 4 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QCNOT requires 4 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCNOT: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCNOT: invalid src register '{}'", ops[1]),
+            })?;
+            let ctrl_qubit_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCNOT: invalid ctrl_qubit_reg '{}'", ops[2]),
+            })?;
+            let tgt_qubit_reg = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCNOT: invalid tgt_qubit_reg '{}'", ops[3]),
+            })?;
+            Ok(Instruction::QCnot { dst, src, ctrl_qubit_reg, tgt_qubit_reg })
+        }
+        "QROT" => {
+            if ops.len() != 5 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QROT requires 5 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QROT: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QROT: invalid src register '{}'", ops[1]),
+            })?;
+            let qubit_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QROT: invalid qubit_reg '{}'", ops[2]),
+            })?;
+            let axis = parse_rot_axis(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QROT: invalid axis '{}' (expected 0/X, 1/Y, 2/Z)", ops[3]),
+            })?;
+            let angle_freg = parse_reg(ops[4]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QROT: invalid angle_freg '{}'", ops[4]),
+            })?;
+            Ok(Instruction::QRot { dst, src, qubit_reg, axis, angle_freg })
+        }
+        "QMEAS" => {
+            if ops.len() != 3 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QMEAS requires 3 operands, got {}", ops.len()),
+                });
+            }
+            let dst_r = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QMEAS: invalid dst_r register '{}'", ops[0]),
+            })?;
+            let src_q = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QMEAS: invalid src_q register '{}'", ops[1]),
+            })?;
+            let qubit_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QMEAS: invalid qubit_reg '{}'", ops[2]),
+            })?;
+            Ok(Instruction::QMeas { dst_r, src_q, qubit_reg })
+        }
+        "QTENSOR" => parse_qqr(
+            &ops,
+            |dst, src0, src1| Instruction::QTensor { dst, src0, src1 },
+            "QTENSOR",
+            line_num,
+        ),
+        "QCUSTOM" => {
+            if ops.len() != 4 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QCUSTOM requires 4 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCUSTOM: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCUSTOM: invalid src register '{}'", ops[1]),
+            })?;
+            let base_addr_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCUSTOM: invalid base_addr_reg '{}'", ops[2]),
+            })?;
+            let dim_reg = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCUSTOM: invalid dim_reg '{}'", ops[3]),
+            })?;
+            Ok(Instruction::QCustom { dst, src, base_addr_reg, dim_reg })
+        }
+        "QCZ" => {
+            if ops.len() != 4 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QCZ requires 4 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCZ: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCZ: invalid src register '{}'", ops[1]),
+            })?;
+            let ctrl_qubit_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCZ: invalid ctrl_qubit_reg '{}'", ops[2]),
+            })?;
+            let tgt_qubit_reg = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QCZ: invalid tgt_qubit_reg '{}'", ops[3]),
+            })?;
+            Ok(Instruction::QCz { dst, src, ctrl_qubit_reg, tgt_qubit_reg })
+        }
+        "QSWAP" => {
+            if ops.len() != 4 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QSWAP requires 4 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QSWAP: invalid dst register '{}'", ops[0]),
+            })?;
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QSWAP: invalid src register '{}'", ops[1]),
+            })?;
+            let qubit_a_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QSWAP: invalid qubit_a_reg '{}'", ops[2]),
+            })?;
+            let qubit_b_reg = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QSWAP: invalid qubit_b_reg '{}'", ops[3]),
+            })?;
+            Ok(Instruction::QSwap { dst, src, qubit_a_reg, qubit_b_reg })
+        }
         "QENCODE" => {
             if ops.len() != 4 {
                 return Err(CqamError::ParseError {
@@ -429,6 +585,66 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             }
             Ok(Instruction::QEncode { dst, src_base, count, file_sel })
         }
+
+        // -- P2: New quantum instructions -----------------------------------------
+        "QMIXED" => {
+            if ops.len() != 3 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QMIXED requires 3 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QMIXED: invalid dst register '{}'", ops[0]),
+            })?;
+            let base_addr_reg = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QMIXED: invalid base_addr_reg '{}'", ops[1]),
+            })?;
+            let count_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QMIXED: invalid count_reg '{}'", ops[2]),
+            })?;
+            Ok(Instruction::QMixed { dst, base_addr_reg, count_reg })
+        }
+        "QPREPN" => {
+            if ops.len() != 3 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QPREPN requires 3 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPN: invalid dst register '{}'", ops[0]),
+            })?;
+            let dist = parse_u8(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPN: invalid distribution ID '{}'", ops[1]),
+            })?;
+            let qubit_count_reg = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPN: invalid qubit_count_reg '{}'", ops[2]),
+            })?;
+            Ok(Instruction::QPrepN { dst, dist, qubit_count_reg })
+        }
+        "FSIN" => parse_rr(&ops, |dst, src| Instruction::FSin { dst, src }, "FSIN", line_num),
+        "FCOS" => parse_rr(&ops, |dst, src| Instruction::FCos { dst, src }, "FCOS", line_num),
+        "FATAN2" => parse_rrr(&ops, |dst, lhs, rhs| Instruction::FAtan2 { dst, lhs, rhs }, "FATAN2", line_num),
+        "FSQRT" => parse_rr(&ops, |dst, src| Instruction::FSqrt { dst, src }, "FSQRT", line_num),
+        "QPTRACE" => parse_qqr(
+            &ops,
+            |dst, src, num_qubits_a_reg| Instruction::QPtrace { dst, src, num_qubits_a_reg },
+            "QPTRACE",
+            line_num,
+        ),
+        "QRESET" => parse_qqr(
+            &ops,
+            |dst, src, qubit_reg| Instruction::QReset { dst, src, qubit_reg },
+            "QRESET",
+            line_num,
+        ),
 
         // -- Hybrid -----------------------------------------------------------
         "HFORK" => Ok(Instruction::HFork),
@@ -762,6 +978,17 @@ where
         message: format!("{}: invalid immediate '{}'", name, ops[1]),
     })?;
     Ok(build(reg, imm))
+}
+
+/// Parse a rotation axis token: numeric (0-2) or named (X, Y, Z).
+fn parse_rot_axis(token: &str) -> Option<u8> {
+    let token = token.trim();
+    match token {
+        "X" | "x" | "0" => Some(0),
+        "Y" | "y" | "1" => Some(1),
+        "Z" | "z" | "2" => Some(2),
+        _ => None,
+    }
 }
 
 /// Parse an observe mode token: numeric (0-2) or named (DIST, PROB, AMP).

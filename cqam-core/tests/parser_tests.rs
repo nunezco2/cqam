@@ -1255,3 +1255,284 @@ HALT
     assert_eq!(program[2], Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 });
     assert_eq!(program[3], Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 });
 }
+
+// ===========================================================================
+// Example file parsing integration tests
+// ===========================================================================
+
+#[test]
+fn test_parse_all_example_files() {
+    let examples_dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .unwrap()
+        .join("examples");
+
+    let mut count = 0;
+    for entry in std::fs::read_dir(&examples_dir).unwrap() {
+        let entry = entry.unwrap();
+        let path = entry.path();
+        if path.extension().map_or(false, |e| e == "cqam") {
+            let source = std::fs::read_to_string(&path).unwrap();
+            let result = parse_program(&source);
+            assert!(
+                result.is_ok(),
+                "Failed to parse {}: {:?}",
+                path.display(),
+                result.unwrap_err()
+            );
+            let instrs = result.unwrap();
+            assert!(
+                !instrs.is_empty(),
+                "{} parsed to zero instructions",
+                path.display()
+            );
+            count += 1;
+        }
+    }
+    // Ensure we found and parsed a reasonable number of examples
+    assert!(count >= 20, "Expected at least 20 example files, found {}", count);
+}
+
+// =============================================================================
+// Phase 5a: QCNOT, QROT, QMEAS parse tests
+// =============================================================================
+
+#[test]
+fn test_parse_qcnot() {
+    assert_eq!(
+        parse_instruction("QCNOT Q0, Q1, R2, R3").unwrap(),
+        Instruction::QCnot { dst: 0, src: 1, ctrl_qubit_reg: 2, tgt_qubit_reg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qcnot_max_regs() {
+    assert_eq!(
+        parse_instruction("QCNOT Q7, Q7, R15, R15").unwrap(),
+        Instruction::QCnot { dst: 7, src: 7, ctrl_qubit_reg: 15, tgt_qubit_reg: 15 }
+    );
+}
+
+#[test]
+fn test_parse_qcnot_missing_operand() {
+    assert!(parse_instruction("QCNOT Q0, Q1, R2").is_err());
+}
+
+#[test]
+fn test_parse_qcnot_too_many_operands() {
+    assert!(parse_instruction("QCNOT Q0, Q1, R2, R3, R4").is_err());
+}
+
+#[test]
+fn test_parse_qrot_x_axis() {
+    assert_eq!(
+        parse_instruction("QROT Q0, Q1, R2, X, F3").unwrap(),
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 0, angle_freg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qrot_y_axis() {
+    assert_eq!(
+        parse_instruction("QROT Q0, Q1, R2, Y, F3").unwrap(),
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 1, angle_freg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qrot_z_axis() {
+    assert_eq!(
+        parse_instruction("QROT Q0, Q1, R2, Z, F3").unwrap(),
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 2, angle_freg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qrot_numeric_axis() {
+    assert_eq!(
+        parse_instruction("QROT Q0, Q1, R2, 0, F3").unwrap(),
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 0, angle_freg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qrot_missing_operand() {
+    assert!(parse_instruction("QROT Q0, Q1, R2, X").is_err());
+}
+
+#[test]
+fn test_parse_qrot_invalid_axis() {
+    assert!(parse_instruction("QROT Q0, Q1, R2, W, F3").is_err());
+}
+
+#[test]
+fn test_parse_qmeas() {
+    assert_eq!(
+        parse_instruction("QMEAS R0, Q1, R2").unwrap(),
+        Instruction::QMeas { dst_r: 0, src_q: 1, qubit_reg: 2 }
+    );
+}
+
+#[test]
+fn test_parse_qmeas_max_regs() {
+    assert_eq!(
+        parse_instruction("QMEAS R15, Q7, R15").unwrap(),
+        Instruction::QMeas { dst_r: 15, src_q: 7, qubit_reg: 15 }
+    );
+}
+
+#[test]
+fn test_parse_qmeas_missing_operand() {
+    assert!(parse_instruction("QMEAS R0, Q1").is_err());
+}
+
+#[test]
+fn test_parse_qmeas_too_many_operands() {
+    assert!(parse_instruction("QMEAS R0, Q1, R2, R3").is_err());
+}
+
+// ===========================================================================
+// P1 instructions: QTENSOR, QCUSTOM, QCZ, QSWAP
+// ===========================================================================
+
+#[test]
+fn test_parse_qtensor() {
+    assert_eq!(
+        parse_instruction("QTENSOR Q0, Q1, Q2").unwrap(),
+        Instruction::QTensor { dst: 0, src0: 1, src1: 2 }
+    );
+}
+
+#[test]
+fn test_parse_qtensor_error() {
+    assert!(parse_instruction("QTENSOR Q0, Q1").is_err());
+    assert!(parse_instruction("QTENSOR Q0, Q1, Q2, Q3").is_err());
+}
+
+#[test]
+fn test_parse_qcustom() {
+    assert_eq!(
+        parse_instruction("QCUSTOM Q0, Q1, R2, R3").unwrap(),
+        Instruction::QCustom { dst: 0, src: 1, base_addr_reg: 2, dim_reg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qcustom_error() {
+    assert!(parse_instruction("QCUSTOM Q0, Q1, R2").is_err());
+}
+
+#[test]
+fn test_parse_qcz() {
+    assert_eq!(
+        parse_instruction("QCZ Q0, Q1, R2, R3").unwrap(),
+        Instruction::QCz { dst: 0, src: 1, ctrl_qubit_reg: 2, tgt_qubit_reg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qcz_error() {
+    assert!(parse_instruction("QCZ Q0, Q1").is_err());
+}
+
+#[test]
+fn test_parse_qswap() {
+    assert_eq!(
+        parse_instruction("QSWAP Q0, Q1, R2, R3").unwrap(),
+        Instruction::QSwap { dst: 0, src: 1, qubit_a_reg: 2, qubit_b_reg: 3 }
+    );
+}
+
+#[test]
+fn test_parse_qswap_error() {
+    assert!(parse_instruction("QSWAP Q0").is_err());
+}
+
+// ===========================================================================
+// P2 new instructions
+// ===========================================================================
+
+#[test]
+fn test_parse_qmixed() {
+    assert_eq!(
+        parse_instruction("QMIXED Q0, R1, R2").unwrap(),
+        Instruction::QMixed { dst: 0, base_addr_reg: 1, count_reg: 2 }
+    );
+}
+
+#[test]
+fn test_parse_qmixed_error() {
+    assert!(parse_instruction("QMIXED Q0").is_err());
+    assert!(parse_instruction("QMIXED Q0, R1").is_err());
+}
+
+#[test]
+fn test_parse_qprepn() {
+    assert_eq!(
+        parse_instruction("QPREPN Q0, 1, R2").unwrap(),
+        Instruction::QPrepN { dst: 0, dist: 1, qubit_count_reg: 2 }
+    );
+}
+
+#[test]
+fn test_parse_qprepn_error() {
+    assert!(parse_instruction("QPREPN Q0, 1").is_err());
+}
+
+#[test]
+fn test_parse_fsin() {
+    assert_eq!(
+        parse_instruction("FSIN F0, F1").unwrap(),
+        Instruction::FSin { dst: 0, src: 1 }
+    );
+}
+
+#[test]
+fn test_parse_fcos() {
+    assert_eq!(
+        parse_instruction("FCOS F3, F4").unwrap(),
+        Instruction::FCos { dst: 3, src: 4 }
+    );
+}
+
+#[test]
+fn test_parse_fatan2() {
+    assert_eq!(
+        parse_instruction("FATAN2 F0, F1, F2").unwrap(),
+        Instruction::FAtan2 { dst: 0, lhs: 1, rhs: 2 }
+    );
+}
+
+#[test]
+fn test_parse_fsqrt() {
+    assert_eq!(
+        parse_instruction("FSQRT F5, F6").unwrap(),
+        Instruction::FSqrt { dst: 5, src: 6 }
+    );
+}
+
+#[test]
+fn test_parse_qptrace() {
+    assert_eq!(
+        parse_instruction("QPTRACE Q0, Q1, R2").unwrap(),
+        Instruction::QPtrace { dst: 0, src: 1, num_qubits_a_reg: 2 }
+    );
+}
+
+#[test]
+fn test_parse_qreset() {
+    assert_eq!(
+        parse_instruction("QRESET Q0, Q1, R2").unwrap(),
+        Instruction::QReset { dst: 0, src: 1, qubit_reg: 2 }
+    );
+}
+
+#[test]
+fn test_parse_fsin_error() {
+    assert!(parse_instruction("FSIN F0").is_err());
+}
+
+#[test]
+fn test_parse_fatan2_error() {
+    assert!(parse_instruction("FATAN2 F0, F1").is_err());
+}

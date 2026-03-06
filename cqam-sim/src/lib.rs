@@ -54,4 +54,5 @@ pub mod kernels {
     pub mod grover;
     pub mod rotate;
     pub mod phase;
+    pub mod fourier_inv;
 }

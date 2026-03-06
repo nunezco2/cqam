@@ -1150,3 +1150,50 @@ fn test_hfork_verify_fork_state_independence() {
     // Fork ran the same code past merge to HALT, so its R0 is set by its own execution
     // The key: fork's execution is independent of main
 }
+
+// =============================================================================
+// P2.2: HREDUCE/EXPECT — expectation value reduction
+// =============================================================================
+
+#[test]
+fn test_hreduce_expect_simple() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+
+    // Set up a distribution in H0: outcomes (0, 0.6) and (1, 0.4)
+    ctx.hregs.set(0, HybridValue::Dist(vec![(0, 0.6), (1, 0.4)])).unwrap();
+
+    // R5 = base address for eigenvalues
+    // CMEM[100] = eigenvalue for outcome 0 = 2.0
+    // CMEM[101] = eigenvalue for outcome 1 = 5.0
+    ctx.iregs.set(5, 100).unwrap();
+    ctx.cmem.store(100, 2.0f64.to_bits() as i64);
+    ctx.cmem.store(101, 5.0f64.to_bits() as i64);
+
+    execute_instruction(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 5, func: reduce_fn::EXPECT },
+        &mut fm,
+    ).unwrap();
+
+    // Expected: 0.6 * 2.0 + 0.4 * 5.0 = 1.2 + 2.0 = 3.2
+    let result = ctx.fregs.get(5).unwrap();
+    assert!((result - 3.2).abs() < 1e-10, "EXPECT should compute 0.6*2.0 + 0.4*5.0 = 3.2, got {}", result);
+}
+
+#[test]
+fn test_hreduce_expect_type_error() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+
+    // Put a Float (not Dist) in H0
+    ctx.hregs.set(0, HybridValue::Float(1.5)).unwrap();
+    ctx.iregs.set(5, 0).unwrap();
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::HReduce { src: 0, dst: 5, func: reduce_fn::EXPECT },
+        &mut fm,
+    );
+    assert!(result.is_err(), "EXPECT on Float should fail with type mismatch");
+}

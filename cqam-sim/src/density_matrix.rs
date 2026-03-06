@@ -116,6 +116,72 @@ impl DensityMatrix {
         Self { num_qubits, data }
     }
 
+    /// Construct a mixed state from weighted pure states.
+    ///
+    /// rho = sum_i weights[i] * |psi_i><psi_i|
+    ///
+    /// All statevectors must have the same dimension. Weights should be
+    /// non-negative and will be normalized to sum to 1.
+    ///
+    /// # Errors
+    /// Returns Err if statevectors have mismatched dimensions or zero total weight.
+    pub fn from_mixture(states: &[(f64, &[C64])]) -> Result<Self, String> {
+        if states.is_empty() {
+            return Err("from_mixture: empty state list".to_string());
+        }
+
+        let dim = states[0].1.len();
+        if dim == 0 || (dim & (dim - 1)) != 0 {
+            return Err(format!("from_mixture: dimension {} is not a power of 2", dim));
+        }
+        let num_qubits = dim.trailing_zeros() as u8;
+        if num_qubits > MAX_QUBITS {
+            return Err(format!("from_mixture: {} qubits exceeds MAX_QUBITS", num_qubits));
+        }
+
+        // Validate all dims match
+        for (i, (_, psi)) in states.iter().enumerate() {
+            if psi.len() != dim {
+                return Err(format!(
+                    "from_mixture: state {} has dimension {} but expected {}",
+                    i, psi.len(), dim
+                ));
+            }
+        }
+
+        // Compute total weight
+        let total_weight: f64 = states.iter().map(|(w, _)| *w).sum();
+        if total_weight <= 0.0 {
+            return Err("from_mixture: total weight must be positive".to_string());
+        }
+
+        let mut data = vec![complex::ZERO; dim * dim];
+
+        for (weight, psi) in states {
+            let normalized_weight = weight / total_weight;
+
+            // Normalize this statevector
+            let norm_sq: f64 = psi.iter().map(|z| cx_norm_sq(*z)).sum();
+            let norm = norm_sq.sqrt();
+            let psi_norm: Vec<C64> = if (norm - 1.0).abs() > 1e-12 && norm > 1e-30 {
+                psi.iter().map(|z| cx_scale(1.0 / norm, *z)).collect()
+            } else {
+                psi.to_vec()
+            };
+
+            // Accumulate: rho += w * |psi><psi|
+            for i in 0..dim {
+                for j in 0..dim {
+                    let outer = cx_mul(psi_norm[i], cx_conj(psi_norm[j]));
+                    let scaled = cx_scale(normalized_weight, outer);
+                    data[i * dim + j] = cx_add(data[i * dim + j], scaled);
+                }
+            }
+        }
+
+        Ok(Self { num_qubits, data })
+    }
+
     /// Construct a density matrix from a pure state vector: rho = |psi><psi|.
     ///
     /// The statevector length must be a power of 2 (2^n for some n >= 1).
@@ -231,6 +297,74 @@ impl DensityMatrix {
 // =============================================================================
 
 impl DensityMatrix {
+    /// Measure a single qubit via the Born rule, returning the outcome
+    /// and the post-measurement density matrix.
+    ///
+    /// Steps:
+    ///   1. Compute p(0) = sum over basis states with qubit=0 of rho[k][k]
+    ///   2. Sample outcome: 0 with probability p(0), else 1
+    ///   3. Project: rho' = P_outcome * rho * P_outcome / p(outcome)
+    ///      where P_0 = I_rest tensor |0><0| and P_1 = I_rest tensor |1><1|
+    ///   4. Return (outcome, rho')
+    ///
+    /// The returned DensityMatrix has the SAME number of qubits (no trace-out).
+    ///
+    /// # Panics
+    /// Panics if `target >= self.num_qubits`.
+    pub fn measure_qubit(&self, target: u8) -> (u8, DensityMatrix) {
+        let n = self.num_qubits as usize;
+        let dim = self.dimension();
+        assert!(
+            (target as usize) < n,
+            "target qubit {} out of range for {}-qubit system",
+            target, n
+        );
+
+        let bit = n - 1 - target as usize;
+        let mask = 1usize << bit;
+
+        // Step 1: Compute p(0) = sum of rho[k][k] where bit `target` of k is 0
+        let mut p0: f64 = 0.0;
+        for k in 0..dim {
+            if k & mask == 0 {
+                p0 += self.data[k * dim + k].0;
+            }
+        }
+        // Clamp to valid probability range
+        p0 = p0.clamp(0.0, 1.0);
+        let p1 = 1.0 - p0;
+
+        // Step 2: Sample outcome
+        let mut rng = rand::thread_rng();
+        let r: f64 = rng.r#gen();
+        let outcome: u8 = if r < p0 { 0 } else { 1 };
+        let p_outcome = if outcome == 0 { p0 } else { p1 };
+
+        // Step 3: Project and renormalize
+        // P_outcome zeroes out all rows and columns where the target bit
+        // doesn't match the outcome.
+        let mut result = self.clone();
+        let outcome_bit = if outcome == 0 { 0 } else { mask };
+
+        for i in 0..dim {
+            for j in 0..dim {
+                if (i & mask) != outcome_bit || (j & mask) != outcome_bit {
+                    result.data[i * dim + j] = complex::ZERO;
+                }
+            }
+        }
+
+        // Renormalize: rho' = projected / p(outcome)
+        if p_outcome > 1e-30 {
+            let inv_p = 1.0 / p_outcome;
+            for entry in result.data.iter_mut() {
+                *entry = cx_scale(inv_p, *entry);
+            }
+        }
+
+        (outcome, result)
+    }
+
     /// Stochastic measurement of all qubits using the Born rule.
     pub fn measure_all(&self) -> (u16, DensityMatrix) {
         let dim = self.dimension();
@@ -435,6 +569,96 @@ impl DensityMatrix {
 // =============================================================================
 
 impl DensityMatrix {
+    /// Apply a two-qubit gate to specific control and target qubits.
+    ///
+    /// The `gate` parameter is a 4x4 unitary matrix in row-major order,
+    /// acting on the 2-qubit subspace of (ctrl, tgt).
+    ///
+    /// The basis ordering for the 4x4 gate is:
+    ///   index 0 = (ctrl=0, tgt=0), index 1 = (ctrl=0, tgt=1),
+    ///   index 2 = (ctrl=1, tgt=0), index 3 = (ctrl=1, tgt=1).
+    ///
+    /// # Panics
+    /// Panics if ctrl or tgt >= num_qubits, or if ctrl == tgt.
+    pub fn apply_two_qubit_gate(&mut self, ctrl: u8, tgt: u8, gate: &[C64; 16]) {
+        let n = self.num_qubits as usize;
+        let dim = self.dimension();
+        assert!(
+            (ctrl as usize) < n && (tgt as usize) < n,
+            "qubit indices ({}, {}) out of range for {}-qubit system",
+            ctrl, tgt, n
+        );
+        assert!(ctrl != tgt, "ctrl ({}) must differ from tgt ({})", ctrl, tgt);
+
+        let ctrl_bit = n - 1 - ctrl as usize;
+        let tgt_bit = n - 1 - tgt as usize;
+        let ctrl_mask = 1usize << ctrl_bit;
+        let tgt_mask = 1usize << tgt_bit;
+
+        // Step 1: Apply gate to rows: temp = G * rho
+        let mut temp = self.data.clone();
+        for base in 0..dim {
+            // Skip indices that have any of the ctrl or tgt bits set;
+            // we process them via the base index where both bits are 0.
+            if base & (ctrl_mask | tgt_mask) != 0 {
+                continue;
+            }
+            // The 4 basis states for (ctrl_bit, tgt_bit) combinations:
+            let i00 = base;
+            let i01 = base | tgt_mask;
+            let i10 = base | ctrl_mask;
+            let i11 = base | ctrl_mask | tgt_mask;
+
+            let idxs = [i00, i01, i10, i11];
+
+            for j in 0..dim {
+                let orig = [
+                    self.data[i00 * dim + j],
+                    self.data[i01 * dim + j],
+                    self.data[i10 * dim + j],
+                    self.data[i11 * dim + j],
+                ];
+                for (a, &row_idx) in idxs.iter().enumerate() {
+                    let mut sum = complex::ZERO;
+                    for (b, &_col_idx) in idxs.iter().enumerate() {
+                        sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                    }
+                    temp[row_idx * dim + j] = sum;
+                }
+            }
+        }
+
+        // Step 2: Apply gate^dagger to columns: result = temp * G^dagger
+        for base in 0..dim {
+            if base & (ctrl_mask | tgt_mask) != 0 {
+                continue;
+            }
+            let j00 = base;
+            let j01 = base | tgt_mask;
+            let j10 = base | ctrl_mask;
+            let j11 = base | ctrl_mask | tgt_mask;
+
+            let jdxs = [j00, j01, j10, j11];
+
+            for i in 0..dim {
+                let orig = [
+                    temp[i * dim + j00],
+                    temp[i * dim + j01],
+                    temp[i * dim + j10],
+                    temp[i * dim + j11],
+                ];
+                for (a, &col_idx) in jdxs.iter().enumerate() {
+                    let mut sum = complex::ZERO;
+                    for (b, &_) in jdxs.iter().enumerate() {
+                        // G^dagger[b][a] = conj(G[a][b])
+                        sum = cx_add(sum, cx_mul(orig[b], cx_conj(gate[a * 4 + b])));
+                    }
+                    self.data[i * dim + col_idx] = sum;
+                }
+            }
+        }
+    }
+
     /// Apply a single-qubit gate to a specific qubit in the register.
     ///
     /// Performs the transformation rho' = U * rho * U^dagger where U is the
@@ -490,6 +714,50 @@ impl DensityMatrix {
         }
     }
 
+    /// Compute the tensor product of two density matrices.
+    ///
+    /// rho_AB = rho_A tensor rho_B
+    ///
+    /// The resulting matrix has dimension dim_A * dim_B and
+    /// (num_qubits_A + num_qubits_B) qubits.
+    ///
+    /// # Panics
+    /// Panics if combined qubit count exceeds MAX_QUBITS.
+    pub fn tensor_product(&self, other: &DensityMatrix) -> DensityMatrix {
+        let n0 = self.num_qubits;
+        let n1 = other.num_qubits;
+        let n_total = n0 + n1;
+        assert!(
+            n_total <= MAX_QUBITS,
+            "tensor_product: combined qubits {} + {} = {} exceeds MAX_QUBITS ({})",
+            n0, n1, n_total, MAX_QUBITS
+        );
+
+        let dim_a = self.dimension();
+        let dim_b = other.dimension();
+        let dim_ab = dim_a * dim_b;
+        let mut data = vec![complex::ZERO; dim_ab * dim_ab];
+
+        // Kronecker product: result[i*dim_b + j][k*dim_b + l] = self[i][k] * other[j][l]
+        for i in 0..dim_a {
+            for j in 0..dim_b {
+                let row = i * dim_b + j;
+                for k in 0..dim_a {
+                    let a_ik = self.data[i * dim_a + k];
+                    for l in 0..dim_b {
+                        let col = k * dim_b + l;
+                        let b_jl = other.data[j * dim_b + l];
+                        data[row * dim_ab + col] = cx_mul(a_ik, b_jl);
+                    }
+                }
+            }
+        }
+
+        DensityMatrix {
+            num_qubits: n_total,
+            data,
+        }
+    }
 }
 
 // =============================================================================

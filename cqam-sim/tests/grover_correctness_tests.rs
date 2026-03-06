@@ -8,7 +8,7 @@ use cqam_sim::kernels::grover::GroverIter;
 /// Apply Grover iterations and return the probability of the target state.
 fn grover_probability(num_qubits: u8, target: u16, iterations: usize) -> f64 {
     let mut rho = DensityMatrix::new_uniform(num_qubits);
-    let kernel = GroverIter { target };
+    let kernel = GroverIter { target, extra_targets: Vec::new() };
     for _ in 0..iterations {
         rho = kernel.apply(&rho);
     }
@@ -45,7 +45,7 @@ fn test_grover_4q_3iter_high_prob() {
 #[test]
 fn test_grover_preserves_trace_after_iterations() {
     let mut rho = DensityMatrix::new_uniform(3);
-    let kernel = GroverIter { target: 5 };
+    let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
         rho = kernel.apply(&rho);
     }
@@ -63,7 +63,7 @@ fn test_grover_preserves_trace_after_iterations() {
 #[test]
 fn test_grover_preserves_purity_after_iterations() {
     let mut rho = DensityMatrix::new_uniform(3);
-    let kernel = GroverIter { target: 5 };
+    let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
         rho = kernel.apply(&rho);
     }
@@ -111,7 +111,7 @@ fn test_grover_2q_overiteration_returns_to_uniform() {
 fn test_grover_3q_probabilities_sum_to_one() {
     // All diagonal probabilities must sum to 1.0 after any number of iterations.
     let mut rho = DensityMatrix::new_uniform(3);
-    let kernel = GroverIter { target: 5 };
+    let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
         rho = kernel.apply(&rho);
     }
@@ -128,7 +128,7 @@ fn test_grover_non_target_states_equal() {
     // After Grover iterations, all non-target states should have equal probability
     // (symmetry of the algorithm).
     let mut rho = DensityMatrix::new_uniform(3);
-    let kernel = GroverIter { target: 5 };
+    let kernel = GroverIter { target: 5, extra_targets: Vec::new() };
     for _ in 0..2 {
         rho = kernel.apply(&rho);
     }

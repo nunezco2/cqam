@@ -174,6 +174,26 @@ pub fn execute_hybrid(
                     }
                 }
 
+                reduce_fn::EXPECT => {
+                    if let HybridValue::Dist(ref entries) = hybrid_val {
+                        let base_addr = ctx.iregs.get(*dst)? as u16;
+
+                        let mut expectation = 0.0f64;
+                        for (val, prob) in entries {
+                            let eigenvalue_addr = base_addr.wrapping_add(*val);
+                            let eigenvalue = f64::from_bits(ctx.cmem.load(eigenvalue_addr) as u64);
+                            expectation += eigenvalue * prob;
+                        }
+
+                        ctx.fregs.set(*dst, expectation)?;
+                    } else {
+                        return Err(CqamError::TypeMismatch {
+                            instruction: "HREDUCE/EXPECT".to_string(),
+                            detail: format!("expected Dist, got {:?}", hybrid_val),
+                        });
+                    }
+                }
+
                 _ => {
                     return Err(CqamError::UnknownKernel(
                         format!("Unknown reduction function ID: {}", func),

@@ -295,6 +295,102 @@ pub enum Instruction {
     /// Store the result in Q[dst]. Bits beyond num_qubits are ignored.
     QPhase { dst: u8, src: u8, mask_reg: u8 },
 
+    /// Apply two-qubit CNOT gate to specific qubits within a quantum register.
+    ///
+    /// Q[dst] = CNOT(Q[src], ctrl=R[ctrl_qubit_reg], tgt=R[tgt_qubit_reg])
+    /// The control and target qubit indices are read from integer registers.
+    /// Traps if ctrl == tgt or either index >= num_qubits.
+    QCnot { dst: u8, src: u8, ctrl_qubit_reg: u8, tgt_qubit_reg: u8 },
+
+    /// Apply parameterized single-qubit rotation to a specific qubit.
+    ///
+    /// Q[dst] = R_axis(F[angle_freg])(Q[src], qubit=R[qubit_reg])
+    /// axis: 0=X, 1=Y, 2=Z (see rot_axis module)
+    /// The rotation angle theta is read from F[angle_freg] in radians.
+    /// The target qubit index is read from R[qubit_reg].
+    QRot { dst: u8, src: u8, qubit_reg: u8, axis: u8, angle_freg: u8 },
+
+    /// Measure a single qubit within a quantum register.
+    ///
+    /// R[dst_r] = measure_qubit(Q[src_q], qubit=R[qubit_reg])
+    /// Stores the measurement outcome (0 or 1) in integer register R[dst_r].
+    /// The quantum register Q[src_q] is updated to the post-measurement state
+    /// (projected and renormalized, NOT consumed).
+    QMeas { dst_r: u8, src_q: u8, qubit_reg: u8 },
+
+    /// Tensor product of two quantum registers.
+    ///
+    /// Q[dst] = Q[src0] tensor Q[src1]
+    /// Both source registers are consumed (set to None).
+    /// The resulting register has num_qubits(src0) + num_qubits(src1) qubits.
+    /// Traps if the combined qubit count exceeds MAX_QUBITS.
+    QTensor { dst: u8, src0: u8, src1: u8 },
+
+    /// Apply a custom unitary matrix read from classical memory.
+    ///
+    /// Q[dst] = U * Q[src] * U^dagger
+    /// where U is read from CMEM[R[base_addr_reg]..] as consecutive (re, im) pairs.
+    /// R[dim_reg] specifies the matrix dimension (must equal Q[src].dimension()).
+    /// Total cells consumed: 2 * dim * dim.
+    QCustom { dst: u8, src: u8, base_addr_reg: u8, dim_reg: u8 },
+
+    /// Apply two-qubit Controlled-Z gate to specific qubits within a quantum register.
+    ///
+    /// Q[dst] = CZ(Q[src], ctrl=R[ctrl_qubit_reg], tgt=R[tgt_qubit_reg])
+    QCz { dst: u8, src: u8, ctrl_qubit_reg: u8, tgt_qubit_reg: u8 },
+
+    /// Apply two-qubit SWAP gate to specific qubits within a quantum register.
+    ///
+    /// Q[dst] = SWAP(Q[src], qubit_a=R[qubit_a_reg], qubit_b=R[qubit_b_reg])
+    QSwap { dst: u8, src: u8, qubit_a_reg: u8, qubit_b_reg: u8 },
+
+    /// Prepare a mixed quantum state from weighted statevectors in CMEM.
+    ///
+    /// Q[dst] = sum_i w_i * |psi_i><psi_i|
+    /// R[base_addr_reg] = base address in CMEM for state data.
+    /// R[count_reg] = number of statevector/weight entries.
+    ///
+    /// CMEM layout per entry: [weight_f64][dim_u64][re_0][im_0][re_1][im_1]...
+    /// where weight is f64 bits, dim is the statevector dimension (power of 2),
+    /// and (re, im) pairs are f64 bits for each amplitude.
+    QMixed { dst: u8, base_addr_reg: u8, count_reg: u8 },
+
+    /// Prepare quantum register with a specified number of qubits.
+    ///
+    /// Q[dst] = new_qdist(dist, num_qubits=R[qubit_count_reg])
+    /// dist: distribution ID (0=uniform, 1=zero, 2=bell, 3=ghz)
+    /// The qubit count is read from R[qubit_count_reg] at runtime.
+    QPrepN { dst: u8, dist: u8, qubit_count_reg: u8 },
+
+    /// Float sine: F[dst] = sin(F[src])
+    FSin { dst: u8, src: u8 },
+
+    /// Float cosine: F[dst] = cos(F[src])
+    FCos { dst: u8, src: u8 },
+
+    /// Float atan2: F[dst] = atan2(F[lhs], F[rhs])
+    /// lhs = y, rhs = x (following standard math convention)
+    FAtan2 { dst: u8, lhs: u8, rhs: u8 },
+
+    /// Float square root: F[dst] = sqrt(F[src])
+    /// Traps if F[src] < 0.
+    FSqrt { dst: u8, src: u8 },
+
+    /// Compute partial trace over subsystem B.
+    ///
+    /// Q[dst] = Tr_B(Q[src]) where subsystem A has R[num_qubits_a_reg] qubits.
+    /// The resulting register has fewer qubits than Q[src].
+    /// Q[src] is NOT consumed (non-destructive).
+    QPtrace { dst: u8, src: u8, num_qubits_a_reg: u8 },
+
+    /// Reset a single qubit to |0> within a quantum register.
+    ///
+    /// Q[dst] = reset_qubit(Q[src], qubit=R[qubit_reg])
+    /// Semantics: measure the target qubit; if outcome is 1, apply X to flip it.
+    /// The result is a state where the target qubit is guaranteed to be |0>.
+    /// Depends on P0.3 measure_qubit and existing apply_single_qubit_gate.
+    QReset { dst: u8, src: u8, qubit_reg: u8 },
+
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
     /// Fork hybrid execution into parallel threads. Sets PSW fork flags.
@@ -380,6 +476,8 @@ pub mod kernel_id {
     pub const ROTATE: u8 = 5;
     /// Phase shift kernel: U[k][k] = exp(i * |z| * k).
     pub const PHASE_SHIFT: u8 = 6;
+    /// Inverse Quantum Fourier Transform.
+    pub const FOURIER_INV: u8 = 7;
 }
 
 /// PSW flag IDs for HCExec.
@@ -453,6 +551,11 @@ pub mod reduce_fn {
     pub const CONJ_Z: u8 = 14;
     /// Negate: Z[dst] = (-re, -im).
     pub const NEGATE_Z: u8 = 15;
+
+    /// Expectation value: sum_k eigenvalue_k * p_k.
+    /// Reads eigenvalues from CMEM[R[ctx]..R[ctx]+n] where n is distribution size.
+    /// Output: F[dst] = expectation value.
+    pub const EXPECT: u8 = 16;
 }
 
 /// Helper: name string for a distribution ID (for display/debug).
@@ -476,6 +579,7 @@ pub fn kernel_name(id: u8) -> &'static str {
         kernel_id::GROVER_ITER => "grover_iter",
         kernel_id::ROTATE => "rotate",
         kernel_id::PHASE_SHIFT => "phase_shift",
+        kernel_id::FOURIER_INV => "fourier_inv",
         _ => "unknown",
     }
 }
@@ -535,6 +639,26 @@ pub fn file_sel_name(id: u8) -> &'static str {
     }
 }
 
+/// Rotation axis constants for QROT instruction.
+pub mod rot_axis {
+    /// Rotation about X axis: Rx(theta).
+    pub const X: u8 = 0;
+    /// Rotation about Y axis: Ry(theta).
+    pub const Y: u8 = 1;
+    /// Rotation about Z axis: Rz(theta).
+    pub const Z: u8 = 2;
+}
+
+/// Helper: name string for a rotation axis (for display/debug).
+pub fn rot_axis_name(axis: u8) -> &'static str {
+    match axis {
+        rot_axis::X => "X",
+        rot_axis::Y => "Y",
+        rot_axis::Z => "Z",
+        _ => "unknown",
+    }
+}
+
 /// Helper: name string for a reduction function ID (for display/debug).
 pub fn reduce_fn_name(id: u8) -> &'static str {
     match id {
@@ -554,6 +678,7 @@ pub fn reduce_fn_name(id: u8) -> &'static str {
         reduce_fn::VARIANCE => "variance",
         reduce_fn::CONJ_Z => "conj_z",
         reduce_fn::NEGATE_Z => "negate_z",
+        reduce_fn::EXPECT => "expect",
         _ => "unknown",
     }
 }

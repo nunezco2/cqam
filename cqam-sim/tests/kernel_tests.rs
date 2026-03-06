@@ -5,6 +5,7 @@ use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernels::init::Init;
 use cqam_sim::kernels::entangle::Entangle;
 use cqam_sim::kernels::fourier::Fourier;
+use cqam_sim::kernels::fourier_inv::FourierInv;
 use cqam_sim::kernels::diffuse::Diffuse;
 use cqam_sim::kernels::grover::GroverIter;
 use cqam_sim::kernels::rotate::Rotate;
@@ -134,7 +135,7 @@ fn test_diffuse_preserves_purity() {
 fn test_grover_2q_target3_exact() {
     // Key verification: 1 iteration on N=4, target=3 -> probability 1.0
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 3 };
+    let grover = GroverIter { target: 3, extra_targets: Vec::new() };
     let output = grover.apply(&input);
 
     let probs = output.diagonal_probabilities();
@@ -148,7 +149,7 @@ fn test_grover_2q_target3_exact() {
 #[test]
 fn test_grover_amplifies_target() {
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 2 };
+    let grover = GroverIter { target: 2, extra_targets: Vec::new() };
     let output = grover.apply(&input);
 
     let probs = output.diagonal_probabilities();
@@ -162,7 +163,7 @@ fn test_grover_amplifies_target() {
 #[test]
 fn test_grover_preserves_normalization() {
     let input = DensityMatrix::new_uniform(2);
-    let grover = GroverIter { target: 1 };
+    let grover = GroverIter { target: 1, extra_targets: Vec::new() };
     let output = grover.apply(&input);
 
     let tr = output.trace();
@@ -177,7 +178,7 @@ fn test_grover_preserves_normalization() {
 fn test_grover_4q_3_iterations() {
     // 3 iterations on 16 states should give high probability for the target
     let mut dm = DensityMatrix::new_uniform(4);
-    let grover = GroverIter { target: 7 };
+    let grover = GroverIter { target: 7, extra_targets: Vec::new() };
 
     for _ in 0..3 {
         dm = grover.apply(&dm);
@@ -507,4 +508,188 @@ fn test_phase_shift_preserves_trace() {
         (tr.0 - 1.0).abs() < 1e-10,
         "PhaseShift should preserve trace, got ({}, {})", tr.0, tr.1
     );
+}
+
+// =============================================================================
+// FourierInv kernel tests (P1.1)
+// =============================================================================
+
+#[test]
+fn test_fourier_inv_is_inverse_of_fourier() {
+    // QFT then IQFT should give back the original state
+    let input = DensityMatrix::new_uniform(2);
+    let fwd = Fourier;
+    let inv = FourierInv;
+
+    let after_fwd = fwd.apply(&input);
+    let roundtrip = inv.apply(&after_fwd);
+
+    let dim = input.dimension();
+    for i in 0..dim {
+        for j in 0..dim {
+            let (re_in, im_in) = input.get(i, j);
+            let (re_rt, im_rt) = roundtrip.get(i, j);
+            assert!(
+                (re_in - re_rt).abs() < 1e-9 && (im_in - im_rt).abs() < 1e-9,
+                "QFT then IQFT should recover input at [{},{}]: ({},{}) vs ({},{})",
+                i, j, re_in, im_in, re_rt, im_rt
+            );
+        }
+    }
+}
+
+#[test]
+fn test_fourier_inv_preserves_trace() {
+    let input = DensityMatrix::new_zero_state(3);
+    let inv = FourierInv;
+    let output = inv.apply(&input);
+
+    let tr = output.trace();
+    assert!(
+        (tr.0 - 1.0).abs() < 1e-10,
+        "IQFT should preserve trace, got ({}, {})", tr.0, tr.1
+    );
+}
+
+#[test]
+fn test_fourier_inv_preserves_purity() {
+    let input = DensityMatrix::new_uniform(2);
+    let inv = FourierInv;
+    let output = inv.apply(&input);
+
+    assert!(
+        (output.purity() - 1.0).abs() < 1e-10,
+        "IQFT should preserve purity of pure state, got {}",
+        output.purity()
+    );
+}
+
+// =============================================================================
+// Tensor product tests (P1.2)
+// =============================================================================
+
+#[test]
+fn test_tensor_product_dimension() {
+    let dm1 = DensityMatrix::new_zero_state(1); // 2x2
+    let dm2 = DensityMatrix::new_zero_state(2); // 4x4
+    let result = dm1.tensor_product(&dm2);
+    assert_eq!(result.num_qubits(), 3);
+    assert_eq!(result.dimension(), 8);
+}
+
+#[test]
+fn test_tensor_product_zero_states() {
+    // |0> tensor |0> = |00>
+    let dm1 = DensityMatrix::new_zero_state(1);
+    let dm2 = DensityMatrix::new_zero_state(1);
+    let result = dm1.tensor_product(&dm2);
+
+    let probs = result.diagonal_probabilities();
+    assert!((probs[0] - 1.0).abs() < 1e-10, "tensor of |0>x|0> should be |00>");
+    assert!((probs[1]).abs() < 1e-10);
+    assert!((probs[2]).abs() < 1e-10);
+    assert!((probs[3]).abs() < 1e-10);
+}
+
+#[test]
+fn test_tensor_product_preserves_trace() {
+    let dm1 = DensityMatrix::new_uniform(1);
+    let dm2 = DensityMatrix::new_uniform(2);
+    let result = dm1.tensor_product(&dm2);
+
+    let tr = result.trace();
+    assert!(
+        (tr.0 - 1.0).abs() < 1e-10,
+        "Tensor product should preserve trace, got ({}, {})", tr.0, tr.1
+    );
+}
+
+#[test]
+fn test_tensor_product_uniform_states() {
+    // Uniform(1) tensor Uniform(1) should give uniform(2)
+    let dm1 = DensityMatrix::new_uniform(1);
+    let dm2 = DensityMatrix::new_uniform(1);
+    let result = dm1.tensor_product(&dm2);
+
+    let probs = result.diagonal_probabilities();
+    for (i, &p) in probs.iter().enumerate() {
+        assert!(
+            (p - 0.25).abs() < 1e-10,
+            "tensor uniform(1) x uniform(1) should be uniform(2): p[{}] = {}",
+            i, p
+        );
+    }
+}
+
+// =============================================================================
+// Multi-target Grover tests (P1.5)
+// =============================================================================
+
+#[test]
+fn test_grover_multi_target_backward_compat() {
+    // Single target via single() should match old behavior
+    let input = DensityMatrix::new_uniform(2);
+    let g1 = GroverIter::single(3);
+    let g2 = GroverIter { target: 3, extra_targets: Vec::new() };
+
+    let out1 = g1.apply(&input);
+    let out2 = g2.apply(&input);
+
+    let dim = input.dimension();
+    for i in 0..dim {
+        for j in 0..dim {
+            let (re1, im1) = out1.get(i, j);
+            let (re2, im2) = out2.get(i, j);
+            assert!(
+                (re1 - re2).abs() < 1e-12 && (im1 - im2).abs() < 1e-12,
+                "single() should match struct literal at [{},{}]",
+                i, j
+            );
+        }
+    }
+}
+
+#[test]
+fn test_grover_multi_target_two_targets() {
+    // With 2 targets in a 16-state system (4 qubits), after 1 iteration both
+    // targets should have equal and higher probability than non-targets
+    let input = DensityMatrix::new_uniform(4);
+    let g = GroverIter::multi(vec![1, 2]);
+    let output = g.apply(&input);
+
+    let probs = output.diagonal_probabilities();
+    // Both targets should have equal prob
+    assert!(
+        (probs[1] - probs[2]).abs() < 1e-10,
+        "Multi-target: targets should have equal prob, got p[1]={}, p[2]={}",
+        probs[1], probs[2]
+    );
+    // Targets should be amplified over non-targets
+    assert!(
+        probs[1] > probs[0],
+        "Multi-target: target prob {} should exceed non-target prob {}",
+        probs[1], probs[0]
+    );
+}
+
+#[test]
+fn test_grover_multi_target_preserves_trace() {
+    let input = DensityMatrix::new_uniform(3);
+    let g = GroverIter::multi(vec![0, 3, 7]);
+    let output = g.apply(&input);
+
+    let tr = output.trace();
+    assert!(
+        (tr.0 - 1.0).abs() < 1e-10,
+        "Multi-target Grover should preserve trace, got ({}, {})",
+        tr.0, tr.1
+    );
+}
+
+#[test]
+fn test_grover_multi_all_targets() {
+    // The all_targets() method should return primary + extra
+    let g = GroverIter { target: 5, extra_targets: vec![10, 15] };
+    let all = g.all_targets();
+    assert_eq!(all, vec![5, 10, 15]);
 }

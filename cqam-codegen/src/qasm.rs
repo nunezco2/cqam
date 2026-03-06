@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use cqam_core::instruction::{Instruction, dist_name, file_sel_name, kernel_name, flag_name, reduce_fn_name};
+use cqam_core::instruction::{Instruction, dist_name, file_sel_name, kernel_name, flag_name, reduce_fn_name, rot_axis_name};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -441,6 +441,55 @@ impl QasmFormat for Instruction {
                     dst, mask_reg, mask_reg
                 )]
             }
+            Instruction::QCnot { dst, src: _, ctrl_qubit_reg, tgt_qubit_reg } => {
+                vec![format!(
+                    "cx q{}[R{}], q{}[R{}]; // QCNOT Q{} ctrl=R{} tgt=R{}",
+                    dst, ctrl_qubit_reg, dst, tgt_qubit_reg, dst, ctrl_qubit_reg, tgt_qubit_reg
+                )]
+            }
+            Instruction::QRot { dst, src: _, qubit_reg, axis, angle_freg } => {
+                let gate_name = match *axis {
+                    0 => "rx",
+                    1 => "ry",
+                    2 => "rz",
+                    _ => "r_unknown",
+                };
+                vec![format!(
+                    "{}(F{}) q{}[R{}]; // QROT axis={} angle=F{}",
+                    gate_name, angle_freg, dst, qubit_reg,
+                    rot_axis_name(*axis), angle_freg
+                )]
+            }
+            Instruction::QMeas { dst_r, src_q, qubit_reg } => {
+                vec![format!(
+                    "R{} = measure q{}[R{}]; // QMEAS partial measurement",
+                    dst_r, src_q, qubit_reg
+                )]
+            }
+            Instruction::QTensor { dst, src0, src1 } => {
+                vec![format!(
+                    "// @cqam.qtensor Q{} = Q{} tensor Q{} [no QASM equivalent]",
+                    dst, src0, src1
+                )]
+            }
+            Instruction::QCustom { dst, src, base_addr_reg, dim_reg } => {
+                vec![format!(
+                    "// @cqam.qcustom Q{} = custom_unitary(Q{}, CMEM[R{}], dim=R{})",
+                    dst, src, base_addr_reg, dim_reg
+                )]
+            }
+            Instruction::QCz { dst, src: _, ctrl_qubit_reg, tgt_qubit_reg } => {
+                vec![format!(
+                    "cz q{}[R{}], q{}[R{}]; // QCZ",
+                    dst, ctrl_qubit_reg, dst, tgt_qubit_reg
+                )]
+            }
+            Instruction::QSwap { dst, src: _, qubit_a_reg, qubit_b_reg } => {
+                vec![format!(
+                    "swap q{}[R{}], q{}[R{}]; // QSWAP",
+                    dst, qubit_a_reg, dst, qubit_b_reg
+                )]
+            }
             Instruction::QPrepR { dst, dist_reg } => {
                 vec![format!("// @cqam.qprepr Q{} = prep(R[{}]);", dst, dist_reg)]
             }
@@ -449,6 +498,45 @@ impl QasmFormat for Instruction {
                 vec![format!(
                     "// @cqam.qencode Q{} = encode({}, base={}, count={});",
                     dst, file, src_base, count
+                )]
+            }
+
+            // -- P2: New instructions QASM emission --------------------------
+
+            Instruction::QMixed { dst, base_addr_reg, count_reg } => {
+                vec![format!(
+                    "// @cqam.qmixed Q{} = mixed_state(CMEM[R{}], count=R{}) [no QASM equivalent]",
+                    dst, base_addr_reg, count_reg
+                )]
+            }
+            Instruction::QPrepN { dst, dist, qubit_count_reg } => {
+                vec![format!(
+                    "// @cqam.qprepn Q{} = prep(dist={}, qubits=R{})",
+                    dst, dist_name(*dist), qubit_count_reg
+                )]
+            }
+            Instruction::FSin { dst, src } => {
+                vec![format!("F{} = sin(F{});", dst, src)]
+            }
+            Instruction::FCos { dst, src } => {
+                vec![format!("F{} = cos(F{});", dst, src)]
+            }
+            Instruction::FAtan2 { dst, lhs, rhs } => {
+                vec![format!("F{} = arctan(F{}, F{});", dst, lhs, rhs)]
+            }
+            Instruction::FSqrt { dst, src } => {
+                vec![format!("F{} = sqrt(F{});", dst, src)]
+            }
+            Instruction::QPtrace { dst, src, num_qubits_a_reg } => {
+                vec![format!(
+                    "// @cqam.qptrace Q{} = Tr_B(Q{}, qubits_a=R{}) [no QASM equivalent]",
+                    dst, src, num_qubits_a_reg
+                )]
+            }
+            Instruction::QReset { dst, src: _, qubit_reg } => {
+                vec![format!(
+                    "reset q{}[R{}]; // QRESET qubit R{}",
+                    dst, qubit_reg, qubit_reg
                 )]
             }
 
@@ -733,6 +821,47 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.quantum_regs.insert(*dst);
             used.quantum_regs.insert(*src);
         }
+        Instruction::QCnot { dst, src, ctrl_qubit_reg, tgt_qubit_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*ctrl_qubit_reg);
+            used.int_regs.insert(*tgt_qubit_reg);
+        }
+        Instruction::QRot { dst, src, qubit_reg, axis: _, angle_freg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*qubit_reg);
+            used.float_regs.insert(*angle_freg);
+        }
+        Instruction::QMeas { dst_r, src_q, qubit_reg } => {
+            used.int_regs.insert(*dst_r);
+            used.quantum_regs.insert(*src_q);
+            used.int_regs.insert(*qubit_reg);
+        }
+        Instruction::QTensor { dst, src0, src1 } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src0);
+            used.quantum_regs.insert(*src1);
+        }
+        Instruction::QCustom { dst, src, base_addr_reg, dim_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*base_addr_reg);
+            used.int_regs.insert(*dim_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::QCz { dst, src, ctrl_qubit_reg, tgt_qubit_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*ctrl_qubit_reg);
+            used.int_regs.insert(*tgt_qubit_reg);
+        }
+        Instruction::QSwap { dst, src, qubit_a_reg, qubit_b_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*qubit_a_reg);
+            used.int_regs.insert(*qubit_b_reg);
+        }
         Instruction::QPrepR { dst, dist_reg } => {
             used.quantum_regs.insert(*dst);
             used.int_regs.insert(*dist_reg);
@@ -754,6 +883,39 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             }
         }
 
+        // -- P2: New instruction scan --
+        Instruction::QMixed { dst, base_addr_reg, count_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.int_regs.insert(*base_addr_reg);
+            used.int_regs.insert(*count_reg);
+            used.uses_cmem = true;
+        }
+        Instruction::QPrepN { dst, dist: _, qubit_count_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.int_regs.insert(*qubit_count_reg);
+        }
+        Instruction::FSin { dst, src }
+        | Instruction::FCos { dst, src }
+        | Instruction::FSqrt { dst, src } => {
+            used.float_regs.insert(*dst);
+            used.float_regs.insert(*src);
+        }
+        Instruction::FAtan2 { dst, lhs, rhs } => {
+            used.float_regs.insert(*dst);
+            used.float_regs.insert(*lhs);
+            used.float_regs.insert(*rhs);
+        }
+        Instruction::QPtrace { dst, src, num_qubits_a_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*num_qubits_a_reg);
+        }
+        Instruction::QReset { dst, src, qubit_reg } => {
+            used.quantum_regs.insert(*dst);
+            used.quantum_regs.insert(*src);
+            used.int_regs.insert(*qubit_reg);
+        }
+
         // -- Hybrid operations --
         Instruction::HFork | Instruction::HMerge => {}
         Instruction::HCExec { .. } => {}
@@ -762,6 +924,11 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             match *func {
                 0..=5 => { used.int_regs.insert(*dst); }
                 14..=15 => { used.complex_regs.insert(*dst); }
+                16 => {
+                    used.int_regs.insert(*dst);
+                    used.float_regs.insert(*dst);
+                    used.uses_cmem = true;
+                }
                 _ => { used.float_regs.insert(*dst); }
             }
         }

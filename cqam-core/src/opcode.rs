@@ -102,10 +102,31 @@ pub mod op {
     pub const QPREPR: u8 = 0x43;
     pub const QENCODE: u8 = 0x44;
 
-    // -- Phase 5 Revised: Masked register-level gate operations (0x45-0x48) ---
+    // -- Phase 5 Revised: Masked register-level gate operations (0x45-0x47) ---
     pub const QHADM: u8 = 0x45;
     pub const QFLIP: u8 = 0x46;
     pub const QPHASE: u8 = 0x47;
+
+    // -- Phase 5a: Qubit-level gate operations (0x48-0x4A) --------------------
+    pub const QCNOT: u8 = 0x48;
+    pub const QROT: u8 = 0x49;
+    pub const QMEAS: u8 = 0x4A;
+
+    // -- Phase 5c: Extended quantum operations (0x4B-0x4E) ------------------
+    pub const QTENSOR: u8 = 0x4B;
+    pub const QCUSTOM: u8 = 0x4C;
+    pub const QCZ: u8 = 0x4D;
+    pub const QSWAP: u8 = 0x4E;
+
+    // -- PLAN4 P2 extension range (0x4F-0x57) ---------------------------------
+    pub const QMIXED: u8 = 0x4F;
+    pub const QPREPN: u8 = 0x51;
+    pub const FSIN: u8 = 0x52;
+    pub const FCOS: u8 = 0x53;
+    pub const FATAN2: u8 = 0x54;
+    pub const FSQRT: u8 = 0x55;
+    pub const QPTRACE: u8 = 0x56;
+    pub const QRESET: u8 = 0x57;
 
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
@@ -130,8 +151,8 @@ const MAX_SHIFT: u8 = 63;
 /// Maximum value for a 5-bit kernel ID.
 const MAX_KERNEL: u8 = 31;
 
-/// Maximum value for a 4-bit function ID.
-const MAX_FUNC: u8 = 15;
+/// Maximum value for a 5-bit function ID.
+const MAX_FUNC: u8 = 31;
 
 /// Maximum value for a 2-bit mode field.
 const MAX_MODE: u8 = 3;
@@ -312,6 +333,77 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             encode_qmk(op::QFLIP, *dst, *src, *mask_reg),
         Instruction::QPhase { dst, src, mask_reg } =>
             encode_qmk(op::QPHASE, *dst, *src, *mask_reg),
+
+        // -- Q2R2-format (two-qubit CNOT gate) ------------------------------------
+        Instruction::QCnot { dst, src, ctrl_qubit_reg, tgt_qubit_reg } =>
+            encode_q2r2(op::QCNOT, *dst, *src, *ctrl_qubit_reg, *tgt_qubit_reg),
+
+        // -- QROT-format (parameterized rotation) ---------------------------------
+        Instruction::QRot { dst, src, qubit_reg, axis, angle_freg } =>
+            encode_qrot(op::QROT, *dst, *src, *qubit_reg, *axis, *angle_freg),
+
+        // -- QMEAS-format (partial measurement) -----------------------------------
+        Instruction::QMeas { dst_r, src_q, qubit_reg } => {
+            validate_reg4(*dst_r, "dst_r")?;
+            validate_reg3(*src_q, "src_q")?;
+            validate_reg4(*qubit_reg, "qubit_reg")?;
+            Ok(((op::QMEAS as u32) << 24)
+                | ((*dst_r as u32) << 20)
+                | ((*src_q as u32) << 17)
+                | ((*qubit_reg as u32) << 13))
+        }
+
+        // -- QQQ-format (tensor product: 3 Q-register fields) --------------------
+        Instruction::QTensor { dst, src0, src1 } =>
+            encode_qqq(op::QTENSOR, *dst, *src0, *src1),
+
+        // -- Q2R2-format (custom unitary, CZ, SWAP) ------------------------------
+        Instruction::QCustom { dst, src, base_addr_reg, dim_reg } =>
+            encode_q2r2(op::QCUSTOM, *dst, *src, *base_addr_reg, *dim_reg),
+
+        Instruction::QCz { dst, src, ctrl_qubit_reg, tgt_qubit_reg } =>
+            encode_q2r2(op::QCZ, *dst, *src, *ctrl_qubit_reg, *tgt_qubit_reg),
+
+        Instruction::QSwap { dst, src, qubit_a_reg, qubit_b_reg } =>
+            encode_q2r2(op::QSWAP, *dst, *src, *qubit_a_reg, *qubit_b_reg),
+
+        // -- QMIXED-format: [opcode:8][dst:3][base_addr_reg:4][count_reg:4][pad:13]
+        Instruction::QMixed { dst, base_addr_reg, count_reg } => {
+            validate_reg3(*dst, "dst")?;
+            validate_reg4(*base_addr_reg, "base_addr_reg")?;
+            validate_reg4(*count_reg, "count_reg")?;
+            Ok(((op::QMIXED as u32) << 24)
+                | ((*dst as u32) << 21)
+                | ((*base_addr_reg as u32) << 17)
+                | ((*count_reg as u32) << 13))
+        }
+
+        // -- QPREPN-format: [opcode:8][dst:3][dist:3][qubit_count_reg:4][pad:14]
+        Instruction::QPrepN { dst, dist, qubit_count_reg } => {
+            validate_reg3(*dst, "dst")?;
+            if *dist > MAX_DIST {
+                return Err(CqamError::OperandOverflow { field: "dist".to_string(), value: *dist as u32, max: MAX_DIST as u32 });
+            }
+            validate_reg4(*qubit_count_reg, "qubit_count_reg")?;
+            Ok(((op::QPREPN as u32) << 24)
+                | ((*dst as u32) << 21)
+                | ((*dist as u32) << 18)
+                | ((*qubit_count_reg as u32) << 14))
+        }
+
+        // -- Trig functions (RR and RRR format) --
+        Instruction::FSin { dst, src } => encode_rr(op::FSIN, *dst, *src),
+        Instruction::FCos { dst, src } => encode_rr(op::FCOS, *dst, *src),
+        Instruction::FAtan2 { dst, lhs, rhs } => encode_rrr(op::FATAN2, *dst, *lhs, *rhs),
+        Instruction::FSqrt { dst, src } => encode_rr(op::FSQRT, *dst, *src),
+
+        // -- QPTRACE: QMK-format (dst:3, src:3, reg:4) --
+        Instruction::QPtrace { dst, src, num_qubits_a_reg } =>
+            encode_qmk(op::QPTRACE, *dst, *src, *num_qubits_a_reg),
+
+        // -- QRESET: QMK-format (dst:3, src:3, reg:4) --
+        Instruction::QReset { dst, src, qubit_reg } =>
+            encode_qmk(op::QRESET, *dst, *src, *qubit_reg),
 
         // -- QR-format (quantum prepare from register) ----------------------------
         Instruction::QPrepR { dst, dist_reg } =>
@@ -656,6 +748,116 @@ pub fn decode_with_debug(
             Ok(Instruction::QPhase { dst: dst_q, src: src_q, mask_reg })
         }
 
+        // -- Q2R2-format (two-qubit CNOT gate) ------------------------------------
+        op::QCNOT => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let ctrl_qubit_reg = extract_reg4(word, 14);
+            let tgt_qubit_reg = extract_reg4(word, 10);
+            Ok(Instruction::QCnot { dst, src, ctrl_qubit_reg, tgt_qubit_reg })
+        }
+
+        // -- QROT-format (parameterized rotation) ---------------------------------
+        op::QROT => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let qubit_reg = extract_reg4(word, 14);
+            let axis = ((word >> 12) & 0x3) as u8;
+            let angle_freg = extract_reg4(word, 8);
+            Ok(Instruction::QRot { dst, src, qubit_reg, axis, angle_freg })
+        }
+
+        // -- QMEAS-format (partial measurement) -----------------------------------
+        op::QMEAS => {
+            let dst_r = extract_reg4(word, 20);
+            let src_q = extract_reg3(word, 17);
+            let qubit_reg = extract_reg4(word, 13);
+            Ok(Instruction::QMeas { dst_r, src_q, qubit_reg })
+        }
+
+        // -- QQQ-format (tensor product) ------------------------------------------
+        op::QTENSOR => {
+            let dst = extract_reg3(word, 21);
+            let src0 = extract_reg3(word, 18);
+            let src1 = extract_reg3(word, 15);
+            Ok(Instruction::QTensor { dst, src0, src1 })
+        }
+
+        // -- Q2R2-format (custom unitary, CZ, SWAP) ------------------------------
+        op::QCUSTOM => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let base_addr_reg = extract_reg4(word, 14);
+            let dim_reg = extract_reg4(word, 10);
+            Ok(Instruction::QCustom { dst, src, base_addr_reg, dim_reg })
+        }
+
+        op::QCZ => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let ctrl_qubit_reg = extract_reg4(word, 14);
+            let tgt_qubit_reg = extract_reg4(word, 10);
+            Ok(Instruction::QCz { dst, src, ctrl_qubit_reg, tgt_qubit_reg })
+        }
+
+        op::QSWAP => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let qubit_a_reg = extract_reg4(word, 14);
+            let qubit_b_reg = extract_reg4(word, 10);
+            Ok(Instruction::QSwap { dst, src, qubit_a_reg, qubit_b_reg })
+        }
+
+        // -- P2: QMIXED decode --
+        op::QMIXED => {
+            let dst = extract_reg3(word, 21);
+            let base_addr_reg = extract_reg4(word, 17);
+            let count_reg = extract_reg4(word, 13);
+            Ok(Instruction::QMixed { dst, base_addr_reg, count_reg })
+        }
+
+        // -- P2: QPREPN decode --
+        op::QPREPN => {
+            let dst = extract_reg3(word, 21);
+            let dist = extract_reg3(word, 18);
+            let qubit_count_reg = extract_reg4(word, 14);
+            Ok(Instruction::QPrepN { dst, dist, qubit_count_reg })
+        }
+
+        // -- P2: Trig functions decode --
+        op::FSIN => {
+            let dst = extract_reg4(word, 20);
+            let src = extract_reg4(word, 16);
+            Ok(Instruction::FSin { dst, src })
+        }
+        op::FCOS => {
+            let dst = extract_reg4(word, 20);
+            let src = extract_reg4(word, 16);
+            Ok(Instruction::FCos { dst, src })
+        }
+        op::FATAN2 => decode_rrr(word, |dst, lhs, rhs| Instruction::FAtan2 { dst, lhs, rhs }),
+        op::FSQRT => {
+            let dst = extract_reg4(word, 20);
+            let src = extract_reg4(word, 16);
+            Ok(Instruction::FSqrt { dst, src })
+        }
+
+        // -- P2: QPTRACE decode --
+        op::QPTRACE => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let num_qubits_a_reg = extract_reg4(word, 10);
+            Ok(Instruction::QPtrace { dst, src, num_qubits_a_reg })
+        }
+
+        // -- P2: QRESET decode --
+        op::QRESET => {
+            let dst = extract_reg3(word, 21);
+            let src = extract_reg3(word, 18);
+            let qubit_reg = extract_reg4(word, 10);
+            Ok(Instruction::QReset { dst, src, qubit_reg })
+        }
+
         // -- QO-format (quantum observe, extended) --------------------------------
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
@@ -690,7 +892,7 @@ pub fn decode_with_debug(
         op::HREDUCE => {
             let src = extract_reg4(word, 20);
             let dst = extract_reg4(word, 16);
-            let func = extract_reg4(word, 12);
+            let func = extract_u5(word, 11);
             Ok(Instruction::HReduce { src, dst, func })
         }
 
@@ -795,6 +997,21 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QHADM => Some("QHADM"),
         op::QFLIP => Some("QFLIP"),
         op::QPHASE => Some("QPHASE"),
+        op::QCNOT => Some("QCNOT"),
+        op::QROT => Some("QROT"),
+        op::QMEAS => Some("QMEAS"),
+        op::QTENSOR => Some("QTENSOR"),
+        op::QCUSTOM => Some("QCUSTOM"),
+        op::QCZ => Some("QCZ"),
+        op::QSWAP => Some("QSWAP"),
+        op::QMIXED => Some("QMIXED"),
+        op::QPREPN => Some("QPREPN"),
+        op::FSIN => Some("FSIN"),
+        op::FCOS => Some("FCOS"),
+        op::FATAN2 => Some("FATAN2"),
+        op::FSQRT => Some("FSQRT"),
+        op::QPTRACE => Some("QPTRACE"),
+        op::QRESET => Some("QRESET"),
         op::ILDX => Some("ILDX"),
         op::ISTRX => Some("ISTRX"),
         op::FLDX => Some("FLDX"),
@@ -916,6 +1133,36 @@ fn encode_q(
         | ((ctx1 as u32) << 5))
 }
 
+/// Encode a Q2R2-format word: [opcode:8][q_dst:3][q_src:3][r_a:4][r_b:4][pad:10]
+fn encode_q2r2(opcode: u8, q_dst: u8, q_src: u8, r_a: u8, r_b: u8) -> Result<u32, CqamError> {
+    validate_reg3(q_dst, "q_dst")?;
+    validate_reg3(q_src, "q_src")?;
+    validate_reg4(r_a, "r_a")?;
+    validate_reg4(r_b, "r_b")?;
+    Ok(((opcode as u32) << 24)
+        | ((q_dst as u32) << 21)
+        | ((q_src as u32) << 18)
+        | ((r_a as u32) << 14)
+        | ((r_b as u32) << 10))
+}
+
+/// Encode a QROT-format word: [opcode:8][q_dst:3][q_src:3][qubit_reg:4][axis:2][angle_freg:4][pad:8]
+fn encode_qrot(opcode: u8, q_dst: u8, q_src: u8, qubit_reg: u8, axis: u8, angle_freg: u8) -> Result<u32, CqamError> {
+    validate_reg3(q_dst, "q_dst")?;
+    validate_reg3(q_src, "q_src")?;
+    validate_reg4(qubit_reg, "qubit_reg")?;
+    if axis > 2 {
+        return Err(CqamError::OperandOverflow { field: "axis".to_string(), value: axis as u32, max: 2 });
+    }
+    validate_reg4(angle_freg, "angle_freg")?;
+    Ok(((opcode as u32) << 24)
+        | ((q_dst as u32) << 21)
+        | ((q_src as u32) << 18)
+        | ((qubit_reg as u32) << 14)
+        | ((axis as u32) << 12)
+        | ((angle_freg as u32) << 8))
+}
+
 /// Encode an N-format word: [opcode:8][_:24]
 fn encode_n(opcode: u8) -> u32 {
     (opcode as u32) << 24
@@ -990,6 +1237,17 @@ fn encode_qmk(opcode: u8, dst_q: u8, src_q: u8, mask_reg: u8) -> Result<u32, Cqa
         | ((mask_reg as u32) << 10))
 }
 
+/// Encode a QQQ-format word: [opcode:8][q0:3][q1:3][q2:3][_:15]
+fn encode_qqq(opcode: u8, q0: u8, q1: u8, q2: u8) -> Result<u32, CqamError> {
+    validate_reg3(q0, "q0")?;
+    validate_reg3(q1, "q1")?;
+    validate_reg3(q2, "q2")?;
+    Ok(((opcode as u32) << 24)
+        | ((q0 as u32) << 21)
+        | ((q1 as u32) << 18)
+        | ((q2 as u32) << 15))
+}
+
 /// Encode a QS-format word: [opcode:8][qreg:3][_:5][addr:8][_:8]
 fn encode_qs(opcode: u8, qreg: u8, addr: u8) -> Result<u32, CqamError> {
     validate_reg3(qreg, "qreg")?;
@@ -1027,7 +1285,7 @@ fn encode_qo_ext(
         | ((ctx1 as u32) << 8))
 }
 
-/// Encode an HR-format word: [opcode:8][src:4][dst:4][func:4][_:12]
+/// Encode an HR-format word: [opcode:8][src:4][dst:4][func:5][_:11]
 fn encode_hr(opcode: u8, src: u8, dst: u8, func: u8) -> Result<u32, CqamError> {
     validate_reg4(src, "src")?;
     validate_reg4(dst, "dst")?;
@@ -1041,7 +1299,7 @@ fn encode_hr(opcode: u8, src: u8, dst: u8, func: u8) -> Result<u32, CqamError> {
     Ok(((opcode as u32) << 24)
         | ((src as u32) << 20)
         | ((dst as u32) << 16)
-        | ((func as u32) << 12))
+        | ((func as u32) << 11))
 }
 
 /// Encode an L-format word: [opcode:8][label_id:16][_:8]

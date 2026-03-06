@@ -398,6 +398,37 @@ pub fn execute_instruction(
         }
 
         // =====================================================================
+        // Trig / transcendental float operations (P2.4)
+        // =====================================================================
+
+        Instruction::FSin { dst, src } => {
+            let result = ctx.fregs.get(*src)?.sin();
+            ctx.fregs.set(*dst, result)?;
+        }
+
+        Instruction::FCos { dst, src } => {
+            let result = ctx.fregs.get(*src)?.cos();
+            ctx.fregs.set(*dst, result)?;
+        }
+
+        Instruction::FAtan2 { dst, lhs, rhs } => {
+            let y = ctx.fregs.get(*lhs)?;
+            let x = ctx.fregs.get(*rhs)?;
+            let result = y.atan2(x);
+            ctx.fregs.set(*dst, result)?;
+        }
+
+        Instruction::FSqrt { dst, src } => {
+            let val = ctx.fregs.get(*src)?;
+            if val < 0.0 {
+                ctx.psw.trap_arith = true;
+                ctx.fregs.set(*dst, f64::NAN)?;
+            } else {
+                ctx.fregs.set(*dst, val.sqrt())?;
+            }
+        }
+
+        // =====================================================================
         // Quantum -- delegate to qop.rs
         // =====================================================================
 
@@ -413,7 +444,18 @@ pub fn execute_instruction(
         | Instruction::QStore { .. }
         | Instruction::QHadM { .. }
         | Instruction::QFlip { .. }
-        | Instruction::QPhase { .. } => {
+        | Instruction::QPhase { .. }
+        | Instruction::QCnot { .. }
+        | Instruction::QRot { .. }
+        | Instruction::QMeas { .. }
+        | Instruction::QTensor { .. }
+        | Instruction::QCustom { .. }
+        | Instruction::QCz { .. }
+        | Instruction::QSwap { .. }
+        | Instruction::QMixed { .. }
+        | Instruction::QPrepN { .. }
+        | Instruction::QPtrace { .. }
+        | Instruction::QReset { .. } => {
             execute_qop(ctx, instr)?;
         }
 
