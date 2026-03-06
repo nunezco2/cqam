@@ -1,0 +1,133 @@
+# examples/qsvt.cqam
+# Quantum Singular Value Transformation (QSVT) — signal processing framework
+#
+# Algorithm: QSVT implements a polynomial transformation of the singular
+# values of a block-encoded matrix A via interleaved signal processing
+# rotations and projector-controlled phase operators:
+#
+#   U_QSVT = R(phi_d) * W * R(phi_{d-1}) * W * ... * R(phi_1) * W * R(phi_0)
+#
+# where:
+#   - W is a block-encoding of the target operator (approximated here by
+#     the Grover iterate G = (2|s><s| - I) * O_target, which block-encodes
+#     the overlap with the target state)
+#   - R(phi_k) are signal processing rotations applied to the signal qubit
+#     (qubit 0), implementing the projector-controlled phase factors
+#
+# The interleaving of W and R(phi_k) implements a degree-d polynomial P(a)
+# of the singular values a of A, where the coefficients are determined by
+# the angles {phi_k}.
+#
+# This example implements a threshold polynomial: P(a) ~ 1 if a > 0.5,
+# P(a) ~ 0 otherwise, using d=6 signal processing rotations.
+#
+# Gate-level justification: QROT is required for per-qubit signal processing
+# rotations on the signal qubit (qubit 0). The projector-controlled phase
+# cannot be expressed as a register-level kernel because it must selectively
+# rotate a single qubit. QCNOT implements the controlled reflections that
+# define the projector structure.
+#
+#! qubits 8
+
+# --- QSVT parameters ---
+# Signal processing angles (phi_0 through phi_5) for threshold polynomial
+# These angles define P(a) ~ step(a - 0.5) to degree 6
+    FLDI F0, 1           # phi_0 = 1.0 (signal processing angle)
+    FLDI F1, -1          # phi_1 = -1.0
+    FLDI F2, 2           # phi_2 = 2.0
+    FLDI F3, -2          # phi_3 = -2.0
+    FLDI F4, 1           # phi_4 = 1.0
+    FLDI F5, -1          # phi_5 = -1.0
+    FLDI F6, 0           # F6 = unused fctx
+
+# Grover oracle parameters (block-encoding target)
+    ILDI R0, 3           # R0 = target state for Grover oracle
+    ILDI R1, 0           # R1 = unused ctx1
+    ILDI R2, 6           # R2 = polynomial degree d (number of phi angles)
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = QSVT iteration counter
+    ILDI R5, 0           # R5 = signal qubit index (qubit 0)
+    ILDI R6, 1           # R6 = control qubit index (qubit 1)
+
+# Store phi angles in CMEM for indexed access
+    FSTR F0, 500         # CMEM[500] = phi_0
+    FSTR F1, 501         # CMEM[501] = phi_1
+    FSTR F2, 502         # CMEM[502] = phi_2
+    FSTR F3, 503         # CMEM[503] = phi_3
+    FSTR F4, 504         # CMEM[504] = phi_4
+    FSTR F5, 505         # CMEM[505] = phi_5
+
+# --- Prepare initial state ---
+    QPREP Q0, 0          # Q0 = uniform superposition (register-level)
+
+# --- Sample initial distribution ---
+    QSAMPLE H0, Q0, 0, R1, R1
+    HREDUCE H0, F7, 10   # F7 = initial mean
+    HREDUCE H0, F8, 13   # F8 = initial variance
+
+# === QSVT main loop: interleave R(phi_k) and W ===
+# Structure: R(phi_0) -> W -> R(phi_1) -> W -> ... -> R(phi_{d-1})
+# The signal processing rotation acts on qubit 0 (the signal qubit)
+# W is a Grover iteration (block-encoding of target overlap)
+
+    ILDI R7, 500         # R7 = CMEM pointer to phi angles
+
+LABEL: qsvt_loop
+
+# --- Signal processing rotation R(phi_k) on signal qubit ---
+# Load phi_k from CMEM
+    FLDX F9, R7          # F9 = phi_k = CMEM[R7]
+
+# Apply R_Z(phi_k) to signal qubit (qubit 0)
+    QROT Q0, Q0, R5, 2, F9    # Rz(phi_k) on qubit 0
+
+# --- Block-encoding operator W (Grover iterate) ---
+# G = (2|s><s| - I) * O_target
+    QKERNEL Q0, Q0, 4, R0, R1  # Grover iteration (kernel 4)
+
+# --- Projector-controlled phase: CNOT(signal, control) ---
+# This implements the interleaved projector structure of QSVT
+    QCNOT Q0, Q0, R5, R6       # CNOT(qubit 0 -> qubit 1)
+
+# Advance to next phi angle
+    IADD R7, R7, R3      # CMEM pointer++
+    IADD R4, R4, R3      # iteration counter++
+    ISUB R2, R2, R3      # remaining--
+    JIF R2, qsvt_loop
+
+# === Final signal processing rotation (closing angle) ===
+# Apply one more Rz on the signal qubit to complete the polynomial
+    FLDI F10, 1          # F10 = closing angle
+    QROT Q0, Q0, R5, 2, F10
+
+# === Measurement and analysis ===
+
+# Non-destructive sampling of QSVT output
+    QSAMPLE H1, Q0, 0, R1, R1   # Full distribution
+    HREDUCE H1, F11, 10          # F11 = mean of output distribution
+    HREDUCE H1, F12, 13          # F12 = variance of output
+
+# Check probability of target state (should be amplified)
+    QSAMPLE H2, Q0, 1, R0, R0   # P(target state)
+    HREDUCE H2, F13, 8           # F13 = P(target)
+
+# Check probability of |0> (signal qubit outcome)
+    ILDI R8, 0
+    QSAMPLE H3, Q0, 1, R8, R8   # P(|0>)
+    HREDUCE H3, F14, 8           # F14 = P(|0>) -- encodes polynomial value
+
+# Destructive measurement
+    QOBSERVE H4, Q0
+    HREDUCE H4, R9, 11          # R9 = mode (most probable state)
+    HREDUCE H4, R10, 12         # R10 = argmax
+
+# === Store results ===
+    FSTR F7, 0           # CMEM[0] = initial mean
+    FSTR F11, 1          # CMEM[1] = QSVT output mean
+    FSTR F13, 2          # CMEM[2] = P(target) after QSVT
+    FSTR F14, 3          # CMEM[3] = P(|0>) (polynomial value proxy)
+    ISTR R9, 4           # CMEM[4] = most probable state
+    FSTR F8, 5           # CMEM[5] = initial variance
+    FSTR F12, 6          # CMEM[6] = output variance
+
+    HALT

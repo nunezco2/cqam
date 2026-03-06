@@ -1,0 +1,191 @@
+# examples/coined_quantum_walk.cqam
+# Coined Quantum Walk on a Graph — Hadamard coin + custom shift operator
+#
+# Algorithm: Implement a discrete-time coined quantum walk on a cycle graph
+# of 4 nodes. The total Hilbert space is (coin) x (position) = 2 x 4 = 8
+# dimensions, encoded in 3 qubits:
+#   - Qubit 0: coin degree of freedom (|L> = |0>, |R> = |1>)
+#   - Qubits 1-2: position on the 4-node cycle (|00>, |01>, |10>, |11>)
+#
+# Each step of the walk:
+#   1. Coin operation: Hadamard on coin qubit (qubit 0)
+#   2. Shift operation: conditional shift on position register
+#      - If coin = |0> (left): position -> (position - 1) mod 4
+#      - If coin = |1> (right): position -> (position + 1) mod 4
+#
+# The shift operator is loaded from CMEM as a custom unitary matrix
+# (QCUSTOM), since no kernel can express a coin-conditioned cyclic
+# permutation on a subsystem.
+#
+# Gate-level justification:
+#   - QHADM with partial mask is required for the coin flip (qubit 0 only)
+#   - QCUSTOM is required for the shift operator (loaded from CMEM)
+#
+#! qubits 3
+
+# --- Walk parameters ---
+    ILDI R0, 10          # R0 = number of walk steps
+    ILDI R1, 1           # R1 = constant 1 / coin qubit mask
+    ILDI R2, 0           # R2 = step counter
+    ILDI R3, 0           # R3 = ctx
+
+# Coin mask: qubit 0 only
+    ILDI R4, 1           # R4 = mask 0b001 (coin qubit)
+
+# --- Construct the shift operator in CMEM ---
+# The shift operator S acts on 8-dimensional space (3 qubits):
+#   S|coin>|pos> = |coin>|pos + (-1)^coin mod 4>
+#
+# Matrix representation (8x8):
+# We encode the shift as (re, im) pairs = 2 * 8 * 8 = 128 CMEM cells
+# starting at address 0.
+#
+# The unitary S is a permutation matrix:
+#   |0>|p> -> |0>|(p-1) mod 4>   (left shift when coin=0)
+#   |1>|p> -> |1>|(p+1) mod 4>   (right shift when coin=1)
+#
+# Basis ordering: |coin, pos1, pos0> = |q0, q1, q2>
+#   |000>=0, |001>=1, |010>=2, |011>=3, |100>=4, |101>=5, |110>=6, |111>=7
+#
+# Coin=0 sector (states 0-3): left cyclic shift on position
+#   |0,00> -> |0,11>  (0 -> 3)
+#   |0,01> -> |0,00>  (1 -> 0)
+#   |0,10> -> |0,01>  (2 -> 1)
+#   |0,11> -> |0,10>  (3 -> 2)
+#
+# Coin=1 sector (states 4-7): right cyclic shift on position
+#   |1,00> -> |1,01>  (4 -> 5)
+#   |1,01> -> |1,10>  (5 -> 6)
+#   |1,10> -> |1,11>  (6 -> 7)
+#   |1,11> -> |1,00>  (7 -> 4)
+
+# Base address for shift matrix
+    ILDI R5, 0           # R5 = base address in CMEM
+
+# Dimension of the unitary
+    ILDI R6, 8           # R6 = dimension = 2^3 = 8
+
+# Initialize all 128 cells to 0 (8x8 matrix, 2 cells per entry)
+# We write zeros, then place 1.0 at the permutation entries
+    FLDI F0, 0           # F0 = 0.0 (real part of zero)
+    FLDI F1, 0           # F1 = 0.0 (imag part of zero)
+
+# Write zero matrix (128 cells: addresses 0..127)
+    ILDI R7, 0           # R7 = address counter
+    ILDI R8, 128         # R8 = total cells
+LABEL: zero_matrix
+    FSTRX F0, R7         # CMEM[R7] = 0.0
+    IADD R7, R7, R1      # R7++
+    ISUB R8, R8, R1      # remaining--
+    JIF R8, zero_matrix
+
+# Now place 1.0 at permutation entries
+# Entry (row, col) is at CMEM[base + 2*(row*8 + col)] for real part
+    FLDI F2, 1           # F2 = 1.0 (permutation entry)
+
+# Coin=0 left shift: row=3,col=0; row=0,col=1; row=1,col=2; row=2,col=3
+# S[3][0]: addr = 2*(3*8+0) = 48
+    ILDI R7, 48
+    FSTRX F2, R7
+# S[0][1]: addr = 2*(0*8+1) = 2
+    ILDI R7, 2
+    FSTRX F2, R7
+# S[1][2]: addr = 2*(1*8+2) = 20
+    ILDI R7, 20
+    FSTRX F2, R7
+# S[2][3]: addr = 2*(2*8+3) = 38
+    ILDI R7, 38
+    FSTRX F2, R7
+
+# Coin=1 right shift: row=5,col=4; row=6,col=5; row=7,col=6; row=4,col=7
+# S[5][4]: addr = 2*(5*8+4) = 88
+    ILDI R7, 88
+    FSTRX F2, R7
+# S[6][5]: addr = 2*(6*8+5) = 106
+    ILDI R7, 106
+    FSTRX F2, R7
+# S[7][6]: addr = 2*(7*8+6) = 124
+    ILDI R7, 124
+    FSTRX F2, R7
+# S[4][7]: addr = 2*(4*8+7) = 78
+    ILDI R7, 78
+    FSTRX F2, R7
+
+# --- Initialize walker at position |0>, coin |0> ---
+    QPREP Q0, 1          # Q0 = |000> (walker at origin, coin=0)
+
+# --- Initial coin flip ---
+    QHADM Q0, Q0, R4     # Hadamard on coin qubit
+
+# Store initial state
+    QSTORE Q0, 0         # QMEM[0] = initial state
+
+# Measure initial distribution
+    QSAMPLE H0, Q0, 0, R3, R3
+    HREDUCE H0, F3, 13   # F3 = initial variance
+    FSTR F3, 200         # CMEM[200] = initial variance
+
+# === Quantum walk loop ===
+LABEL: walk_step
+
+# Step 1: Coin operation — Hadamard on coin qubit only
+    QHADM Q0, Q0, R4     # H on qubit 0 (coin flip)
+
+# Step 2: Shift operation — apply custom unitary from CMEM
+    QCUSTOM Q0, Q0, R5, R6  # S * |psi> (shift conditioned on coin)
+
+# Track distribution at each step
+    QSAMPLE H1, Q0, 0, R3, R3
+    HREDUCE H1, F4, 13   # F4 = variance at current step
+    HREDUCE H1, F5, 10   # F5 = mean position at current step
+
+# Store step statistics
+    FSTR F4, 300         # Overwritten each step
+    FSTR F5, 301
+
+# Advance step counter
+    IADD R2, R2, R1
+    ISUB R0, R0, R1
+    JIF R0, walk_step
+
+# === Final measurement ===
+    QSAMPLE H2, Q0, 0, R3, R3
+    HREDUCE H2, F6, 10   # F6 = final mean
+    HREDUCE H2, F7, 13   # F7 = final variance
+
+# Check specific state probabilities
+    ILDI R8, 0
+    QSAMPLE H3, Q0, 1, R8, R8  # P(|000>)
+    HREDUCE H3, F8, 8           # F8 = P(origin, coin=0)
+
+# Destructive measurement
+    QOBSERVE H4, Q0
+    HREDUCE H4, R9, 11   # R9 = mode (most probable state)
+    HREDUCE H4, R10, 12  # R10 = argmax
+
+# Load initial state for comparison
+    QLOAD Q1, 0
+    QSAMPLE H5, Q1, 0, R3, R3
+    HREDUCE H5, F9, 13   # F9 = initial variance
+    QOBSERVE H6, Q1
+
+# Compute variance ratio (ballistic signature: var ~ t^2)
+    FLDI F10, 0
+    FLT R11, F10, F9     # R11 = (0 < initial_var)
+    JIF R11, compute_ratio
+    JMP store_walk_results
+
+LABEL: compute_ratio
+    FDIV F10, F7, F9     # F10 = final_var / initial_var
+
+LABEL: store_walk_results
+# === Store results ===
+    FSTR F6, 400         # CMEM[400] = final mean
+    FSTR F7, 401         # CMEM[401] = final variance
+    FSTR F8, 402         # CMEM[402] = P(origin)
+    ISTR R9, 403         # CMEM[403] = mode (most probable)
+    ISTR R2, 404         # CMEM[404] = total steps
+    FSTR F10, 405        # CMEM[405] = variance ratio (ballistic check)
+    FSTR F3, 406         # CMEM[406] = initial variance
+
+    HALT

@@ -1,0 +1,131 @@
+# examples/durr_hoyer.cqam
+# Grover Minimum Finding (Durr-Hoyer Algorithm)
+#
+# Algorithm: Find the minimum of an unstructured function f: {0,..,N-1} -> Z
+# using O(sqrt(N)) quantum queries. The algorithm maintains a classical
+# threshold y and iteratively tightens it:
+#
+#   1. Pick an initial random threshold y by measuring a uniform state
+#   2. Repeat for O(sqrt(N)) rounds:
+#      a. Use Grover's search to find x such that f(x) < y
+#      b. If found, update y = f(x) (tighten threshold)
+#      c. If not found, keep current y
+#   3. Return y as the minimum
+#
+# In CQAM, the "function" is approximated by the Grover oracle: the target
+# state encodes the current threshold, and QMEAS provides the adaptive
+# feedback. Grover iterations with JIF-based conditional updates implement
+# the threshold tightening.
+#
+# The key insight is that each successful Grover search reduces the search
+# space, so later iterations need fewer Grover steps (adaptive scheduling).
+#
+#! qubits 8
+
+# --- Algorithm parameters ---
+    ILDI R0, 42          # R0 = initial Grover target (threshold y)
+    ILDI R1, 0           # R1 = unused ctx1
+    ILDI R2, 6           # R2 = number of Durr-Hoyer rounds
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = round counter
+    ILDI R5, 4           # R5 = Grover iterations per round (adaptive)
+    ILDI R6, 0           # R6 = current minimum candidate
+    ILDI R7, 0           # R7 = measurement qubit index (qubit 0)
+
+# --- Step 0: Initialize threshold from random measurement ---
+    QPREP Q0, 0          # Uniform superposition
+    QOBSERVE H0, Q0      # Destructive measurement -> random state
+    HREDUCE H0, R0, 11   # R0 = random initial threshold y (mode)
+    ILDI R6, 0
+    IADD R6, R0, R6      # R6 = y (current best)
+
+# Store initial threshold
+    ISTR R0, 100         # CMEM[100] = initial threshold
+
+# === Durr-Hoyer main loop ===
+LABEL: dh_loop
+
+# --- Step 1: Prepare uniform state ---
+    QPREP Q0, 0          # Q0 = uniform superposition
+
+# --- Step 2: Apply adaptive Grover iterations ---
+# Search for states below current threshold R0
+    ILDI R8, 0           # R8 = Grover inner counter
+LABEL: dh_grover_inner
+    QKERNEL Q0, Q0, 4, R0, R1   # Grover iteration targeting R0
+    IADD R8, R8, R3              # R8++
+    ILT R9, R8, R5              # R9 = (R8 < iterations_per_round)
+    JIF R9, dh_grover_inner
+
+# --- Step 3: Measure qubit 0 to get search outcome ---
+# QMEAS provides non-destructive single-qubit measurement
+    QMEAS R10, Q0, R7   # R10 = measurement of qubit 0 (0 or 1)
+
+# --- Step 4: Sample full distribution for candidate ---
+    QSAMPLE H1, Q0, 0, R1, R1
+    HREDUCE H1, R11, 12  # R11 = argmax (candidate solution)
+    HREDUCE H1, F0, 10   # F0 = mean of post-Grover distribution
+
+# --- Step 5: Threshold update via JIF ---
+# If measured state is different from current threshold, it may be better
+# In the abstract Durr-Hoyer, we check f(x) < y
+# Here we use: if candidate < current_best, update
+    ILT R12, R11, R6     # R12 = (candidate < current_best)
+    JIF R12, dh_update_threshold
+    JMP dh_no_update
+
+LABEL: dh_update_threshold
+# Found better solution -- tighten threshold
+    ILDI R13, 0
+    IADD R6, R11, R13   # R6 = new best = candidate
+    ILDI R13, 0
+    IADD R0, R11, R13   # R0 = new Grover target = candidate
+
+# Store the improvement
+    ILDI R13, 110
+    IADD R13, R13, R4   # Address = 110 + round
+    ISTRX R6, R13       # CMEM[110+round] = new threshold
+
+# Adaptive step count: increase iterations as search space shrinks
+    IADD R5, R5, R3     # iterations_per_round++ (more effort needed)
+
+LABEL: dh_no_update
+
+# --- Observe remaining quantum state (cleanup) ---
+    QOBSERVE H2, Q0
+    HREDUCE H2, F1, 13  # F1 = variance at this round
+
+# Store round statistics
+    FSTR F0, 200         # CMEM[200] = mean at this round (overwritten)
+    FSTR F1, 201         # CMEM[201] = variance at this round
+
+# --- Advance outer loop ---
+    IADD R4, R4, R3     # round++
+    ISUB R2, R2, R3     # remaining--
+    JIF R2, dh_loop
+
+# === Verification: final Grover search at found minimum ===
+    QPREP Q1, 0
+# Apply extra Grover iterations at the found minimum target
+    ILDI R14, 8          # R14 = verification iterations
+LABEL: dh_verify_loop
+    QKERNEL Q1, Q1, 4, R6, R1
+    ISUB R14, R14, R3
+    JIF R14, dh_verify_loop
+
+    QOBSERVE H3, Q1
+    HREDUCE H3, R15, 11  # R15 = verified minimum state (mode)
+    HREDUCE H3, F2, 10   # F2 = verification mean
+
+# Check consistency
+    IEQ R14, R15, R6     # R14 = (verified == found minimum)
+
+# === Store final results ===
+    ISTR R6, 0           # CMEM[0] = found minimum
+    ISTR R15, 1          # CMEM[1] = verified minimum
+    ISTR R14, 2          # CMEM[2] = consistency flag
+    ISTR R4, 3           # CMEM[3] = total rounds performed
+    FSTR F2, 4           # CMEM[4] = verification mean
+    ISTR R5, 5           # CMEM[5] = final Grover depth (adaptive)
+
+    HALT

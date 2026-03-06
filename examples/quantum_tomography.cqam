@@ -1,0 +1,192 @@
+# examples/quantum_tomography.cqam
+# Quantum State Tomography — reconstruct density matrix from measurements
+#
+# Algorithm: Estimate the full density matrix of an unknown quantum state
+# by performing measurements in multiple bases (X, Y, Z):
+#
+#   1. Prepare the unknown state |psi> (via rotation kernel)
+#   2. For each Pauli basis {X, Y, Z}:
+#      a. Apply basis rotation to transform the measurement basis
+#         - Z basis: no rotation needed (computational basis)
+#         - X basis: Ry(-pi/2) maps X eigenstates to Z eigenstates
+#         - Y basis: Rx(pi/2) maps Y eigenstates to Z eigenstates
+#      b. Measure in the computational basis (QMEAS)
+#      c. Accumulate statistics in CMEM
+#   3. Reconstruct Bloch vector components from measurement outcomes
+#
+# Gate-level justification: QROT is required for per-qubit basis rotations
+# before measurement. Each Pauli basis requires a different single-qubit
+# rotation that cannot be expressed as a register-level kernel.
+# QMEAS provides non-destructive single-qubit measurement.
+#
+#! qubits 4
+
+# --- Tomography parameters ---
+    ILDI R0, 0           # R0 = target qubit for tomography (qubit 0)
+    ILDI R1, 1           # R1 = constant 1
+    ILDI R2, 8           # R2 = shots per basis (statistical samples)
+    ILDI R3, 0           # R3 = shot counter
+    ILDI R4, 0           # R4 = ctx
+
+# Rotation angles for basis changes
+# pi/2 ~ 1.57, approximate as 2 (within i16 FLDI range)
+    FLDI F0, 2           # F0 = pi/2 approximation for basis rotation
+    FLDI F1, -2          # F1 = -pi/2 approximation
+    FLDI F2, 0           # F2 = zero angle (Z basis, no rotation)
+
+# Accumulators for measurement outcomes (Bloch vector components)
+    ILDI R5, 0           # R5 = Z-basis count of |0> outcomes
+    ILDI R6, 0           # R6 = X-basis count of |0> outcomes
+    ILDI R7, 0           # R7 = Y-basis count of |0> outcomes
+
+# Prepare the state to tomograph
+# Use rotation kernel to create a non-trivial state
+    FLDI F3, 1           # F3 = preparation angle
+    FLDI F4, 0           # F4 = unused
+
+# CMEM addresses for accumulation
+    ILDI R8, 500         # R8 = base address for Z outcomes
+    ILDI R9, 600         # R9 = base address for X outcomes
+    ILDI R10, 700        # R10 = base address for Y outcomes
+
+# ===============================================
+# Phase 1: Z-basis measurements (computational basis)
+# ===============================================
+    ILDI R3, 0           # Reset shot counter
+    ILDI R5, 0           # Reset Z accumulator
+    ILDI R2, 8           # Reset shots
+LABEL: tomo_z_loop
+
+# Prepare the unknown state
+    QPREP Q0, 1          # |0...0>
+    QKERNELF Q0, Q0, 5, F3, F4  # Rotate to create |psi> (register-level)
+
+# Z basis: no rotation needed, measure directly
+    QMEAS R11, Q0, R0   # R11 = measurement of qubit 0 (0 or 1)
+
+# Accumulate: count |0> outcomes
+    IEQ R12, R11, R4     # R12 = (outcome == 0)
+    IADD R5, R5, R12     # Z_zero_count += (outcome == 0)
+
+# Store individual outcome
+    ISTRX R11, R8        # CMEM[R8] = outcome
+    IADD R8, R8, R1      # R8++ advance pointer
+
+# Observe remaining state (cleanup)
+    QOBSERVE H0, Q0
+
+# Loop control
+    IADD R3, R3, R1
+    ISUB R2, R2, R1
+    JIF R2, tomo_z_loop
+
+# ===============================================
+# Phase 2: X-basis measurements (Ry(-pi/2) then measure)
+# ===============================================
+    ILDI R3, 0
+    ILDI R6, 0
+    ILDI R2, 8
+LABEL: tomo_x_loop
+
+# Prepare the unknown state
+    QPREP Q0, 1
+    QKERNELF Q0, Q0, 5, F3, F4  # Create |psi>
+
+# X basis rotation: Ry(-pi/2) on target qubit
+    QROT Q0, Q0, R0, 1, F1      # Ry(-pi/2) on qubit 0
+
+# Measure in computational basis (now equivalent to X basis)
+    QMEAS R11, Q0, R0
+
+# Accumulate
+    IEQ R12, R11, R4
+    IADD R6, R6, R12     # X_zero_count += (outcome == 0)
+
+    ISTRX R11, R9
+    IADD R9, R9, R1
+
+    QOBSERVE H0, Q0
+
+    IADD R3, R3, R1
+    ISUB R2, R2, R1
+    JIF R2, tomo_x_loop
+
+# ===============================================
+# Phase 3: Y-basis measurements (Rx(pi/2) then measure)
+# ===============================================
+    ILDI R3, 0
+    ILDI R7, 0
+    ILDI R2, 8
+LABEL: tomo_y_loop
+
+# Prepare the unknown state
+    QPREP Q0, 1
+    QKERNELF Q0, Q0, 5, F3, F4  # Create |psi>
+
+# Y basis rotation: Rx(pi/2) on target qubit
+    QROT Q0, Q0, R0, 0, F0      # Rx(pi/2) on qubit 0
+
+# Measure
+    QMEAS R11, Q0, R0
+
+# Accumulate
+    IEQ R12, R11, R4
+    IADD R7, R7, R12     # Y_zero_count += (outcome == 0)
+
+    ISTRX R11, R10
+    IADD R10, R10, R1
+
+    QOBSERVE H0, Q0
+
+    IADD R3, R3, R1
+    ISUB R2, R2, R1
+    JIF R2, tomo_y_loop
+
+# ===============================================
+# Classical reconstruction of Bloch vector
+# ===============================================
+# Bloch components: <sigma_i> = 2 * P(0) - 1 for each basis i
+# where P(0) = zero_count / total_shots
+
+    ILDI R13, 8          # R13 = total shots per basis
+    CVTIF F5, R13        # F5 = 8.0
+
+# Z component: <sigma_Z> = 2 * (Z_zero_count / shots) - 1
+    CVTIF F6, R5         # F6 = Z zero count as float
+    FDIV F6, F6, F5      # F6 = P_Z(0)
+    FLDI F7, 2
+    FMUL F8, F6, F7      # F8 = 2 * P_Z(0)
+    FLDI F9, 1
+    FSUB F10, F8, F9     # F10 = <sigma_Z> = 2*P(0) - 1
+
+# X component: <sigma_X>
+    CVTIF F6, R6
+    FDIV F6, F6, F5
+    FMUL F8, F6, F7
+    FSUB F11, F8, F9     # F11 = <sigma_X>
+
+# Y component: <sigma_Y>
+    CVTIF F6, R7
+    FDIV F6, F6, F5
+    FMUL F8, F6, F7
+    FSUB F12, F8, F9     # F12 = <sigma_Y>
+
+# Bloch vector magnitude: |r| = sqrt(x^2 + y^2 + z^2)
+# Should be <= 1 for physical states (= 1 for pure states)
+    FMUL F13, F10, F10   # z^2
+    FMUL F14, F11, F11   # x^2
+    FADD F13, F13, F14   # z^2 + x^2
+    FMUL F14, F12, F12   # y^2
+    FADD F13, F13, F14   # x^2 + y^2 + z^2
+    FSQRT F15, F13       # F15 = |r| (Bloch vector magnitude)
+
+# === Store final results ===
+    FSTR F10, 0          # CMEM[0] = <sigma_Z>
+    FSTR F11, 1          # CMEM[1] = <sigma_X>
+    FSTR F12, 2          # CMEM[2] = <sigma_Y>
+    FSTR F15, 3          # CMEM[3] = |r| (purity measure)
+    ISTR R5, 4           # CMEM[4] = Z zero count
+    ISTR R6, 5           # CMEM[5] = X zero count
+    ISTR R7, 6           # CMEM[6] = Y zero count
+
+    HALT

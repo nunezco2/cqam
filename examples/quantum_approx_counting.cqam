@@ -1,0 +1,123 @@
+# examples/quantum_approx_counting.cqam
+# Quantum Approximate Counting — estimate M solutions via QPE on Grover
+#
+# Algorithm: Estimate the number of solutions M to a search problem
+# by combining Grover iterations with inverse QFT:
+#
+#   1. For each precision bit k = 0, ..., K-1:
+#      a. Prepare uniform superposition
+#      b. Apply 2^k Grover iterations (phase kickback encodes theta)
+#      c. Apply inverse QFT to extract phase
+#      d. Measure to obtain phase estimate
+#   2. Classically compute M = N * sin^2(theta/2) from phase estimates
+#
+# The Grover operator G has eigenvalues exp(+/- 2i*theta) where
+# theta = arcsin(sqrt(M/N)). QPE on G extracts theta, from which
+# M can be recovered.
+#
+# Privileged kernels used:
+#   - GROVER_ITER (kernel 4): Grover oracle + diffusion operator
+#   - FOURIER_INV (kernel 7): inverse QFT for phase extraction
+#   - HREDUCE: classical post-processing (ARGMAX, MEAN, VARIANCE)
+#
+#! qubits 8
+#
+# All operations are register-level -- no gate-level ops required.
+
+# --- Setup ---
+    ILDI R0, 5           # R0 = target state for Grover oracle
+    ILDI R1, 0           # R1 = unused ctx1
+    ILDI R2, 5           # R2 = number of precision levels K (k = 0..4)
+    ILDI R3, 1           # R3 = constant 1
+    ILDI R4, 0           # R4 = precision level counter k
+    ILDI R5, 1           # R5 = current Grover depth (2^k, starts at 1)
+    ILDI R6, 200         # R6 = CMEM storage pointer for phase estimates
+
+# === Precision loop: for each k, apply 2^k Grover iters + IQFT ===
+LABEL: count_outer
+
+# --- Prepare uniform superposition ---
+    QPREP Q0, 0          # Q0 = |+>^n (uniform)
+
+# --- Apply 2^k Grover iterations ---
+    ILDI R7, 0           # R7 = inner iteration counter
+LABEL: grover_inner_count
+    QKERNEL Q0, Q0, 4, R0, R1   # One Grover iteration (kernel 4)
+    IADD R7, R7, R3              # R7++
+    ILT R8, R7, R5              # R8 = (R7 < 2^k)
+    JIF R8, grover_inner_count
+
+# --- Apply inverse QFT to extract phase ---
+    QKERNEL Q1, Q0, 7, R1, R1   # Q1 = IQFT(Grover^{2^k} |+>) (kernel 7)
+
+# --- Measure the IQFT output ---
+    QOBSERVE H0, Q1             # H0 = full distribution (destructive)
+    HREDUCE H0, R9, 12          # R9 = argmax (peak frequency bin)
+    HREDUCE H0, F0, 10          # F0 = mean frequency
+    HREDUCE H0, F1, 13          # F1 = variance
+
+# --- Store phase estimate for this depth ---
+    ISTRX R9, R6                # CMEM[R6] = phase index for depth 2^k
+    IADD R6, R6, R3             # Advance storage pointer
+
+# --- Store mean to track convergence ---
+    ILDI R10, 300
+    IADD R10, R10, R4           # Address = 300 + k
+    CVTIF F2, R9                # F2 = argmax as float
+    FSTRX F2, R10               # CMEM[300+k] = phase estimate (float)
+
+# --- Double the Grover depth for next precision level ---
+    IADD R5, R5, R5             # R5 *= 2
+
+# --- Advance outer loop ---
+    IADD R4, R4, R3             # k++
+    ISUB R2, R2, R3             # remaining--
+    JIF R2, count_outer
+
+# === Classical post-processing ===
+# Estimate M from the phase indices collected across precision levels
+
+# Load the last measured phase index
+    CVTIF F3, R9                # F3 = last phase index as float
+
+# Compute theta estimate: theta ~ 2*pi * argmax / N
+# N = 2^8 = 256 for 8-qubit register
+    FLDI F4, 6                  # F4 ~ 2*pi (limited by i16 range)
+    FMUL F5, F3, F4             # F5 = argmax * 2*pi
+    ILDI R11, 256               # R11 = N = 2^8
+    CVTIF F6, R11               # F6 = 256.0
+    FDIV F7, F5, F6             # F7 = theta estimate = 2*pi*argmax/N
+
+# Compute sin(theta/2) for M estimate
+    FLDI F8, 2                  # F8 = 2.0
+    FDIV F9, F7, F8             # F9 = theta/2
+    FSIN F10, F9                # F10 = sin(theta/2)
+    FMUL F11, F10, F10          # F11 = sin^2(theta/2)
+
+# M = N * sin^2(theta/2)
+    FMUL F12, F6, F11           # F12 = estimated M
+
+# Load first phase index for comparison
+    ILDI R12, 200
+    ILDX R13, R12               # R13 = phase index from depth 2^0
+    CVTIF F13, R13              # F13 = first phase index as float
+
+# Compute consistency ratio between first and last estimates
+    FLDI F14, 0                 # F14 = 0 (default)
+    FLT R14, F14, F13           # R14 = (0 < first_phase)
+    JIF R14, do_count_ratio
+    JMP store_count_results
+LABEL: do_count_ratio
+    FDIV F14, F3, F13           # F14 = last/first ratio (convergence check)
+
+LABEL: store_count_results
+# === Store final results ===
+    ISTR R9, 0                  # CMEM[0] = last phase index
+    FSTR F7, 1                  # CMEM[1] = theta estimate
+    FSTR F12, 2                 # CMEM[2] = estimated M (solution count)
+    FSTR F14, 3                 # CMEM[3] = phase ratio (consistency)
+    ISTR R0, 4                  # CMEM[4] = target state
+    FSTR F11, 5                 # CMEM[5] = sin^2(theta/2)
+    ISTR R5, 6                  # CMEM[6] = final Grover depth
+
+    HALT
