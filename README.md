@@ -1,7 +1,7 @@
 # CQAM: Classical-Quantum Abstract Machine
 
 
-Santiago Núñez-Corrales, PhD
+Santiago Núñez-Corrales, PhD <nunezco2@illinois.edu>
 
 *National Center for Supercomputing Applications*
 
