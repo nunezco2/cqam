@@ -316,6 +316,10 @@ API documentation from inline Rust doc comments:
 cargo doc --workspace --no-deps --open
 ```
 
+## Disclaimers
+
+This repository was developed with AI coding assistance using Claude Code v2.1.68 under Opus 4.6. The architecture design was entirely devised by the author, and an agentic pipeline was created to translate the architecture into code design, implementation, critique and debugging tasks divided into multiple phases. Agents were driven by conservative and precise prompts in which high friction to change the implementation was the default behavior when facing test errors. Corrections to the code structure, details and extensive review of the source code was performed by the author. Any errors that remain are the author's.
+
 ## Acknowledgments
 
 This project was partially funded by the IBM-Illinois Discovery Accelerator Institute.
