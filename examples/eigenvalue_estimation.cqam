@@ -1,72 +1,94 @@
 # examples/eigenvalue_estimation.cqam
 # Eigenvalue Estimation using Controlled-PHASE_SHIFT
 #
-# Algorithm: Use QPE with a controlled PHASE_SHIFT unitary to estimate
-# its eigenvalues. The PHASE_SHIFT kernel applies U[k][k] = exp(i*|z|*k),
-# so its eigenvalues are directly the diagonal phases.
+# Algorithm: Use QPE with controlled PHASE_SHIFT to estimate eigenvalues.
+# PHASE_SHIFT(|z|) on 1 qubit: U|0⟩=|0⟩, U|1⟩=exp(i*|z|)|1⟩.
+# Eigenstate |1⟩ has eigenvalue exp(i*|z|).
 #
-# QPE with C-PHASE_SHIFT^{2^k} encodes the phase |z|*k into the
-# counting register, which the inverse QFT extracts as a binary fraction.
+# With |z| = 2.0 and eigenstate |1⟩:
+# phase = |z| / (2*pi) = 2.0/6.283 = 0.318
+# Expected bin = 0.318 * 2^m
+# With m=3: bin = 0.318 * 8 = 2.55 → bin 2 or 3.
 #
-#! qubits 4
-#
-# Register layout:
-#   Q0 = 4-qubit register
-#     qubits 0-2: counting register (3 bits of precision)
-#     qubit 3: eigenstate register
-#   CMEM[100..103] = C-U parameter block
+#! qubits 3
 
-# --- Classical setup ---
-    ILDI R0, 0           # R0 = control qubit index (varies)
+# --- Constants ---
     ILDI R1, 100         # R1 = CMEM base
-    ILDI R2, 0           # R2 = step counter
     ILDI R3, 1           # R3 = constant 1
-    ILDI R4, 3           # R4 = number of QPE steps
+    ILDI R10, 3          # R10 = m = 3 counting qubits
 
 # --- Store C-U parameter block ---
-# Sub-kernel = PHASE_SHIFT (id=6)
-# amplitude = (2.0, 0.0), so |z| = 2.0
-    ILDI R5, 6           # sub_kernel_id = PHASE_SHIFT
-    ISTR R5, 100
+# Sub-kernel = PHASE_SHIFT (id=6), amplitude = (2.0, 0.0), |z| = 2.0
+    ILDI R5, 6
+    ISTR R5, 100         # sub_kernel_id = PHASE_SHIFT
     ILDI R5, 0
     ISTR R5, 101         # power (set per step)
-    FLDI F0, 2           # param_re = 2.0
-    FSTR F0, 102
-    FLDI F1, 0           # param_im = 0.0
-    FSTR F1, 103
+    FLDI F0, 2
+    FSTR F0, 102         # param_re = 2.0
+    FLDI F1, 0
+    FSTR F1, 103         # param_im = 0.0
+    ISTR R3, 104         # target_qubits = 1
 
-# --- Prepare quantum state ---
-    QPREP Q0, 0          # Uniform superposition
+# --- Prepare counting register: m qubits in |+⟩ ---
+    QPREPN Q0, 1, R10    # Q0 = |000⟩ (3 qubits)
+    ILDI R6, 7            # mask = 0b111
+    QHADM Q0, Q0, R6     # Hadamard → |+⟩^3
+
+# --- Prepare eigenstate: 1 qubit in |1⟩ ---
+    QPREPN Q1, 1, R3     # Q1 = |0⟩ (1 qubit)
+    QFLIP Q1, Q1, R3     # Q1 = |1⟩
+
+# --- Combine ---
+    QTENSOR Q2, Q0, Q1    # Q2 = |+⟩^3 ⊗ |1⟩ = 4-qubit register
 
 # --- QPE: Controlled-PHASE_SHIFT^{2^k} ---
+    ILDI R2, 0            # R2 = k
+    ILDI R11, 0
+    IADD R4, R10, R11     # R4 = m
+
 LABEL: eig_loop
-    ISTR R2, 101         # CMEM[101] = power = k
-    QKERNEL Q0, Q0, 8, R2, R1   # C-PhaseShift^{2^k}
+    ISTR R2, 101          # CMEM[101] = power = k
+    QKERNEL Q2, Q2, 8, R2, R1   # C-PhaseShift^{2^k}
 
     IADD R2, R2, R3
     ISUB R4, R4, R3
     JIF R4, eig_loop
 
+# --- Partial trace: discard eigenstate, keep counting ---
+    QPTRACE Q3, Q2, R10
+
 # --- Inverse QFT ---
     ILDI R6, 0
-    QKERNEL Q0, Q0, 7, R6, R6
+    QKERNEL Q3, Q3, 7, R6, R6
 
 # --- Measure ---
-    QOBSERVE H0, Q0
-    HREDUCE H0, R7, 12          # argmax (peak bin)
-    HREDUCE H0, F2, 10          # mean
-    HREDUCE H0, F3, 13          # variance
+    QOBSERVE H0, Q3
+    HREDUCE H0, R7, 12           # argmax (peak bin)
+    HREDUCE H0, F2, 10           # mean
+    HREDUCE H0, F3, 13           # variance
 
-# --- Classical: estimate eigenvalue ---
-# eigenvalue ~ 2*pi * argmax / N
-    CVTIF F4, R7         # F4 = argmax as float
-    FLDI F5, 6           # F5 ~ 2*pi (approx)
-    FMUL F6, F4, F5      # F6 = argmax * 2*pi
+# --- Classical: estimate eigenvalue = 2*pi * argmax / 2^m ---
+    CVTIF F4, R7          # F4 = argmax as float
+
+    # Compute 2*pi ≈ 6.2832
+    # pi ≈ 355/113 ≈ 3.1416; 2*pi ≈ 710/113 ≈ 6.2832
+    # Approximate with available arithmetic:
+    FLDI F5, 6            # F5 = 6.0 (approximation of 2*pi)
+    FLDI F8, 3
+    FLDI F9, 10
+    FDIV F10, F8, F9      # F10 = 0.3
+    FADD F5, F5, F10      # F5 = 6.3 (closer to 2*pi = 6.2832)
+
+    FMUL F6, F4, F5       # F6 = argmax * 2*pi
+
+    # Divide by 2^m = 8
+    FLDI F11, 8
+    FDIV F12, F6, F11     # F12 = argmax * 2*pi / 8 = estimated eigenvalue phase
 
 # --- Store results ---
-    ISTR R7, 0           # CMEM[0] = phase index
-    FSTR F2, 1           # CMEM[1] = mean
-    FSTR F3, 2           # CMEM[2] = variance
-    FSTR F6, 3           # CMEM[3] = estimated eigenvalue (scaled)
+    ISTR R7, 0            # CMEM[0] = phase index (argmax)
+    FSTR F2, 1            # CMEM[1] = mean
+    FSTR F3, 2            # CMEM[2] = variance
+    FSTR F12, 3           # CMEM[3] = estimated eigenvalue phase
 
     HALT

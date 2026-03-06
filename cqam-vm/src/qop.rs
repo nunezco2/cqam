@@ -203,19 +203,21 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     kernel_id::FOURIER_INV => Box::new(FourierInv),
                     kernel_id::CONTROLLED_U => {
                         // R[ctx0] = control qubit index
-                        // R[ctx1] = CMEM base address for parameter block
+                        // R[ctx1] = CMEM base address for 5-cell parameter block
                         let control_qubit = param0 as u8;
                         let base = param1 as u16;
                         let sub_kernel_id = ctx.cmem.load(base) as u8;
                         let power = ctx.cmem.load(base.wrapping_add(1)) as u32;
                         let param_re = f64::from_bits(ctx.cmem.load(base.wrapping_add(2)) as u64);
                         let param_im = f64::from_bits(ctx.cmem.load(base.wrapping_add(3)) as u64);
+                        let target_qubits = ctx.cmem.load(base.wrapping_add(4)) as u8;
                         Box::new(ControlledU {
                             control_qubit,
                             sub_kernel_id,
                             power,
                             param_re,
                             param_im,
+                            target_qubits,
                         })
                     }
                     _ => {
@@ -259,13 +261,14 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     kernel_id::FOURIER_INV => Box::new(FourierInv),
                     kernel_id::CONTROLLED_U => {
                         // QKernelF shorthand: F[fctx0] = control qubit, F[fctx1] = theta
-                        // Controlled-ROTATE with power=0
+                        // Controlled-ROTATE with power=0, all target qubits
                         Box::new(ControlledU {
                             control_qubit: fparam0 as u8,
                             sub_kernel_id: kernel_id::ROTATE,
                             power: 0,
                             param_re: fparam1,
                             param_im: 0.0,
+                            target_qubits: 0,
                         })
                     }
                     _ => {
@@ -315,6 +318,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                             power: 0,
                             param_re: zparam1.0,
                             param_im: zparam1.1,
+                            target_qubits: 0,
                         })
                     }
                     _ => {

@@ -1,16 +1,25 @@
 //! Controlled-U kernel (kernel_id = 8).
 //!
 //! Applies a sub-kernel conditioned on a control qubit within the register.
-//! When the control qubit is |1⟩, the sub-kernel U is applied to the remaining
-//! (n-1) qubits; when |0⟩, the state is unchanged.
+//! When the control qubit is |1⟩, the sub-kernel U is applied to the target
+//! qubits (bottom `target_qubits` of the register, excluding the control);
+//! when |0⟩, the state is unchanged.
 //!
 //! Supports power application: U^{2^k}. For ROTATE and PHASE_SHIFT kernels,
 //! the power is folded into the parameter (theta * 2^k) in O(1). For other
 //! kernels, the sub-kernel is applied 2^k times in a loop.
+//!
+//! When `target_qubits = 0`, the sub-kernel acts on ALL (n-1) non-control
+//! qubits (original behavior). When `target_qubits > 0`, only the bottom t
+//! qubits of the register are targeted; the remaining spectator qubits pass
+//! through as identity. This is essential for QPE where counting qubits must
+//! not be affected by the sub-kernel.
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::kernel_id;
-use crate::complex::{self, C64, cx_norm_sq};
+use crate::complex;
+#[cfg(test)]
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -23,13 +32,17 @@ use crate::kernels::rotate::Rotate;
 use crate::kernels::phase::PhaseShift;
 use crate::kernels::fourier_inv::FourierInv;
 
-/// Controlled-U kernel parameterized by control qubit, sub-kernel, and power.
+/// Controlled-U kernel parameterized by control qubit, sub-kernel, power,
+/// and optional target qubit count.
 pub struct ControlledU {
     pub control_qubit: u8,
     pub sub_kernel_id: u8,
     pub power: u32,
     pub param_re: f64,
     pub param_im: f64,
+    /// Number of bottom qubits in the register to target with the sub-kernel.
+    /// 0 means all (n-1) non-control qubits (backward compatible).
+    pub target_qubits: u8,
 }
 
 impl ControlledU {
@@ -47,7 +60,6 @@ impl ControlledU {
                 amplitude: (self.param_re * scale, self.param_im * scale),
             }),
             kernel_id::FOURIER_INV => Box::new(FourierInv),
-            // Default: treat as identity-like (will error if applied to wrong dim)
             _ => Box::new(Init),
         }
     }
@@ -56,14 +68,18 @@ impl ControlledU {
     fn is_power_foldable(&self) -> bool {
         matches!(self.sub_kernel_id, kernel_id::ROTATE | kernel_id::PHASE_SHIFT)
     }
+
+    /// Effective number of target qubits for the sub-kernel, given register size n.
+    fn effective_target_qubits(&self, n: u8) -> u8 {
+        if self.target_qubits == 0 {
+            n - 1 // all non-control qubits
+        } else {
+            self.target_qubits
+        }
+    }
 }
 
 /// Remove bit at position `bit_pos` from index `k`, collapsing to (n-1)-bit index.
-///
-/// Example: remove_bit(0b11010, 2) with n=5 bits:
-///   bits above pos 2: 0b110__ → shifted right by 1 → 0b11___
-///   bits below pos 2: 0b___10
-///   result: 0b1110 (4-bit value)
 #[inline]
 fn remove_bit(k: usize, bit_pos: usize) -> usize {
     let above = (k >> (bit_pos + 1)) << bit_pos;
@@ -96,21 +112,26 @@ impl Kernel for ControlledU {
             });
         }
 
+        let t = self.effective_target_qubits(n);
+        if t >= n {
+            return Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                detail: format!("target_qubits {} >= register size {}", t, n),
+            });
+        }
+
         let dim = input.dimension();
-        let sub_n = n - 1;
-        let sub_dim = 1usize << sub_n;
+        let target_dim = 1usize << t;
         let ctrl_bit_pos = (n - 1 - self.control_qubit) as usize;
 
-        // Build the sub-unitary by probing the sub-kernel with each basis vector.
+        // Build sub-unitary for the target qubits only (t-qubit system).
         let sub_kernel = self.build_sub_kernel();
         let need_loop = !self.is_power_foldable() && self.power > 0;
         let loop_count = if need_loop { 1u64 << self.power } else { 1 };
 
-        // Build sub-unitary matrix U_sub by applying the kernel to each basis vector
-        let mut sub_u = vec![complex::ZERO; sub_dim * sub_dim];
-        for col in 0..sub_dim {
-            // Create basis vector |col⟩
-            let mut basis = vec![complex::ZERO; sub_dim];
+        let mut target_u = vec![complex::ZERO; target_dim * target_dim];
+        for col in 0..target_dim {
+            let mut basis = vec![complex::ZERO; target_dim];
             basis[col] = complex::ONE;
             let sv = Statevector::from_amplitudes(basis)
                 .map_err(|e| CqamError::TypeMismatch {
@@ -118,26 +139,26 @@ impl Kernel for ControlledU {
                     detail: e,
                 })?;
 
-            // Apply sub-kernel (potentially multiple times for power)
             let mut result_sv = sv;
             for _ in 0..loop_count {
                 result_sv = sub_kernel.apply_sv(&result_sv)
-                    .map_err(|_| {
-                        // Fallback: use density matrix path for sub-kernel
-                        CqamError::TypeMismatch {
-                            instruction: "QKERNEL/CONTROLLED_U".to_string(),
-                            detail: "sub-kernel does not support statevector probing".to_string(),
-                        }
+                    .map_err(|_| CqamError::TypeMismatch {
+                        instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                        detail: "sub-kernel does not support statevector probing".to_string(),
                     })?;
             }
 
             let result_amps = result_sv.amplitudes();
-            for row in 0..sub_dim {
-                sub_u[row * sub_dim + col] = result_amps[row];
+            for row in 0..target_dim {
+                target_u[row * target_dim + col] = result_amps[row];
             }
         }
 
-        // Build full C_U matrix: identity on |ctrl=0⟩, sub_u on |ctrl=1⟩
+        // Build full C_U matrix.
+        // For |ctrl=0⟩: identity.
+        // For |ctrl=1⟩: sub_u on target qubits (bottom t bits of (n-1)-bit index),
+        //               identity on spectator qubits (upper bits).
+        let target_mask = target_dim - 1; // mask for bottom t bits of sub-index
         let mut cu = vec![complex::ZERO; dim * dim];
         for row in 0..dim {
             for col in 0..dim {
@@ -145,20 +166,26 @@ impl Kernel for ControlledU {
                 let col_ctrl = (col >> ctrl_bit_pos) & 1;
 
                 if row_ctrl != col_ctrl {
-                    // Cross-block: zero
                     continue;
                 }
 
                 if row_ctrl == 0 {
-                    // Identity block
                     if row == col {
                         cu[row * dim + col] = complex::ONE;
                     }
                 } else {
-                    // Sub-unitary block
                     let sub_row = remove_bit(row, ctrl_bit_pos);
                     let sub_col = remove_bit(col, ctrl_bit_pos);
-                    cu[row * dim + col] = sub_u[sub_row * sub_dim + sub_col];
+                    // Spectator bits must match (identity on spectators)
+                    let spec_row = sub_row >> t;
+                    let spec_col = sub_col >> t;
+                    if spec_row != spec_col {
+                        continue;
+                    }
+                    // Target bits: apply sub-unitary
+                    let tgt_row = sub_row & target_mask;
+                    let tgt_col = sub_col & target_mask;
+                    cu[row * dim + col] = target_u[tgt_row * target_dim + tgt_col];
                 }
             }
         }
@@ -180,62 +207,78 @@ impl Kernel for ControlledU {
             ));
         }
 
-        let sub_n = n - 1;
-        let sub_dim = 1usize << sub_n;
+        let t = self.effective_target_qubits(n);
+        if t >= n {
+            return Err(format!("target_qubits {} >= register size {}", t, n));
+        }
+
+        let target_dim = 1usize << t;
         let ctrl_bit_pos = (n - 1 - self.control_qubit) as usize;
         let ctrl_mask = 1usize << ctrl_bit_pos;
 
         let amps = input.amplitudes();
 
-        // Extract sub-amplitudes for |ctrl=1⟩ subset
-        let mut sub_amps = vec![complex::ZERO; sub_dim];
-        let mut norm_sq_ctrl1 = 0.0f64;
-
-        for (k, &amp) in amps.iter().enumerate() {
-            if k & ctrl_mask != 0 {
-                let sub_k = remove_bit(k, ctrl_bit_pos);
-                sub_amps[sub_k] = amp;
-                norm_sq_ctrl1 += cx_norm_sq(amp);
-            }
-        }
-
-        // If ctrl=1 subspace is empty, nothing to do
-        if norm_sq_ctrl1 < 1e-30 {
-            return Ok(Statevector::from_amplitudes(amps.to_vec())
-                .expect("ControlledU: pass-through failed"));
-        }
-
-        // Normalize sub-amplitudes
-        let norm_ctrl1 = norm_sq_ctrl1.sqrt();
-        let inv_norm = 1.0 / norm_ctrl1;
-        let normalized: Vec<C64> = sub_amps.iter()
-            .map(|&a| (a.0 * inv_norm, a.1 * inv_norm))
-            .collect();
-
-        // Apply sub-kernel to normalized sub-state
-        let sub_sv = Statevector::from_amplitudes(normalized)
-            .map_err(|e| format!("ControlledU sub-state error: {}", e))?;
-
+        // Build sub-kernel unitary on target qubits
         let sub_kernel = self.build_sub_kernel();
         let need_loop = !self.is_power_foldable() && self.power > 0;
         let loop_count = if need_loop { 1u64 << self.power } else { 1 };
 
-        let mut result_sv = sub_sv;
-        for _ in 0..loop_count {
-            result_sv = sub_kernel.apply_sv(&result_sv)?;
+        let mut target_u = vec![complex::ZERO; target_dim * target_dim];
+        for col in 0..target_dim {
+            let mut basis = vec![complex::ZERO; target_dim];
+            basis[col] = complex::ONE;
+            let sv = Statevector::from_amplitudes(basis)
+                .map_err(|e| format!("ControlledU sub-state error: {}", e))?;
+            let mut result_sv = sv;
+            for _ in 0..loop_count {
+                result_sv = sub_kernel.apply_sv(&result_sv)?;
+            }
+            let result_amps = result_sv.amplitudes();
+            for row in 0..target_dim {
+                target_u[row * target_dim + col] = result_amps[row];
+            }
         }
 
-        // Rescale back and reinsert
-        let result_sub = result_sv.amplitudes();
+        // Apply: for each |ctrl=1⟩ amplitude, transform target bits using target_u,
+        // keeping spectator bits fixed.
         let mut out_amps = amps.to_vec();
 
-        for (k, out_amp) in out_amps.iter_mut().enumerate() {
-            if k & ctrl_mask != 0 {
-                let sub_k = remove_bit(k, ctrl_bit_pos);
-                *out_amp = (
-                    result_sub[sub_k].0 * norm_ctrl1,
-                    result_sub[sub_k].1 * norm_ctrl1,
-                );
+        // Group amplitudes by (ctrl=1, spectator bits) and apply target_u
+        let sub_n = (n - 1) as usize;
+        let num_spectator_configs = 1usize << (sub_n - t as usize);
+
+        for spec in 0..num_spectator_configs {
+            // Collect target amplitudes for this spectator configuration
+            let mut target_amps = vec![complex::ZERO; target_dim];
+            let mut full_indices = vec![0usize; target_dim];
+
+            for tgt in 0..target_dim {
+                // Reconstruct sub-index: spectator bits in upper, target in lower
+                let sub_idx = (spec << t) | tgt;
+                // Reconstruct full index by inserting control bit = 1
+                let above = (sub_idx >> ctrl_bit_pos) << (ctrl_bit_pos + 1);
+                let below = sub_idx & ((1 << ctrl_bit_pos) - 1);
+                let full_idx = above | ctrl_mask | below;
+                full_indices[tgt] = full_idx;
+                target_amps[tgt] = amps[full_idx];
+            }
+
+            // Apply target_u to these amplitudes
+            let mut new_target = vec![complex::ZERO; target_dim];
+            for row in 0..target_dim {
+                let mut sum = complex::ZERO;
+                for col in 0..target_dim {
+                    let u_elem = target_u[row * target_dim + col];
+                    let a = target_amps[col];
+                    sum.0 += u_elem.0 * a.0 - u_elem.1 * a.1;
+                    sum.1 += u_elem.0 * a.1 + u_elem.1 * a.0;
+                }
+                new_target[row] = sum;
+            }
+
+            // Write back
+            for tgt in 0..target_dim {
+                out_amps[full_indices[tgt]] = new_target[tgt];
             }
         }
 
@@ -250,13 +293,9 @@ mod tests {
 
     #[test]
     fn test_remove_insert_bit() {
-        // remove_bit(0b11010, 2) removes bit at pos 2 (which is 0) → 0b1110
         assert_eq!(remove_bit(0b11010, 2), 0b1110);
-        // insert_bit(0b1110, 2, 0) re-inserts 0 at pos 2 → 0b11010
         assert_eq!(insert_bit(0b1110, 2, 0), 0b11010);
-        // insert_bit(0b1110, 2, 1) inserts 1 at pos 2 → 0b11110
         assert_eq!(insert_bit(0b1110, 2, 1), 0b11110);
-        // Round-trip: remove then re-insert with original bit value
         let k = 0b10110;
         let bit_pos = 1;
         let bit_val = (k >> bit_pos) & 1;
@@ -266,18 +305,16 @@ mod tests {
 
     #[test]
     fn test_controlled_rotate_ctrl0_identity() {
-        // If control qubit is |0⟩, state should be unchanged
-        // 2-qubit state: |00⟩ (ctrl=qubit 0 is |0⟩)
-        let sv = Statevector::new_zero_state(2); // |00⟩
+        let sv = Statevector::new_zero_state(2);
         let cu = ControlledU {
             control_qubit: 0,
             sub_kernel_id: kernel_id::ROTATE,
             power: 0,
             param_re: 1.0,
             param_im: 0.0,
+            target_qubits: 0,
         };
         let result = cu.apply_sv(&sv).unwrap();
-        // |00⟩ should remain |00⟩ since control is 0
         let amps = result.amplitudes();
         assert!((amps[0].0 - 1.0).abs() < 1e-10);
         assert!(amps[1].0.abs() < 1e-10);
@@ -287,7 +324,6 @@ mod tests {
 
     #[test]
     fn test_controlled_rotate_ctrl1_applies() {
-        // 2-qubit state: |10⟩ (ctrl=qubit 0 is |1⟩)
         let sv = Statevector::from_amplitudes(vec![
             complex::ZERO, complex::ZERO, complex::ONE, complex::ZERO,
         ]).unwrap();
@@ -297,17 +333,15 @@ mod tests {
             power: 0,
             param_re: std::f64::consts::PI,
             param_im: 0.0,
+            target_qubits: 0,
         };
         let result = cu.apply_sv(&sv).unwrap();
-        // Sub-state is 1-qubit |0⟩, Rotate(pi) on |0⟩ = exp(i*pi*0)*|0⟩ = |0⟩
-        // So |10⟩ → |10⟩
         let amps = result.amplitudes();
         assert!((amps[2].0 - 1.0).abs() < 1e-10);
     }
 
     #[test]
     fn test_controlled_u_density_matrix() {
-        // Verify DM path produces same result as SV path
         let sv = Statevector::from_amplitudes(vec![
             complex::ZERO, complex::ZERO, complex::ONE, complex::ZERO,
         ]).unwrap();
@@ -318,16 +352,106 @@ mod tests {
             power: 0,
             param_re: 1.0,
             param_im: 0.0,
+            target_qubits: 0,
         };
         let result_sv = cu.apply_sv(&sv).unwrap();
         let result_dm = cu.apply(&dm).unwrap();
 
-        // Compare diagonal probabilities
         let sv_probs: Vec<f64> = result_sv.amplitudes().iter()
             .map(|a| cx_norm_sq(*a))
             .collect();
         let dm_dim = result_dm.dimension();
         let dm_probs: Vec<f64> = (0..dm_dim)
+            .map(|i| result_dm.get(i, i).0)
+            .collect();
+        for i in 0..sv_probs.len() {
+            assert!((sv_probs[i] - dm_probs[i]).abs() < 1e-9,
+                "Mismatch at {}: sv={}, dm={}", i, sv_probs[i], dm_probs[i]);
+        }
+    }
+
+    #[test]
+    fn test_target_qubits_selective() {
+        // 3-qubit register: qubit 0 = control, qubit 1 = spectator, qubit 2 = target
+        // State: |1⟩|0⟩|1⟩ = |101⟩ = basis state 5
+        // C-ROTATE(theta=pi) on target_qubits=1 should only phase qubit 2
+        let sv = Statevector::from_amplitudes(vec![
+            complex::ZERO, complex::ZERO, complex::ZERO, complex::ZERO,
+            complex::ZERO, complex::ONE, complex::ZERO, complex::ZERO,
+        ]).unwrap(); // |101⟩
+
+        let cu = ControlledU {
+            control_qubit: 0,
+            sub_kernel_id: kernel_id::ROTATE,
+            power: 0,
+            param_re: std::f64::consts::PI,
+            param_im: 0.0,
+            target_qubits: 1, // only bottom 1 qubit
+        };
+
+        let result = cu.apply_sv(&sv).unwrap();
+        let amps = result.amplitudes();
+        // Target qubit (qubit 2) has value 1, so ROTATE(pi) gives exp(i*pi*1) = -1
+        // State should become -|101⟩
+        let prob_5 = cx_norm_sq(amps[5]);
+        assert!((prob_5 - 1.0).abs() < 1e-10, "Expected all probability at |101⟩");
+        // Phase should be exp(i*pi) = -1
+        assert!((amps[5].0 - (-1.0)).abs() < 1e-10, "Expected phase -1");
+    }
+
+    #[test]
+    fn test_target_qubits_spectator_unchanged() {
+        // 3-qubit register: qubit 0 = control, qubit 1 = spectator, qubit 2 = target
+        // Superposition of |100⟩ and |110⟩ (different spectator values)
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        let sv = Statevector::from_amplitudes(vec![
+            complex::ZERO, complex::ZERO, complex::ZERO, complex::ZERO,
+            (h, 0.0), complex::ZERO, (h, 0.0), complex::ZERO,
+        ]).unwrap(); // (|100⟩ + |110⟩)/sqrt(2)
+
+        let cu = ControlledU {
+            control_qubit: 0,
+            sub_kernel_id: kernel_id::ROTATE,
+            power: 0,
+            param_re: std::f64::consts::PI,
+            param_im: 0.0,
+            target_qubits: 1,
+        };
+
+        let result = cu.apply_sv(&sv).unwrap();
+        let amps = result.amplitudes();
+        // Target qubit = 0 in both cases, ROTATE(pi)*|0⟩ = exp(i*pi*0)|0⟩ = |0⟩
+        // So state should be unchanged
+        assert!((cx_norm_sq(amps[4]) - 0.5).abs() < 1e-10);
+        assert!((cx_norm_sq(amps[6]) - 0.5).abs() < 1e-10);
+    }
+
+    #[test]
+    fn test_target_qubits_sv_dm_consistency() {
+        // Verify SV and DM paths agree with target_qubits
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        let sv = Statevector::from_amplitudes(vec![
+            complex::ZERO, complex::ZERO, complex::ZERO, complex::ZERO,
+            (h, 0.0), (h, 0.0), complex::ZERO, complex::ZERO,
+        ]).unwrap(); // (|100⟩ + |101⟩)/sqrt(2)
+
+        let dm = sv.to_density_matrix();
+        let cu = ControlledU {
+            control_qubit: 0,
+            sub_kernel_id: kernel_id::ROTATE,
+            power: 0,
+            param_re: 1.0,
+            param_im: 0.0,
+            target_qubits: 1,
+        };
+
+        let result_sv = cu.apply_sv(&sv).unwrap();
+        let result_dm = cu.apply(&dm).unwrap();
+
+        let sv_probs: Vec<f64> = result_sv.amplitudes().iter()
+            .map(|a| cx_norm_sq(*a))
+            .collect();
+        let dm_probs: Vec<f64> = (0..result_dm.dimension())
             .map(|i| result_dm.get(i, i).0)
             .collect();
         for i in 0..sv_probs.len() {

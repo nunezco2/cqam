@@ -1,68 +1,82 @@
 # examples/quantum_counting_general.cqam
-# Quantum Counting using Controlled-U with Grover operator
+# Quantum Counting using QPE on the Grover operator
 #
-# Algorithm: Apply QPE to the Grover iteration operator to estimate
-# the number of marked states M. The eigenphase theta of the Grover
-# operator satisfies sin^2(theta/2) = M/N.
+# Algorithm: Apply QPE to the Grover iteration operator G to estimate
+# the number of marked states M. The eigenphase theta of G satisfies
+# sin^2(theta/2) = M/N.
 #
 # Pipeline:
-#   1. Prepare uniform superposition
-#   2. Apply C-G^{2^k} (controlled Grover iterations) for each counting qubit
-#   3. Apply inverse QFT
-#   4. Measure to extract the Grover eigenphase
+#   1. Prepare m-qubit counting register in |+⟩^m
+#   2. Prepare t-qubit search register in uniform superposition |s⟩
+#   3. QTENSOR to combine
+#   4. Apply C-G^{2^k} for k=0..m-1, targeting search qubits only
+#   5. Partial trace out search register
+#   6. Inverse QFT on counting register
+#   7. Measure to get Grover eigenphase
 #
-# We search for state |5> in a 4-qubit register (N=16).
+# Search: target state |5⟩ in a t=2 qubit register (N=4, target=1 since 5%4=1).
+# M=1 marked state out of N=4 → sin^2(theta/2)=1/4 → theta=pi/3.
+# Expected bin ≈ (pi/3) * 2^m / (2*pi) = 2^m/6.
+# With m=2: expected bin ≈ 0.67 → bin 1.
 #
-#! qubits 4
-#
-# CMEM layout:
-#   CMEM[100..103] = C-U parameter block for controlled Grover
-#   CMEM[110..111] = Grover target list (for multi-target mode, unused here)
+#! qubits 2
 
-# --- Classical setup ---
-    ILDI R0, 0           # R0 = control qubit index (varies)
-    ILDI R1, 100         # R1 = CMEM base for C-U params
-    ILDI R2, 0           # R2 = QPE step counter
+# --- Constants ---
+    ILDI R1, 100         # R1 = CMEM base
     ILDI R3, 1           # R3 = constant 1
-    ILDI R4, 2           # R4 = number of QPE steps
+    ILDI R10, 2          # R10 = m = 2 counting qubits
+    ILDI R11, 2          # R11 = t = 2 search qubits
 
 # --- Store C-U parameter block ---
-# Sub-kernel = GROVER_ITER (id=4), target = state 5
-    ILDI R5, 4           # sub_kernel_id = GROVER_ITER
-    ISTR R5, 100         # CMEM[100] = 4
+# Sub-kernel = GROVER_ITER (id=4), target = state 1 (within 2-qubit space)
+    ILDI R5, 4
+    ISTR R5, 100         # sub_kernel_id = GROVER_ITER
     ILDI R5, 0
-    ISTR R5, 101         # CMEM[101] = power (set per step)
-    # For GROVER_ITER, param_re encodes the target state
-    FLDI F0, 5           # target = state 5
-    FSTR F0, 102         # CMEM[102] = 5.0 (target as f64 bits)
+    ISTR R5, 101         # power (set per step)
+    FLDI F0, 1           # target state = 1 (in 2-qubit register)
+    FSTR F0, 102
     FLDI F1, 0
-    FSTR F1, 103         # CMEM[103] = 0.0
+    FSTR F1, 103         # param_im = 0.0
+    ISTR R11, 104        # target_qubits = 2 (search register size)
 
-# --- Prepare quantum state ---
-    QPREP Q0, 0          # Uniform superposition
+# --- Prepare counting register: m qubits in |+⟩ ---
+    QPREPN Q0, 1, R10   # Q0 = |00⟩ (zero state, 2 qubits)
+    ILDI R6, 3           # mask = 0b11
+    QHADM Q0, Q0, R6    # Hadamard → |+⟩^m
+
+# --- Prepare search register: t qubits in uniform superposition ---
+    QPREPN Q1, 0, R11   # Q1 = |+⟩^t (uniform superposition, 2 qubits)
+
+# --- Combine ---
+    QTENSOR Q2, Q0, Q1   # Q2 = |+⟩^m ⊗ |+⟩^t = (m+t)-qubit register
 
 # --- QPE with Controlled-Grover ---
+    ILDI R2, 0           # R2 = k
+    ILDI R12, 0
+    IADD R4, R10, R12    # R4 = m (remaining rounds)
+
 LABEL: qc_loop
     ISTR R2, 101         # CMEM[101] = power = k
-    QKERNEL Q0, Q0, 8, R2, R1   # C-Grover^{2^k}
+    QKERNEL Q2, Q2, 8, R2, R1   # C-Grover^{2^k}
 
     IADD R2, R2, R3
     ISUB R4, R4, R3
     JIF R4, qc_loop
 
+# --- Partial trace: discard search register, keep counting ---
+    QPTRACE Q3, Q2, R10  # Q3 = counting register (first m qubits)
+
 # --- Inverse QFT ---
     ILDI R6, 0
-    QKERNEL Q0, Q0, 7, R6, R6
+    QKERNEL Q3, Q3, 7, R6, R6
 
 # --- Measure ---
-    QOBSERVE H0, Q0
+    QOBSERVE H0, Q3
     HREDUCE H0, R7, 12          # argmax
     HREDUCE H0, F2, 10          # mean
 
 # --- Store results ---
     ISTR R7, 0           # CMEM[0] = phase index
     FSTR F2, 1           # CMEM[1] = mean phase
-    ILDI R8, 5
-    ISTR R8, 2           # CMEM[2] = target state
 
     HALT
