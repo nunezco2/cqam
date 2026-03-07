@@ -401,6 +401,27 @@ pub fn execute_instruction(
         }
 
         // =====================================================================
+        // Configuration query
+        // =====================================================================
+
+        Instruction::IQCfg { dst } => {
+            let n = ctx.config.default_qubits;
+            let max_allowed = if ctx.config.force_density_matrix {
+                cqam_sim::density_matrix::MAX_QUBITS
+            } else {
+                cqam_sim::statevector::MAX_SV_QUBITS
+            };
+            if n == 0 || n > max_allowed {
+                ctx.psw.trap_arith = true;
+                ctx.iregs.set(*dst, 0)?;
+            } else {
+                ctx.iregs.set(*dst, n as i64)?;
+                ctx.psw.zf = false;
+                ctx.psw.nf = false;
+            }
+        }
+
+        // =====================================================================
         // Control flow
         // =====================================================================
 

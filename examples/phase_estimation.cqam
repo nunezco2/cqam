@@ -63,11 +63,24 @@ LABEL: qpe_loop
     HREDUCE H1, F5, 13  # F5 = variance (uncertainty in phase estimate)
     HREDUCE H1, R5, 12  # R5 = argmax (peak frequency bin)
 
-# --- Convert argmax to phase: phase = 2*pi * argmax / 2^16 ---
+# --- Convert argmax to phase: phase = 2*pi * argmax / 2^N ---
     CVTIF F6, R5        # F6 = argmax as float
     FLDI F7, 6          # F7 ~ 2*pi (approximate, limited by FLDI i16 range)
     FMUL F8, F6, F7     # F8 = argmax * 2*pi
-# Note: dividing by 65536 would require loading that constant
+
+    # Compute 2^N dynamically from pragma
+    IQCFG R6             # R6 = N (qubit count from pragma)
+    ILDI R7, 1           # R7 = accumulator for 2^N
+    ILDI R8, 0           # R8 = loop counter
+LABEL: pe_pow2
+    IEQ R9, R8, R6
+    JIF R9, pe_pow2_done
+    IADD R7, R7, R7
+    IADD R8, R8, R2      # R2 = constant 1
+    JMP pe_pow2
+LABEL: pe_pow2_done
+    CVTIF F9, R7         # F9 = 2^N as float
+    FDIV F8, F8, F9      # F8 = phase = 2*pi * argmax / 2^N
 
 # --- Store results ---
     FSTR F4, 0           # CMEM[0] = mean phase index

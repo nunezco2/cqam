@@ -80,12 +80,23 @@ LABEL: grover_inner_count
 # Load the last measured phase index
     CVTIF F3, R9                # F3 = last phase index as float
 
-# Compute theta estimate: theta ~ 2*pi * argmax / N
-# N = 2^8 = 256 for 8-qubit register
+# Compute theta estimate: theta ~ 2*pi * argmax / 2^N
     FLDI F4, 6                  # F4 ~ 2*pi (limited by i16 range)
     FMUL F5, F3, F4             # F5 = argmax * 2*pi
-    ILDI R11, 256               # R11 = N = 2^8
-    CVTIF F6, R11               # F6 = 256.0
+
+    # Compute 2^N dynamically from pragma
+    IQCFG R12                   # R12 = N (qubit count from pragma)
+    ILDI R11, 1                 # R11 = accumulator for 2^N
+    ILDI R13, 0                 # R13 = loop counter
+LABEL: qac_pow2
+    IEQ R14, R13, R12
+    JIF R14, qac_pow2_done
+    IADD R11, R11, R11
+    IADD R13, R13, R3
+    JMP qac_pow2
+LABEL: qac_pow2_done
+    # R11 = 2^N (Hilbert space dimension)
+    CVTIF F6, R11               # F6 = 2^N as float
     FDIV F7, F5, F6             # F7 = theta estimate = 2*pi*argmax/N
 
 # Compute sin(theta/2) for M estimate

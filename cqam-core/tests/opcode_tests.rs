@@ -237,6 +237,24 @@ fn roundtrip_cvtzf() {
 }
 
 // =============================================================================
+// Round-trip tests: Configuration query (R1-format)
+// =============================================================================
+
+#[test]
+fn roundtrip_iqcfg() {
+    let instr = Instruction::IQCfg { dst: 7 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_iqcfg_all_regs() {
+    for dst in 0..=15 {
+        let instr = Instruction::IQCfg { dst };
+        assert_eq!(roundtrip(&instr), instr);
+    }
+}
+
+// =============================================================================
 // Round-trip tests: RRS-format (2-register + shift)
 // =============================================================================
 

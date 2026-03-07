@@ -123,6 +123,14 @@ fn test_roundtrip_conversions() {
 }
 
 #[test]
+fn test_roundtrip_iqcfg() {
+    let instr = Instruction::IQCfg { dst: 3 };
+    let result = assemble_ok(vec![instr.clone()]);
+    let decoded = decode_ok(result.code[0]);
+    assert_eq!(decoded, instr);
+}
+
+#[test]
 fn test_roundtrip_no_operand_instructions() {
     let cases: Vec<Instruction> = vec![
         Instruction::Nop,

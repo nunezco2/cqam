@@ -14,17 +14,31 @@
 #   6. Inverse QFT on counting register
 #   7. Measure to get Grover eigenphase
 #
-# Search: target state |5⟩ in a t=2 qubit register (N=4, target=1 since 5%4=1).
-# M=1 marked state out of N=4 → sin^2(theta/2)=1/4 → theta=pi/3.
+# Parametric: m = N (from pragma). Scales counting precision with pragma.
+# Search: target state |1⟩ in a t=2 qubit register (N_search=4, M=1).
+# sin^2(theta/2)=1/4 → theta=pi/3.
 # Expected bin ≈ (pi/3) * 2^m / (2*pi) = 2^m/6.
-# With m=2: expected bin ≈ 0.67 → bin 1.
 #
 #! qubits 2
 
+# --- Parametric setup: derive m and mask from pragma ---
+    IQCFG R10            # R10 = m = N counting qubits
+    ILDI R3, 1           # R3 = constant 1
+
+    # Compute 2^m - 1 = counting mask
+    ILDI R8, 1
+    ILDI R9, 0
+LABEL: qc_pow2
+    IEQ R14, R9, R10
+    JIF R14, qc_pow2_done
+    IADD R8, R8, R8
+    IADD R9, R9, R3
+    JMP qc_pow2
+LABEL: qc_pow2_done
+    ISUB R6, R8, R3      # R6 = 2^m - 1 = Hadamard mask
+
 # --- Constants ---
     ILDI R1, 100         # R1 = CMEM base
-    ILDI R3, 1           # R3 = constant 1
-    ILDI R10, 2          # R10 = m = 2 counting qubits
     ILDI R11, 2          # R11 = t = 2 search qubits
 
 # --- Store C-U parameter block ---
@@ -40,8 +54,7 @@
     ISTR R11, 104        # target_qubits = 2 (search register size)
 
 # --- Prepare counting register: m qubits in |+⟩ ---
-    QPREPN Q0, 1, R10   # Q0 = |00⟩ (zero state, 2 qubits)
-    ILDI R6, 3           # mask = 0b11
+    QPREPN Q0, 1, R10   # Q0 = |0⟩^m (zero state, m qubits)
     QHADM Q0, Q0, R6    # Hadamard → |+⟩^m
 
 # --- Prepare search register: t qubits in uniform superposition ---

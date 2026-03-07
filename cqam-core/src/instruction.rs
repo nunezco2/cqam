@@ -193,6 +193,15 @@ pub enum Instruction {
     /// Convert complex to float (real part): F[dst_f] = Z[src_z].0
     CvtZF { dst_f: u8, src_z: u8 },
 
+    // -- Configuration query --------------------------------------------------
+
+    /// Load the configured qubit count into an integer register.
+    /// R[dst] = ctx.config.default_qubits as i64
+    ///
+    /// Traps (Arithmetic) if the value is 0 or exceeds the architectural
+    /// maximum for the active backend.
+    IQCfg { dst: u8 },
+
     // -- Control flow ---------------------------------------------------------
 
     /// Unconditional jump to label.

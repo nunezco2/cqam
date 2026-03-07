@@ -1,23 +1,52 @@
 # examples/grover_16q.cqam
-# Grover's Search Algorithm — 16-qubit search space (65536 elements)
+# Grover's Search Algorithm — parametric search space
 #
 # Algorithm: Amplify the amplitude of a target state |t> in a uniform
-# superposition using O(sqrt(N)) Grover iterations where N = 2^16.
-# Optimal iteration count: floor(pi/4 * sqrt(65536)) = ~201 iterations.
+# superposition using O(sqrt(N)) Grover iterations where N = 2^n.
+# Optimal iteration count: floor(pi/4 * sqrt(2^n)).
+#
+# Parametric: scales to any qubit count via IQCFG.
+# Iteration count is computed at runtime from N.
 #
 #! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
 
+# --- Parametric setup: compute iteration count from N ---
+    IQCFG R15            # R15 = n (qubit count from pragma)
+    ILDI R3, 1           # R3 = constant 1
+
+    # Compute 2^n via pow2 loop
+    ILDI R8, 1
+    ILDI R9, 0
+LABEL: grov_pow2
+    IEQ R14, R9, R15
+    JIF R14, grov_pow2_done
+    IADD R8, R8, R8
+    IADD R9, R9, R3
+    JMP grov_pow2
+LABEL: grov_pow2_done
+    # R8 = 2^n = N (Hilbert space dimension)
+
+    # Compute floor(pi/4 * sqrt(N)) for iteration count
+    CVTIF F8, R8          # F8 = 2^n as float
+    FSQRT F9, F8          # F9 = sqrt(2^n)
+    # pi/4 ≈ 0.785; approximate via 785/1000
+    ILDI R11, 785
+    CVTIF F10, R11        # F10 = 785.0
+    ILDI R11, 1000
+    CVTIF F11, R11        # F11 = 1000.0
+    FDIV F12, F10, F11    # F12 ≈ 0.785 ≈ pi/4
+    FMUL F13, F12, F9     # F13 = pi/4 * sqrt(2^n)
+    CVTFI R2, F13         # R2 = floor(pi/4 * sqrt(2^n)) = iteration count
+
 # --- Classical setup ---
     ILDI R0, 42          # R0 = target state to search for
     ILDI R1, 0           # R1 = unused ctx1 parameter
-    ILDI R2, 201         # R2 = iteration count (pi/4 * sqrt(2^16) ~ 201)
-    ILDI R3, 1           # R3 = constant 1
     ILDI R4, 0           # R4 = iteration counter (for statistics)
 
 # --- Prepare uniform superposition ---
-    QPREP Q0, 0          # Q0 = |+>^16 (uniform over 65536 states)
+    QPREP Q0, 0          # Q0 = |+>^n (uniform over 2^n states)
 
 # --- Store initial state to quantum memory for later comparison ---
     QSTORE Q0, 0         # QMEM[0] = initial uniform state

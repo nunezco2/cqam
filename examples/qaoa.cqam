@@ -9,6 +9,8 @@
 # CQAM implementation: phase_shift kernel encodes the cost Hamiltonian
 # (diagonal), rotation kernel acts as the mixer. All operations are
 # register-level — no gate-level ops required.
+#
+#! qubits 8
 
 # --- QAOA parameters ---
     ILDI R0, 3           # R0 = p (number of QAOA rounds)

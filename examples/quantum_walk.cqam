@@ -14,6 +14,8 @@
 # a single qubit (the coin degree of freedom) without disturbing the
 # position register. No register-level kernel can target a single
 # qubit subsystem — kernels act on the full density matrix.
+#
+#! qubits 16
 
 # --- Walk parameters ---
     ILDI R0, 20          # R0 = number of walk steps

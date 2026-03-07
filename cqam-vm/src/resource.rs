@@ -188,6 +188,13 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Configuration query: 1 cycle (reads config, no memory access)
+        Instruction::IQCfg { .. } => ResourceDelta {
+            time: 1,
+            space: 0,
+            ..Default::default()
+        },
+
         // Control flow: 1 cycle, no register/memory effects
         Instruction::Jmp { .. }
         | Instruction::Jif { .. }

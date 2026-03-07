@@ -331,6 +331,11 @@ impl QasmFormat for Instruction {
                 vec![format!("F{} = Z{}_re;", dst_f, src_z)]
             }
 
+            // -- Configuration query -----------------------------------------
+            Instruction::IQCfg { dst } => {
+                vec![format!("// R{} = IQCFG (qubit count from pragma)", dst)]
+            }
+
             // -- Control flow ------------------------------------------------
 
             Instruction::Jmp { target } => {
@@ -761,6 +766,11 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::CvtZF { dst_f, src_z } => {
             used.complex_regs.insert(*src_z);
             used.float_regs.insert(*dst_f);
+        }
+
+        // -- Configuration query --
+        Instruction::IQCfg { dst } => {
+            used.int_regs.insert(*dst);
         }
 
         // -- Control flow --

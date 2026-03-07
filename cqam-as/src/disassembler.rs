@@ -153,6 +153,9 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::CvtFZ { dst_z, src_f } => format!("CVTFZ Z{}, F{}", dst_z, src_f),
         Instruction::CvtZF { dst_f, src_z } => format!("CVTZF F{}, Z{}", dst_f, src_z),
 
+        // Configuration query
+        Instruction::IQCfg { dst } => format!("IQCFG R{}", dst),
+
         // Control flow
         Instruction::Jmp { target } => format!("JMP {}", target),
         Instruction::Jif { pred, target } => format!("JIF R{}, {}", pred, target),

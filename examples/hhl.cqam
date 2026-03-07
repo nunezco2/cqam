@@ -8,23 +8,32 @@
 #   4. Inverse QPE to uncompute eigenvalue register
 #   5. Measure
 #
-# Simplified: we use ROTATE(theta=0.5) as the Hamiltonian simulation
-# unitary e^{iAt} on 1 qubit, with m=2 counting qubits.
-# The eigenvalues of 1-qubit ROTATE(0.5) are 1 and exp(i*0.5).
+# Parametric: m = N (from pragma) counting qubits.
+# We use ROTATE(theta=0.5) as the Hamiltonian simulation
+# unitary e^{iAt} on 1 qubit.
 # |b⟩ = |1⟩ (eigenstate with eigenvalue exp(i*0.5)).
 #
-# Pipeline:
-#   Phase 1: QPE forward (C-U^{2^k} + inverse QFT on counting)
-#   Phase 2: Controlled rotation on ancilla
-#   Phase 3: Measure
-#
 #! qubits 2
+
+# --- Parametric setup: derive m and mask from pragma ---
+    IQCFG R10            # R10 = m = N counting qubits
+    ILDI R3, 1           # R3 = constant 1
+
+    # Compute 2^m - 1 = counting mask
+    ILDI R8, 1
+    ILDI R9, 0
+LABEL: hhl_pow2
+    IEQ R14, R9, R10
+    JIF R14, hhl_pow2_done
+    IADD R8, R8, R8
+    IADD R9, R9, R3
+    JMP hhl_pow2
+LABEL: hhl_pow2_done
+    ISUB R6, R8, R3      # R6 = 2^m - 1 = Hadamard mask
 
 # --- Constants ---
     ILDI R0, 0           # R0 = qubit 0
     ILDI R1, 100         # R1 = CMEM base for C-U params
-    ILDI R3, 1           # R3 = constant 1
-    ILDI R10, 2          # R10 = m = 2 counting qubits
 
 # --- Store C-U parameter block ---
 # U = ROTATE(theta=0.5) on 1 qubit
@@ -44,13 +53,12 @@
     QPREPN Q1, 1, R3     # Q1 = |0⟩ (1 qubit)
     QFLIP Q1, Q1, R3     # Q1 = |1⟩ (eigenstate of ROTATE with eigenvalue exp(i*0.5))
 
-# --- Prepare counting register: 2 qubits in |+⟩ ---
-    QPREPN Q0, 1, R10    # Q0 = |00⟩ (2 qubits)
-    ILDI R6, 3            # mask = 0b11
-    QHADM Q0, Q0, R6     # Hadamard → |+⟩^2
+# --- Prepare counting register: m qubits in |+⟩ ---
+    QPREPN Q0, 1, R10    # Q0 = |0⟩^m (m qubits)
+    QHADM Q0, Q0, R6     # Hadamard → |+⟩^m
 
 # --- Combine registers ---
-    QTENSOR Q2, Q0, Q1    # Q2 = |+⟩^m ⊗ |1⟩ = 3-qubit register
+    QTENSOR Q2, Q0, Q1    # Q2 = |+⟩^m ⊗ |1⟩ = (m+1)-qubit register
 
 # === Phase 1: QPE forward ===
     ILDI R2, 0            # R2 = k
@@ -65,14 +73,13 @@ LABEL: hhl_qpe_fwd
     JIF R4, hhl_qpe_fwd
 
 # --- Partial trace to get counting register ---
-    QPTRACE Q3, Q2, R10   # Q3 = counting register (2 qubits)
+    QPTRACE Q3, Q2, R10   # Q3 = counting register (m qubits)
 
 # --- Inverse QFT on counting register ---
     ILDI R6, 0
     QKERNEL Q3, Q3, 7, R6, R6
 
 # === Phase 2: Apply rotation (encode eigenvalue info) ===
-# Apply ROTATE to the counting register to encode 1/lambda
     FLDI F5, 1
     FLDI F6, 0
     QKERNELF Q3, Q3, 5, F5, F6   # ROTATE(theta=1.0) on counting register

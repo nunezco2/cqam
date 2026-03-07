@@ -128,6 +128,9 @@ pub mod op {
     pub const QPTRACE: u8 = 0x56;
     pub const QRESET: u8 = 0x57;
 
+    // -- Configuration query (0x58) -------------------------------------------
+    pub const IQCFG: u8 = 0x58;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;
@@ -254,6 +257,9 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::CvtFI { dst_i, src_f } => encode_rr(op::CVTFI, *dst_i, *src_f),
         Instruction::CvtFZ { dst_z, src_f } => encode_rr(op::CVTFZ, *dst_z, *src_f),
         Instruction::CvtZF { dst_f, src_z } => encode_rr(op::CVTZF, *dst_f, *src_z),
+
+        // -- Configuration query (R1-format, encoded as RR with src=0) --------
+        Instruction::IQCfg { dst } => encode_rr(op::IQCFG, *dst, 0),
 
         // -- RRS-format (2-register + shift) ----------------------------------
         Instruction::IShl { dst, src, amt } => encode_rrs(op::ISHL, *dst, *src, *amt),
@@ -529,6 +535,12 @@ pub fn decode_with_debug(
             let dst_f = extract_reg4(word, 20);
             let src_z = extract_reg4(word, 16);
             Ok(Instruction::CvtZF { dst_f, src_z })
+        }
+
+        // -- Configuration query (R1-format) ----------------------------------
+        op::IQCFG => {
+            let dst = extract_reg4(word, 20);
+            Ok(Instruction::IQCfg { dst })
         }
 
         // -- RR-format (register-indirect memory) -----------------------------
@@ -978,6 +990,7 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::CVTFI => Some("CVTFI"),
         op::CVTFZ => Some("CVTFZ"),
         op::CVTZF => Some("CVTZF"),
+        op::IQCFG => Some("IQCFG"),
         op::JMP => Some("JMP"),
         op::JIF => Some("JIF"),
         op::CALL => Some("CALL"),

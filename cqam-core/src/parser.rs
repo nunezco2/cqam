@@ -170,6 +170,21 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
         "CVTFZ" => parse_rr(&ops, |dst_z, src_f| Instruction::CvtFZ { dst_z, src_f }, "CVTFZ", line_num),
         "CVTZF" => parse_rr(&ops, |dst_f, src_z| Instruction::CvtZF { dst_f, src_z }, "CVTZF", line_num),
 
+        // -- Configuration query ----------------------------------------------
+        "IQCFG" => {
+            if ops.len() != 1 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("IQCFG requires 1 operand, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("IQCFG: invalid register '{}'", ops[0]),
+            })?;
+            Ok(Instruction::IQCfg { dst })
+        }
+
         // -- Control flow -----------------------------------------------------
         "JMP" => {
             let label = remainder.trim();

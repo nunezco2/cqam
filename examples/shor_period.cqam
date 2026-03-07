@@ -12,6 +12,8 @@
 # The modular exponentiation oracle is approximated by rotation and
 # phase-shift kernels whose parameters encode the period structure.
 #
+#! qubits 8
+#
 # All operations are register-level — no gate-level ops required.
 
 # --- Problem parameters: factor N using a^x mod N ---
@@ -77,9 +79,21 @@
     IEQ R11, R9, R2      # R11 = (s == 0)
     JIF R11, handle_zero
 
-# r_est = approximate period
+# r_est = approximate period: r ~ 2^n / s
     CVTIF F5, R9         # F5 = measured s as float
-    ILDI R12, 256        # R12 ~ 2^n (approximation within i16 range)
+
+    # Compute 2^n dynamically from pragma
+    IQCFG R14             # R14 = n (qubit count from pragma)
+    ILDI R12, 1           # R12 = accumulator for 2^n
+    ILDI R11, 0           # R11 = loop counter
+LABEL: shor_pow2
+    IEQ R15, R11, R14
+    JIF R15, shor_pow2_done
+    IADD R12, R12, R12
+    IADD R11, R11, R3
+    JMP shor_pow2
+LABEL: shor_pow2_done
+    # R12 = 2^n (Hilbert space dimension)
     CVTIF F6, R12        # F6 = 2^n as float
     FDIV F7, F6, F5      # F7 = 2^n / s ~ r estimate
     CVTFI R13, F7        # R13 = estimated period (truncated)

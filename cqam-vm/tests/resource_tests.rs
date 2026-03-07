@@ -151,6 +151,14 @@ fn test_resource_type_conversion() {
 }
 
 #[test]
+fn test_resource_iqcfg() {
+    let instrs = [Instruction::IQCfg { dst: 0 }];
+    let t = accumulate_resources(&instrs);
+    assert_eq!(t.total_time, 1);
+    assert_eq!(t.total_space, 0);
+}
+
+#[test]
 fn test_resource_complex_arithmetic() {
     let instrs = [
         Instruction::ZAdd { dst: 0, lhs: 1, rhs: 2 },

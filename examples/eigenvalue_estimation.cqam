@@ -5,17 +5,32 @@
 # PHASE_SHIFT(|z|) on 1 qubit: U|0⟩=|0⟩, U|1⟩=exp(i*|z|)|1⟩.
 # Eigenstate |1⟩ has eigenvalue exp(i*|z|).
 #
+# Parametric: m = N (from pragma) counting qubits.
 # With |z| = 2.0 and eigenstate |1⟩:
 # phase = |z| / (2*pi) = 2.0/6.283 = 0.318
 # Expected bin = 0.318 * 2^m
-# With m=3: bin = 0.318 * 8 = 2.55 → bin 2 or 3.
 #
 #! qubits 3
 
+# --- Parametric setup: derive m, mask, and 2^m from pragma ---
+    IQCFG R10            # R10 = m = N counting qubits
+    ILDI R3, 1           # R3 = constant 1
+
+    # Compute 2^m and 2^m - 1
+    ILDI R8, 1           # R8 = accumulator for 2^m
+    ILDI R9, 0           # R9 = loop counter
+LABEL: eig_pow2
+    IEQ R14, R9, R10
+    JIF R14, eig_pow2_done
+    IADD R8, R8, R8
+    IADD R9, R9, R3
+    JMP eig_pow2
+LABEL: eig_pow2_done
+    ISUB R6, R8, R3      # R6 = 2^m - 1 = Hadamard mask
+    # R8 = 2^m (kept for phase normalization)
+
 # --- Constants ---
     ILDI R1, 100         # R1 = CMEM base
-    ILDI R3, 1           # R3 = constant 1
-    ILDI R10, 3          # R10 = m = 3 counting qubits
 
 # --- Store C-U parameter block ---
 # Sub-kernel = PHASE_SHIFT (id=6), amplitude = (2.0, 0.0), |z| = 2.0
@@ -30,16 +45,15 @@
     ISTR R3, 104         # target_qubits = 1
 
 # --- Prepare counting register: m qubits in |+⟩ ---
-    QPREPN Q0, 1, R10    # Q0 = |000⟩ (3 qubits)
-    ILDI R6, 7            # mask = 0b111
-    QHADM Q0, Q0, R6     # Hadamard → |+⟩^3
+    QPREPN Q0, 1, R10    # Q0 = |0⟩^m (m qubits)
+    QHADM Q0, Q0, R6     # Hadamard → |+⟩^m
 
 # --- Prepare eigenstate: 1 qubit in |1⟩ ---
     QPREPN Q1, 1, R3     # Q1 = |0⟩ (1 qubit)
     QFLIP Q1, Q1, R3     # Q1 = |1⟩
 
 # --- Combine ---
-    QTENSOR Q2, Q0, Q1    # Q2 = |+⟩^3 ⊗ |1⟩ = 4-qubit register
+    QTENSOR Q2, Q0, Q1    # Q2 = |+⟩^m ⊗ |1⟩ = (m+1)-qubit register
 
 # --- QPE: Controlled-PHASE_SHIFT^{2^k} ---
     ILDI R2, 0            # R2 = k
@@ -71,8 +85,6 @@ LABEL: eig_loop
     CVTIF F4, R7          # F4 = argmax as float
 
     # Compute 2*pi ≈ 6.2832
-    # pi ≈ 355/113 ≈ 3.1416; 2*pi ≈ 710/113 ≈ 6.2832
-    # Approximate with available arithmetic:
     FLDI F5, 6            # F5 = 6.0 (approximation of 2*pi)
     FLDI F8, 3
     FLDI F9, 10
@@ -81,9 +93,9 @@ LABEL: eig_loop
 
     FMUL F6, F4, F5       # F6 = argmax * 2*pi
 
-    # Divide by 2^m = 8
-    FLDI F11, 8
-    FDIV F12, F6, F11     # F12 = argmax * 2*pi / 8 = estimated eigenvalue phase
+    # Divide by 2^m (parametric)
+    CVTIF F11, R8         # F11 = 2^m as float
+    FDIV F12, F6, F11     # F12 = argmax * 2*pi / 2^m = estimated eigenvalue phase
 
 # --- Store results ---
     ISTR R7, 0            # CMEM[0] = phase index (argmax)

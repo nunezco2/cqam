@@ -18,8 +18,6 @@
 use cqam_core::error::CqamError;
 use cqam_core::instruction::kernel_id;
 use crate::complex;
-#[cfg(test)]
-use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -290,6 +288,7 @@ impl Kernel for ControlledU {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::complex::cx_norm_sq;
 
     #[test]
     fn test_remove_insert_bit() {

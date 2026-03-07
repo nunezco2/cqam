@@ -8,40 +8,45 @@
 #   3. Apply Hadamard H^n to decode phase information
 #   4. Measure to recover s deterministically
 #
-# The oracle must apply Z to qubits corresponding to set bits in s,
-# which is inherently a per-qubit gate operation (QPHASE with mask).
-# The Hadamard transform (H^⊗n) is also gate-level (QHADM with full mask),
-# distinct from QFT which includes inter-qubit phase rotations.
-#
-# s=21 (binary 10101) needs 5 bits, so this works with #! qubits 5+.
+# Parametric: scales to any qubit count via IQCFG.
+# The secret string s must fit in the register (s < 2^N).
+# s=21 (binary 10101) needs 5 bits.
 #
 #! qubits 5
+
+# --- Parametric setup: derive N and all-qubits mask ---
+    IQCFG R10            # R10 = N (qubit count from pragma)
+    ILDI R11, 1          # R11 = accumulator for 2^N
+    ILDI R12, 0          # R12 = loop counter
+    ILDI R13, 1          # R13 = constant 1
+LABEL: bv_pow2
+    IEQ R14, R12, R10
+    JIF R14, bv_pow2_done
+    IADD R11, R11, R11   # R11 *= 2
+    IADD R12, R12, R13
+    JMP bv_pow2
+LABEL: bv_pow2_done
+    ISUB R2, R11, R13    # R2 = 2^N - 1 = all-qubits Hadamard mask
 
 # --- Classical setup: define the secret string ---
     ILDI R0, 0           # R0 = unused ctx
     ILDI R1, 21          # R1 = secret string s = 21 (binary: 10101)
-    ILDI R2, 31          # R2 = Hadamard mask = 0b11111 (all 5 qubits)
 
 # ===============================================
 # Step 1: Prepare |0⟩ then Hadamard → |+⟩^n
 # ===============================================
-    QPREP Q0, 1          # Q0 = |00000⟩ (zero state)
-    QHADM Q0, Q0, R2     # H^⊗5 → uniform superposition |+⟩^5
+    QPREP Q0, 1          # Q0 = |0⟩^N (zero state)
+    QHADM Q0, Q0, R2     # H^⊗N → uniform superposition |+⟩^N
 
 # ===============================================
 # Step 2: Oracle — phase-kick qubits in the secret string
 # ===============================================
-# QPHASE applies Pauli-Z to each qubit whose bit is set in R1.
-# This is the one gate-level operation required: no kernel can
-# encode an arbitrary secret-string-specific oracle.
     QPHASE Q0, Q0, R1    # Apply Z to qubits set in s=21 (bits 0,2,4)
 
 # ===============================================
 # Step 3: Decode — Hadamard H^⊗n maps phase info to amplitudes
 # ===============================================
-# H^⊗n (NOT QFT!) transforms the phase-encoded state back to
-# the computational basis, concentrating all amplitude on |s⟩.
-    QHADM Q0, Q0, R2     # H^⊗5: decode phase → computational basis
+    QHADM Q0, Q0, R2     # H^⊗N: decode phase → computational basis
 
 # ===============================================
 # Step 4: Measure to recover the secret string

@@ -9,6 +9,8 @@
 # Generates multiple random numbers and computes statistics to verify
 # uniformity (mean should approach N/2, variance should be high).
 #
+#! qubits 16
+#
 # All operations are register-level — no gate-level ops required.
 
 # --- Setup ---
@@ -56,9 +58,21 @@ LABEL: rng_loop
     CVTIF F4, R2         # F4 = count as float
     FDIV F5, F3, F4      # F5 = empirical mean
 
-# Expected mean for uniform distribution
-    ILDI R9, 32767       # Approximate expected mean
-    CVTIF F6, R9         # F6 = expected mean
+# Expected mean for uniform distribution: (2^N - 1) / 2
+    IQCFG R9              # R9 = N (qubit count from pragma)
+    ILDI R10, 1           # R10 = accumulator for 2^N
+    ILDI R11, 0           # R11 = loop counter
+LABEL: rng_pow2
+    IEQ R12, R11, R9
+    JIF R12, rng_pow2_done
+    IADD R10, R10, R10
+    IADD R11, R11, R1     # R1 = constant 1
+    JMP rng_pow2
+LABEL: rng_pow2_done
+    ISUB R9, R10, R1      # R9 = 2^N - 1
+    CVTIF F6, R9          # F6 = (2^N - 1) as float
+    FLDI F9, 2
+    FDIV F6, F6, F9       # F6 = (2^N - 1) / 2 = expected mean
 
 # Deviation from expected
     FSUB F7, F5, F6      # F7 = empirical - expected

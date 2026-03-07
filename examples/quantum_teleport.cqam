@@ -19,6 +19,8 @@
 #     qubit conditioned on Alice's classical bit.
 # These are inherently per-qubit operations with no register-level
 # equivalent.
+#
+#! qubits 2
 
 # --- Setup ---
     ILDI R0, 0           # R0 = ctx / basis state |0>

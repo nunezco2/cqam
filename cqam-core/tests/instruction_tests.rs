@@ -106,6 +106,15 @@ fn test_all_conversion_variants() {
 }
 
 #[test]
+fn test_iqcfg_variant() {
+    let cfg = Instruction::IQCfg { dst: 5 };
+    match cfg {
+        Instruction::IQCfg { dst } => assert_eq!(dst, 5),
+        _ => panic!("Expected IQCfg variant"),
+    }
+}
+
+#[test]
 fn test_all_control_flow_variants() {
     let _jmp = Instruction::Jmp { target: "END".into() };
     let _jif = Instruction::Jif { pred: 0, target: "THEN".into() };

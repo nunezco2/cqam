@@ -500,6 +500,28 @@ fn test_parse_cvtzf() {
 }
 
 // ===========================================================================
+// Configuration query
+// ===========================================================================
+
+#[test]
+fn test_parse_iqcfg() {
+    assert_eq!(
+        parse_instruction("IQCFG R5").unwrap(),
+        Instruction::IQCfg { dst: 5 }
+    );
+}
+
+#[test]
+fn test_parse_iqcfg_no_operand() {
+    assert!(parse_instruction("IQCFG").is_err());
+}
+
+#[test]
+fn test_parse_iqcfg_too_many_operands() {
+    assert!(parse_instruction("IQCFG R5, R6").is_err());
+}
+
+// ===========================================================================
 // Control flow
 // ===========================================================================
 

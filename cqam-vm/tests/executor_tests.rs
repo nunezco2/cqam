@@ -300,6 +300,87 @@ fn test_cvtzf() {
 }
 
 // ===========================================================================
+// Configuration query
+// ===========================================================================
+
+#[test]
+fn test_iqcfg_loads_qubit_count() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 4;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 4);
+    assert!(!ctx.psw.trap_arith);
+    assert!(!ctx.psw.zf);
+    assert!(!ctx.psw.nf);
+}
+
+#[test]
+fn test_iqcfg_traps_on_zero() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 0;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    assert!(ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 0);
+}
+
+#[test]
+fn test_iqcfg_traps_on_exceeds_dm_max() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 17;
+    ctx.config.force_density_matrix = true;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    assert!(ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 0);
+}
+
+#[test]
+fn test_iqcfg_allows_sv_above_dm_max() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 20;
+    ctx.config.force_density_matrix = false;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    assert!(!ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 20);
+}
+
+#[test]
+fn test_iqcfg_traps_on_exceeds_sv_max() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 25; // > MAX_SV_QUBITS (24)
+    ctx.config.force_density_matrix = false;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    assert!(ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 0);
+}
+
+#[test]
+fn test_iqcfg_boundary_dm_max() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 16; // exactly MAX_QUBITS
+    ctx.config.force_density_matrix = true;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 5 }, &mut fm).unwrap();
+    assert!(!ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(5).unwrap(), 16);
+}
+
+#[test]
+fn test_iqcfg_boundary_sv_max() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    ctx.config.default_qubits = 24; // exactly MAX_SV_QUBITS
+    ctx.config.force_density_matrix = false;
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 3 }, &mut fm).unwrap();
+    assert!(!ctx.psw.trap_arith);
+    assert_eq!(ctx.iregs.get(3).unwrap(), 24);
+}
+
+// ===========================================================================
 // Control flow
 // ===========================================================================
 

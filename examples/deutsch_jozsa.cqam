@@ -16,6 +16,8 @@
 # Gate-level justification: QPHASE is required to implement the
 # balanced oracle — it applies Z to specific qubits based on the
 # function definition, which no register-level kernel can express.
+#
+#! qubits 8
 
 # --- Setup ---
     ILDI R0, 0           # R0 = unused ctx
