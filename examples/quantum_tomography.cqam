@@ -28,7 +28,7 @@ banner:
 inp_fmt:
     .ascii "Inputs: qubits=%d, shots=8\n"
 res_fmt:
-    .ascii "Results: sigma_z=%d, sigma_x=%d, sigma_y=%d\n"
+    .ascii "Results: sigma_z=%f, sigma_x=%f, sigma_y=%f\n"
 
 .code
 
@@ -219,9 +219,9 @@ LABEL: tomo_y_loop
     ILDI R1, @res_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDM R2, 0               # sigma_z (float bits as int)
-    ILDM R3, 1               # sigma_x (float bits as int)
-    ILDM R4, 2               # sigma_y (float bits as int)
+    FLDM F1, 0               # F1 = sigma_z (%f arg 1)
+    FLDM F2, 1               # F2 = sigma_x (%f arg 2)
+    FLDM F3, 2               # F3 = sigma_y (%f arg 3)
     ECALL PRINT_STR
 
     HALT

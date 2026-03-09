@@ -21,7 +21,7 @@ banner:
 inp_fmt:
     .ascii "Inputs: qubits=%d, max_iterations=10\n"
 res_fmt:
-    .ascii "Results: iterations=%d, ground_state=%d\n"
+    .ascii "Results: iterations=%d, ground_state_energy=%f\n"
 
 .code
 
@@ -116,8 +116,8 @@ LABEL: vqe_done
     ILDI R1, @res_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDM R2, 12
-    ILDM R3, 13
+    # R2 still holds iteration count from the loop
+    FLDM F1, 10          # F1 = best energy found (CMEM[10], stored via FSTR)
     ECALL PRINT_STR
 
     HALT

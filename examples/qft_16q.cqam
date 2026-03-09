@@ -19,7 +19,7 @@ banner:
 inp_fmt:
     .ascii "Inputs: qubits=%d\n"
 res_fmt:
-    .ascii "Results: mean_freq=%d\n"
+    .ascii "Results: mean_freq=%f\n"
 
 .code
 
@@ -88,7 +88,7 @@ res_fmt:
     ILDI R1, @res_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDM R2, 0
+    FLDM F1, 0           # F1 = mean freq (stored as float via FSTR)
     ECALL PRINT_STR
 
     HALT

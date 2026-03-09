@@ -21,7 +21,7 @@ banner:
 inp:
     .ascii "Inputs: qubits=%d, base_angle=1.0\n"
 res:
-    .ascii "Results: mean_phase_idx=%d\n"
+    .ascii "Results: phase_bin=%d, estimated_phase=%f\n"
 
 .code
 #
@@ -113,7 +113,9 @@ LABEL: pe_pow2_done
     FSTR F8, 2           # CMEM[2] = estimated phase (scaled)
 
 # --- Print results ---
-    ILDM R2, 0           # R2 = CMEM[0] = mean phase index (first %d arg)
+    # R5 still holds argmax (integer peak bin index)
+    IADD R2, R5, R4      # R2 = argmax (first %d arg; R4=0)
+    FLDM F1, 2           # F1 = estimated phase (CMEM[2], stored via FSTR)
     ILDI R0, @res
     ILDI R1, @res.len
     ILDI R15, 1

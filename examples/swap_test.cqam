@@ -27,7 +27,7 @@ banner:
 inp_fmt:
     .ascii "Inputs: qubits=%d\n"
 res_fmt:
-    .ascii "Results: same_diff=%d, diff_diff=%d\n"
+    .ascii "Results: same_diff=%f, diff_diff=%f\n"
 
 .code
 
@@ -146,8 +146,8 @@ res_fmt:
     ILDI R1, @res_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDM R2, 0
-    ILDM R3, 1
+    FLDM F1, 0           # F1 = same-state diff (%f arg 1)
+    FLDM F2, 1           # F2 = diff-state diff (%f arg 2)
     ECALL PRINT_STR
 
     HALT
