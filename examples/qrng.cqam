@@ -20,7 +20,7 @@ banner:
 inp_fmt:
     .ascii "Inputs: samples=%d, qubits=%d\n"
 res_fmt:
-    .ascii "Results: samples=%d, sum=%d\n"
+    .ascii "Results: samples=%d, sum=%d, mean=%f, sq_deviation=%f\n"
 
 .code
 
@@ -122,6 +122,8 @@ LABEL: rng_pow2_done
     ISUB R1, R1, R15
     ILDM R2, 103          # CMEM[103] = sample count
     ILDM R3, 104          # CMEM[104] = sum
+    FLDM F1, 100          # F1 = empirical mean (CMEM[100])
+    FLDM F2, 102          # F2 = squared deviation (CMEM[102])
     ECALL PRINT_STR
 
     HALT

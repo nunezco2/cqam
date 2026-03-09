@@ -26,7 +26,7 @@ banner:
 inp:
     .ascii "Inputs: qubits=%d, theta=1.0\n"
 res:
-    .ascii "Results: phase_index=%d\n"
+    .ascii "Results: phase_index=%d, mean_phase=%f\n"
 
 .code
 #
@@ -125,6 +125,7 @@ LABEL: qpe_cu_loop
 
 # --- Print results ---
     ILDM R2, 0           # R2 = CMEM[0] = phase index
+    FLDM F1, 1           # F1 = mean phase (CMEM[1])
     ILDI R0, @res
     ILDI R1, @res.len
     ILDI R15, 1

@@ -19,7 +19,7 @@ banner:
 inp:
     .ascii "Inputs: qubits=%d, param=2.0\n"
 res:
-    .ascii "Results: phase_index=%d\n"
+    .ascii "Results: phase_index=%d, eigenvalue_phase=%f\n"
 
 .code
 
@@ -132,6 +132,7 @@ LABEL: eig_loop
 
 # --- Print results ---
     ILDM R2, 0           # R2 = CMEM[0] = phase index
+    FLDM F1, 3           # F1 = estimated eigenvalue phase (CMEM[3])
     ILDI R0, @res
     ILDI R1, @res.len
     ILDI R15, 1
