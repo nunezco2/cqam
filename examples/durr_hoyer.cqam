@@ -22,6 +22,31 @@
 #
 #! qubits 8
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Durr-Hoyer Minimum Finding ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, rounds=6\n"
+res_fmt:
+    .ascii "Results: minimum=%d, consistent=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 8
+    ECALL PRINT_STR
+
 # --- Algorithm parameters ---
     ILDI R0, 42          # R0 = initial Grover target (threshold y)
     ILDI R1, 0           # R1 = unused ctx1
@@ -127,5 +152,14 @@ LABEL: dh_verify_loop
     ISTR R4, 3           # CMEM[3] = total rounds performed
     FSTR F2, 4           # CMEM[4] = verification mean
     ISTR R5, 5           # CMEM[5] = final Grover depth (adaptive)
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0               # found minimum
+    ILDM R3, 2               # consistency flag
+    ECALL PRINT_STR
 
     HALT

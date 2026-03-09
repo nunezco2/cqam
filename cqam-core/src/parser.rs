@@ -910,7 +910,22 @@ fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection, CqamError>
         let base_addr = ds.cells.len() as u16;
         let cells_before = ds.cells.len();
 
-        if let Some(rest) = line.strip_prefix(".ascii") {
+        if let Some(rest) = line.strip_prefix(".org") {
+            // .org N — advance allocation pointer to address N
+            let rest = rest.trim();
+            let addr: usize = rest.parse().map_err(|_| CqamError::ParseError {
+                line: line_num,
+                message: format!(".org: invalid address '{}'", rest),
+            })?;
+            if addr < ds.cells.len() {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!(".org {} is below current position {}", addr, ds.cells.len()),
+                });
+            }
+            ds.cells.resize(addr, 0);
+            continue;
+        } else if let Some(rest) = line.strip_prefix(".ascii") {
             parse_ascii_directive(rest.trim_start_matches('z'), line_num, &mut ds.cells)?;
         } else if let Some(rest) = line.strip_prefix(".i64") {
             parse_i64_directive(rest, line_num, &mut ds.cells)?;

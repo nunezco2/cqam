@@ -16,6 +16,33 @@
 #
 # All operations are register-level — no gate-level ops required.
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Shor's Period Finding ===\n"
+inp_fmt:
+    .ascii "Inputs: N=%d, a=%d, qubits=%d\n"
+res_fmt:
+    .ascii "Results: period=%d, factor1=%d, factor2=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 15
+    ILDI R3, 7
+    ILDI R4, 8
+    ECALL PRINT_STR
+
 # --- Problem parameters: factor N using a^x mod N ---
     ILDI R0, 15          # R0 = N (number to factor)
     ILDI R1, 7           # R1 = a (random base, gcd(a, N) = 1)
@@ -133,5 +160,15 @@ LABEL: store_results
     FSTR F2, 5           # CMEM[5] = mean phase index
     FSTR F7, 6           # CMEM[6] = period estimate (float)
     ZSTR Z0, 7           # CMEM[7-8] = complex phase parameter
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0            # CMEM[0] = period
+    ILDM R3, 1            # CMEM[1] = factor1
+    ILDM R4, 2            # CMEM[2] = factor2
+    ECALL PRINT_STR
 
     HALT

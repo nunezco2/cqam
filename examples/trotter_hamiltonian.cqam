@@ -25,6 +25,31 @@
 #
 #! qubits 4
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Trotter-Suzuki Hamiltonian ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, steps=4\n"
+res_fmt:
+    .ascii "Results: most_probable=%d, steps=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 4
+    ECALL PRINT_STR
+
 # --- Hamiltonian parameters ---
     FLDI F0, 1           # F0 = J (Ising coupling strength)
     FLDI F1, 1           # F1 = h (transverse field strength)
@@ -141,5 +166,14 @@ LABEL: trotter_loop
     FSTR F4, 6           # CMEM[6] = dt (time step)
     FSTR F6, 7           # CMEM[7] = ZZ rotation angle
     FSTR F7, 8           # CMEM[8] = X rotation angle
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 4               # most probable state
+    ILDM R3, 5               # total Trotter steps
+    ECALL PRINT_STR
 
     HALT

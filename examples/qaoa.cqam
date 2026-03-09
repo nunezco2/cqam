@@ -12,6 +12,31 @@
 #
 #! qubits 8
 
+.data
+    .org 1000
+banner:
+    .ascii "=== QAOA MaxCut ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, rounds=3\n"
+res_fmt:
+    .ascii "Results: best_solution=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 8
+    ECALL PRINT_STR
+
 # --- QAOA parameters ---
     ILDI R0, 3           # R0 = p (number of QAOA rounds)
     ILDI R1, 0           # R1 = ctx
@@ -73,5 +98,13 @@
     FSTR F8, 2           # CMEM[2] = cost variance
     CVTIF F9, R3         # F9 = solution as float
     FSTR F9, 3           # CMEM[3] = solution (float)
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0
+    ECALL PRINT_STR
 
     HALT

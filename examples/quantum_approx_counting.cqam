@@ -21,8 +21,33 @@
 #   - HREDUCE: classical post-processing (ARGMAX, MEAN, VARIANCE)
 #
 #! qubits 8
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum Approx. Counting ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, target=5, levels=5\n"
+res_fmt:
+    .ascii "Results: phase_index=%d\n"
+
+.code
 #
 # All operations are register-level -- no gate-level ops required.
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    IQCFG R2                 # R2 = N (qubit count) for %d
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
 # --- Setup ---
     ILDI R0, 5           # R0 = target state for Grover oracle
@@ -130,5 +155,13 @@ LABEL: store_count_results
     ISTR R0, 4                  # CMEM[4] = target state
     FSTR F11, 5                 # CMEM[5] = sin^2(theta/2)
     ISTR R5, 6                  # CMEM[6] = final Grover depth
+
+# --- Print results ---
+    ILDM R2, 0               # R2 = CMEM[0] = phase index
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
     HALT

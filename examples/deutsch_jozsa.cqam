@@ -19,6 +19,31 @@
 #
 #! qubits 8
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Deutsch-Jozsa ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d\n"
+res_fmt:
+    .ascii "Results: constant=%d, balanced=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 8
+    ECALL PRINT_STR
+
 # --- Setup ---
     ILDI R0, 0           # R0 = unused ctx
     ILDI R1, 0           # R1 = basis state |0> index
@@ -85,5 +110,14 @@
     ISTR R5, 1           # CMEM[1] = balanced test result (expect 0 ideally)
     FSTR F0, 2           # CMEM[2] = P(|0>) for constant function
     FSTR F1, 3           # CMEM[3] = P(|0>) for balanced function
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0            # CMEM[0] = constant verdict
+    ILDM R3, 1            # CMEM[1] = balanced verdict
+    ECALL PRINT_STR
 
     HALT

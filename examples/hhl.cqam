@@ -15,6 +15,31 @@
 #
 #! qubits 2
 
+.data
+    .org 1000
+banner:
+    .ascii "=== HHL Algorithm ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, theta=0.5\n"
+res_fmt:
+    .ascii "Results: argmax=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    IQCFG R2                 # R2 = N (qubit count) for %d
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
 # --- Parametric setup: derive m and mask from pragma ---
     IQCFG R10            # R10 = m = N counting qubits
     ILDI R3, 1           # R3 = constant 1
@@ -94,5 +119,13 @@ LABEL: hhl_qpe_fwd
     ISTR R7, 0            # CMEM[0] = measurement argmax
     FSTR F7, 1            # CMEM[1] = mean
     FSTR F8, 2            # CMEM[2] = variance
+
+# --- Print results ---
+    ILDM R2, 0               # R2 = CMEM[0] = argmax
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
     HALT

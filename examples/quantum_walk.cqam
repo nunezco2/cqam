@@ -17,6 +17,31 @@
 #
 #! qubits 16
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum Walk ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, steps=20\n"
+res_fmt:
+    .ascii "Results: modal_pos=%d, steps=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 16
+    ECALL PRINT_STR
+
 # --- Walk parameters ---
     ILDI R0, 20          # R0 = number of walk steps
     ILDI R1, 1           # R1 = constant 1
@@ -84,5 +109,14 @@ LABEL: walk_loop
     FSTR F4, 201         # CMEM[201] = final variance
     ISTR R7, 202         # CMEM[202] = modal position
     ISTR R2, 203         # CMEM[203] = total steps taken
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 202             # modal position
+    ILDM R3, 203             # total steps
+    ECALL PRINT_STR
 
     HALT

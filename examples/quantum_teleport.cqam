@@ -22,6 +22,31 @@
 #
 #! qubits 2
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum Teleportation ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, theta=2.0\n"
+res_fmt:
+    .ascii "Results: alice_bits=%d, bob_meas=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    IQCFG R2                 # R2 = N (qubit count) for %d
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
 # --- Setup ---
     ILDI R0, 0           # R0 = ctx / basis state |0>
     ILDI R1, 1           # R1 = constant 1 / mask for qubit 0
@@ -124,4 +149,13 @@ LABEL: quantum_err_handler
     RETI
 
 LABEL: end_program
+# --- Print results ---
+    ILDM R2, 2               # R2 = CMEM[2] = Alice's bits
+    ILDM R3, 3               # R3 = CMEM[3] = Bob's measurement
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
     HALT

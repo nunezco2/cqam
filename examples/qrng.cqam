@@ -13,6 +13,32 @@
 #
 # All operations are register-level — no gate-level ops required.
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum RNG ===\n"
+inp_fmt:
+    .ascii "Inputs: samples=%d, qubits=%d\n"
+res_fmt:
+    .ascii "Results: samples=%d, sum=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 8
+    ILDI R3, 8
+    ECALL PRINT_STR
+
 # --- Setup ---
     ILDI R0, 8           # R0 = number of random samples to generate
     ILDI R1, 1           # R1 = constant 1
@@ -88,5 +114,14 @@ LABEL: rng_pow2_done
 # Load back first random number for verification
     ILDI R10, 0
     ILDX R11, R10        # R11 = CMEM[0] = first random number generated
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 103          # CMEM[103] = sample count
+    ILDM R3, 104          # CMEM[104] = sum
+    ECALL PRINT_STR
 
     HALT

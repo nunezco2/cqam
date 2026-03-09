@@ -13,8 +13,33 @@
 #   4. Measure and reduce to get the estimated phase
 #
 #! qubits 16
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Phase Estimation ===\n"
+inp:
+    .ascii "Inputs: qubits=%d, base_angle=1.0\n"
+res:
+    .ascii "Results: mean_phase_idx=%d\n"
+
+.code
 #
 # All operations are register-level — no gate-level ops required.
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp
+    ILDI R1, @inp.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 16
+    ECALL PRINT_STR
 
 # --- Classical setup: define the target phase ---
     FLDI F0, 1           # F0 = base angle theta = 1.0 radian
@@ -86,5 +111,13 @@ LABEL: pe_pow2_done
     FSTR F4, 0           # CMEM[0] = mean phase index
     FSTR F5, 1           # CMEM[1] = phase variance
     FSTR F8, 2           # CMEM[2] = estimated phase (scaled)
+
+# --- Print results ---
+    ILDM R2, 0           # R2 = CMEM[0] = mean phase index (first %d arg)
+    ILDI R0, @res
+    ILDI R1, @res.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
     HALT

@@ -17,8 +17,33 @@
 # |1...1> = 2^N - 1 is computed dynamically.
 #
 #! qubits 16
+
+.data
+    .org 1000
+banner:
+    .ascii "=== GHZ Verification ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d\n"
+res_fmt:
+    .ascii "Results: entangled=%d\n"
+
+.code
 #
 # All operations are register-level — no gate-level ops required.
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    IQCFG R2                 # R2 = N (qubit count) for %d
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
 # --- Parametric setup: derive 2^N - 1 = |1...1> ---
     IQCFG R15            # R15 = N (qubit count from pragma)
@@ -116,5 +141,13 @@ LABEL: merge_verify
     ISTR R6, 3           # Mode of GHZ measurement
     ISTR R7, 4           # Entanglement verification flag
     ZSTR Z0, 5           # Conjugate of off-diagonal element
+
+# --- Print results ---
+    ILDM R2, 4               # R2 = CMEM[4] = entanglement flag
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
     HALT

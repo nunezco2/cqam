@@ -12,6 +12,31 @@
 #
 # All operations are register-level — no gate-level ops required.
 
+.data
+    .org 1000
+banner:
+    .ascii "=== QFT 16-qubit ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d\n"
+res_fmt:
+    .ascii "Results: mean_freq=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 16
+    ECALL PRINT_STR
+
 # --- Classical setup ---
     ILDI R0, 0           # R0 = basis state index 0
     ILDI R1, 1           # R1 = basis state index 1
@@ -57,5 +82,13 @@
     FSTR F0, 0            # CMEM[0] = mean frequency
     FSTR F2, 1            # CMEM[1] = off-diagonal magnitude
     FSTR F3, 2            # CMEM[2] = off-diagonal phase
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0
+    ECALL PRINT_STR
 
     HALT

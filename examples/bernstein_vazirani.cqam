@@ -14,6 +14,32 @@
 #
 #! qubits 5
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Bernstein-Vazirani ===\n"
+inp_fmt:
+    .ascii "Inputs: secret=%d, qubits=%d\n"
+res_fmt:
+    .ascii "Results: secret=%d, recovered=%d, success=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 21
+    ILDI R3, 5
+    ECALL PRINT_STR
+
 # --- Parametric setup: derive N and all-qubits mask ---
     IQCFG R10            # R10 = N (qubit count from pragma)
     ILDI R11, 1          # R11 = accumulator for 2^N
@@ -63,5 +89,15 @@ LABEL: bv_pow2_done
     ISTR R1, 0           # CMEM[0] = secret string
     ISTR R6, 1           # CMEM[1] = recovered string
     ISTR R8, 2           # CMEM[2] = success flag
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0            # CMEM[0] = secret
+    ILDM R3, 1            # CMEM[1] = recovered
+    ILDM R4, 2            # CMEM[2] = success
+    ECALL PRINT_STR
 
     HALT

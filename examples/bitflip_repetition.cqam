@@ -22,6 +22,31 @@
 #
 #! qubits 3
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Bit-Flip Repetition Code ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, error_qubit=1\n"
+res_fmt:
+    .ascii "Results: success=%d, s1=%d, s2=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 3
+    ECALL PRINT_STR
+
 # --- Setup ---
     ILDI R0, 0           # R0 = qubit 0 index
     ILDI R1, 1           # R1 = qubit 1 index
@@ -147,5 +172,15 @@ LABEL: verify_code
     ISTR R11, 7          # CMEM[7] = qubit 2 measurement
     ISTR R15, 8          # CMEM[8] = final corrected state
     ISTR R14, 9          # CMEM[9] = correction success flag
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 9
+    ILDM R3, 3
+    ILDM R4, 4
+    ECALL PRINT_STR
 
     HALT

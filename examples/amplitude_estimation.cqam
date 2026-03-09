@@ -10,8 +10,33 @@
 # and many quantum machine learning algorithms.
 #
 #! qubits 16
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Amplitude Estimation ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, target=7, precision=4\n"
+res_fmt:
+    .ascii "Results: phase_index=%d, target=%d\n"
+
+.code
 #
 # All operations are register-level — no gate-level ops required.
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    IQCFG R2                 # R2 = N (qubit count) for %d
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
 # --- Setup ---
     ILDI R0, 7           # R0 = target state for Grover oracle
@@ -98,5 +123,14 @@ LABEL: grover_inner
     ISTR R11, 0          # CMEM[0] = phase index (encodes amplitude)
     FSTR F4, 1           # CMEM[1] = mean phase index
     ISTR R0, 2           # CMEM[2] = target state used
+
+# --- Print results ---
+    ILDM R2, 0               # R2 = CMEM[0] = phase index
+    ILDM R3, 2               # R3 = CMEM[2] = target state
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
     HALT

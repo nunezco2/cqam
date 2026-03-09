@@ -12,6 +12,17 @@
 #
 # All operations are register-level — no gate-level ops required.
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Grover's Search ===\n"
+inp_fmt:
+    .ascii "Inputs: target=%d, qubits=%d\n"
+res_fmt:
+    .ascii "Results: found=%d, iterations=%d\n"
+
+.code
+
 # --- Parametric setup: compute iteration count from N ---
     IQCFG R15            # R15 = n (qubit count from pragma)
     ILDI R3, 1           # R3 = constant 1
@@ -42,7 +53,28 @@ LABEL: grov_pow2_done
 
 # --- Classical setup ---
     ILDI R0, 42          # R0 = target state to search for
+
+# --- Print banner and inputs ---
+    ISTR R15, 500         # save qubit count to CMEM[500]
+    ISTR R2, 501          # save iteration count to CMEM[501]
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 42
+    ILDM R3, 500
+    ECALL PRINT_STR
+
+    ILDI R0, 42          # R0 = target state to search for (restore)
     ILDI R1, 0           # R1 = unused ctx1 parameter
+    ILDM R2, 501          # R2 = iteration count (restore)
+    ILDI R3, 1           # R3 = constant 1 (restore)
     ILDI R4, 0           # R4 = iteration counter (for statistics)
 
 # --- Prepare uniform superposition ---
@@ -83,5 +115,14 @@ LABEL: grover_loop
 
 # --- Convert iteration count to float for reporting ---
     CVTIF F2, R4         # F2 = iterations as float
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0            # CMEM[0] = found state
+    ILDM R3, 1            # CMEM[1] = iterations
+    ECALL PRINT_STR
 
     HALT

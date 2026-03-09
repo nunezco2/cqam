@@ -18,6 +18,17 @@
 # Expected QPE bin ≈ theta * 2^m / (2*pi).
 #
 #! qubits 3
+
+.data
+    .org 1000
+banner:
+    .ascii "=== General QPE ===\n"
+inp:
+    .ascii "Inputs: qubits=%d, theta=1.0\n"
+res:
+    .ascii "Results: phase_index=%d\n"
+
+.code
 #
 # Register layout:
 #   Q0 = m-qubit counting register
@@ -26,8 +37,24 @@
 #   Q3 = m-qubit counting register after partial trace
 #   CMEM[100..104] = Controlled-U parameter block
 
-# --- Parametric setup: derive m and Hadamard mask from pragma ---
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
     IQCFG R10            # R10 = m = N counting qubits (from pragma)
+
+    ILDI R0, @inp
+    ILDI R1, @inp.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 0
+    IADD R2, R10, R2    # R2 = R10 (qubit count for %d)
+    ECALL PRINT_STR
+
+# --- Parametric setup: derive m and Hadamard mask from pragma ---
     ILDI R3, 1           # R3 = constant 1
 
     # Compute 2^m - 1 = all-counting-qubits mask
@@ -95,5 +122,13 @@ LABEL: qpe_cu_loop
 # --- Store results ---
     ISTR R7, 0           # CMEM[0] = phase index (argmax)
     FSTR F6, 1           # CMEM[1] = mean phase
+
+# --- Print results ---
+    ILDM R2, 0           # R2 = CMEM[0] = phase index
+    ILDI R0, @res
+    ILDI R1, @res.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
 
     HALT

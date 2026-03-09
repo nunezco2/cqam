@@ -14,6 +14,31 @@
 #
 # All operations are register-level — no gate-level ops required.
 
+.data
+    .org 1000
+banner:
+    .ascii "=== VQE Loop ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, max_iterations=10\n"
+res_fmt:
+    .ascii "Results: iterations=%d, ground_state=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 16
+    ECALL PRINT_STR
+
 # --- VQE parameters ---
     FLDI F0, 0           # F0 = theta (current angle parameter)
     FLDI F1, 0           # F1 = unused fctx1
@@ -85,5 +110,14 @@ LABEL: vqe_done
     CVTIF F8, R2         # F8 = iterations performed as float
     FSTR F8, 12          # CMEM[12] = iteration count
     ISTR R7, 13          # CMEM[13] = ground state candidate
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 12
+    ILDM R3, 13
+    ECALL PRINT_STR
 
     HALT

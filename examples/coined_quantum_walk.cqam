@@ -23,6 +23,31 @@
 #
 #! qubits 3
 
+.data
+    .org 1000
+banner:
+    .ascii "=== Coined Quantum Walk ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, steps=10\n"
+res_fmt:
+    .ascii "Results: most_probable=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 3
+    ECALL PRINT_STR
+
 # --- Walk parameters ---
     ILDI R0, 10          # R0 = number of walk steps
     ILDI R1, 1           # R1 = constant 1 / coin qubit mask
@@ -187,5 +212,13 @@ LABEL: store_walk_results
     ISTR R2, 404         # CMEM[404] = total steps
     FSTR F10, 405        # CMEM[405] = variance ratio (ballistic check)
     FSTR F3, 406         # CMEM[406] = initial variance
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 403             # most probable state
+    ECALL PRINT_STR
 
     HALT

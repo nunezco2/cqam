@@ -24,6 +24,31 @@
 #
 #! qubits 4
 
+.data
+    .org 1000
+banner:
+    .ascii "=== ADAPT-VQE ===\n"
+inp_fmt:
+    .ascii "Inputs: qubits=%d, max_iter=3\n"
+res_fmt:
+    .ascii "Results: iterations=%d, ground_state=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 4
+    ECALL PRINT_STR
+
 # --- ADAPT-VQE parameters ---
     ILDI R0, 3           # R0 = max ADAPT iterations
     ILDI R1, 1           # R1 = constant 1
@@ -186,5 +211,14 @@ LABEL: adapt_check_convergence
     FSTR F1, 13               # CMEM[13] = optimized theta
     ISTR R12, 14              # CMEM[14] = ground state candidate
     ISTR R2, 15               # CMEM[15] = total ADAPT iterations
+
+# --- Print results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 15               # iterations
+    ILDM R3, 14               # ground state candidate
+    ECALL PRINT_STR
 
     HALT
