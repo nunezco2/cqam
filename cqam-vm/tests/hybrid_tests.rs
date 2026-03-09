@@ -262,13 +262,13 @@ fn test_hfork_merge_flow_simulation() {
 #[test]
 fn test_hreduce_type_mismatch_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // ROUND expects Float, but we have Int
+    // CONJ_Z expects Complex, but we have Int — genuine type mismatch
     ctx.hregs.set(0, HybridValue::Int(42)).unwrap();
 
     let mut fm = ForkManager::new();
     let result = execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ROUND },
+        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::CONJ_Z },
         &mut fm,
     );
     assert!(result.is_err());

@@ -1096,6 +1096,7 @@ fn parse_observe_mode(token: &str) -> Option<u8> {
         "DIST" | "dist" => Some(0),
         "PROB" | "prob" => Some(1),
         "AMP" | "amp" => Some(2),
+        "SAMPLE" | "sample" => Some(3),
         _ => parse_u8(token).filter(|&v| v <= 3),
     }
 }

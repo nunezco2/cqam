@@ -60,8 +60,8 @@
 # ===============================================
 # Step 4: Alice measures — get classical bits
 # ===============================================
-    QOBSERVE H1, Q0      # H1 = measurement result (destructive)
-    HREDUCE H1, R4, 11   # R4 = measured state (classical bits)
+    QOBSERVE H1, Q0, SAMPLE  # H1 = Int(k), projective measurement
+    HREDUCE H1, R4, 0    # R4 = measured state (classical bits)
 
 # Extract individual bits for correction
     IAND R5, R4, R1      # R5 = bit 0 (Alice's first measurement)

@@ -177,6 +177,8 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
             if *mode == 0 && *ctx0 == 0 && *ctx1 == 0 {
                 format!("QOBSERVE H{}, Q{}", dst_h, src_q)
+            } else if *mode == 3 {
+                format!("QOBSERVE H{}, Q{}, SAMPLE", dst_h, src_q)
             } else if *mode == 1 {
                 format!("QOBSERVE H{}, Q{}, {}, R{}", dst_h, src_q, mode, ctx0)
             } else {

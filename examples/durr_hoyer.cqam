@@ -34,8 +34,8 @@
 
 # --- Step 0: Initialize threshold from random measurement ---
     QPREP Q0, 0          # Uniform superposition
-    QOBSERVE H0, Q0      # Destructive measurement -> random state
-    HREDUCE H0, R0, 11   # R0 = random initial threshold y (mode)
+    QOBSERVE H0, Q0, SAMPLE  # Projective measurement -> random outcome
+    HREDUCE H0, R0, 0    # R0 = random initial threshold y
     ILDI R6, 0
     IADD R6, R0, R6      # R6 = y (current best)
 

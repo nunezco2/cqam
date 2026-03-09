@@ -85,10 +85,14 @@ pub fn execute_hybrid(
                             };
                             $ctx.iregs.set($dst, ($body)(mean))?;
                         }
+                        HybridValue::Int(v) => {
+                            // Int pass-through (e.g., from QOBSERVE/SAMPLE)
+                            $ctx.iregs.set($dst, ($body)(v as f64))?;
+                        }
                         _ => {
                             return Err(CqamError::TypeMismatch {
                                 instruction: concat!("HREDUCE/", $name).to_string(),
-                                detail: format!("expected Float, Complex, or Dist, got {:?}", $val),
+                                detail: format!("expected Float, Complex, Dist, or Int, got {:?}", $val),
                             });
                         }
                     }
@@ -110,26 +114,40 @@ pub fn execute_hybrid(
 
             macro_rules! hreduce_dist_to_float {
                 ($val:expr, $name:expr, $body:expr, $ctx:expr, $dst:expr) => {
-                    if let HybridValue::Dist(ref entries) = $val {
-                        $ctx.fregs.set($dst, ($body)(entries))?;
-                    } else {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: concat!("HREDUCE/", $name).to_string(),
-                            detail: format!("expected Dist, got {:?}", $val),
-                        });
+                    match $val {
+                        HybridValue::Dist(ref entries) => {
+                            $ctx.fregs.set($dst, ($body)(entries))?;
+                        }
+                        HybridValue::Int(v) => {
+                            // Int pass-through (e.g., from QOBSERVE/SAMPLE)
+                            $ctx.fregs.set($dst, v as f64)?;
+                        }
+                        _ => {
+                            return Err(CqamError::TypeMismatch {
+                                instruction: concat!("HREDUCE/", $name).to_string(),
+                                detail: format!("expected Dist or Int, got {:?}", $val),
+                            });
+                        }
                     }
                 };
             }
 
             macro_rules! hreduce_dist_to_int {
                 ($val:expr, $name:expr, $body:expr, $ctx:expr, $dst:expr) => {
-                    if let HybridValue::Dist(ref entries) = $val {
-                        $ctx.iregs.set($dst, ($body)(entries))?;
-                    } else {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: concat!("HREDUCE/", $name).to_string(),
-                            detail: format!("expected Dist, got {:?}", $val),
-                        });
+                    match $val {
+                        HybridValue::Dist(ref entries) => {
+                            $ctx.iregs.set($dst, ($body)(entries))?;
+                        }
+                        HybridValue::Int(v) => {
+                            // Int pass-through (e.g., from QOBSERVE/SAMPLE)
+                            $ctx.iregs.set($dst, v)?;
+                        }
+                        _ => {
+                            return Err(CqamError::TypeMismatch {
+                                instruction: concat!("HREDUCE/", $name).to_string(),
+                                detail: format!("expected Dist or Int, got {:?}", $val),
+                            });
+                        }
                     }
                 };
             }

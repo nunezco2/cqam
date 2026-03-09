@@ -20,6 +20,7 @@ use cqam_sim::kernels::rotate::Rotate;
 use cqam_sim::kernels::phase::PhaseShift;
 use cqam_sim::kernels::fourier_inv::FourierInv;
 use cqam_sim::kernels::controlled_u::ControlledU;
+use rand::Rng;
 use crate::context::ExecutionContext;
 
 // =============================================================================
@@ -377,6 +378,21 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         }
                         let (re, im) = qr.get_element(row, col);
                         HybridValue::Complex(re, im)
+                    }
+                    observe_mode::SAMPLE => {
+                        let probs = qr.diagonal_probabilities();
+                        let r: f64 = ctx.rng.gen_range(0.0..1.0);
+                        let mut cumulative = 0.0;
+                        let mut outcome = (probs.len() - 1) as i64;
+                        for (k, p) in probs.iter().enumerate() {
+                            cumulative += p;
+                            if r < cumulative {
+                                outcome = k as i64;
+                                break;
+                            }
+                        }
+                        ctx.psw.zf = outcome == 0;
+                        HybridValue::Int(outcome)
                     }
                     _ => {
                         return Err(CqamError::TypeMismatch {

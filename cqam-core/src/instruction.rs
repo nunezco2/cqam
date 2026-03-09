@@ -519,6 +519,9 @@ pub mod observe_mode {
     pub const PROB: u8 = 1;
     /// Amplitude dm.get(row, col) where row=R[ctx0], col=R[ctx1].
     pub const AMP: u8 = 2;
+    /// Projective measurement: sample one outcome k with probability P(k) = rho_{k,k}.
+    /// Destructive (consumes the quantum register). Returns HybridValue::Int(k).
+    pub const SAMPLE: u8 = 3;
 }
 
 /// Reduction function IDs for HReduce.
@@ -617,6 +620,7 @@ pub fn observe_mode_name(mode: u8) -> &'static str {
         observe_mode::DIST => "dist",
         observe_mode::PROB => "prob",
         observe_mode::AMP => "amp",
+        observe_mode::SAMPLE => "sample",
         _ => "unknown",
     }
 }

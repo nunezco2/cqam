@@ -9,7 +9,7 @@
 # Generates multiple random numbers and computes statistics to verify
 # uniformity (mean should approach N/2, variance should be high).
 #
-#! qubits 16
+#! qubits 8
 #
 # All operations are register-level — no gate-level ops required.
 
@@ -30,12 +30,12 @@ LABEL: rng_loop
 # Step 1: Prepare uniform superposition (register-level)
     QPREP Q0, 0
 
-# Step 2: Measure (collapse to random basis state)
-    QOBSERVE H0, Q0      # H0 = distribution (single outcome after collapse)
+# Step 2: Projective measurement (collapse to random basis state)
+    QOBSERVE H0, Q0, SAMPLE  # H0 = Int(k), a single random outcome
 
 # Step 3: Extract the random number
-    HREDUCE H0, R8, 11   # R8 = mode = the random number
-    HREDUCE H0, F2, 10   # F2 = mean of single-shot distribution
+    HREDUCE H0, R8, 0    # R8 = sampled random number (ROUND, identity on Int)
+    CVTIF F2, R8          # F2 = random number as float
 
 # Step 4: Store random number to memory using indirect addressing
     ISTRX R8, R4         # CMEM[R4] = random number
