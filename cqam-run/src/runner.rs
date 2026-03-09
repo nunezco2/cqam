@@ -15,7 +15,7 @@
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
-use cqam_core::parser::ProgramMetadata;
+use cqam_core::parser::{DataSection, ProgramMetadata};
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
@@ -42,6 +42,18 @@ pub fn run_program_with_config(
     run_program_with_config_and_metadata(program, config, &ProgramMetadata::default())
 }
 
+/// Run a complete CQAM program with configuration, metadata, and data section.
+///
+/// Pre-loads the `.data` section into CMEM before execution begins.
+pub fn run_program_with_data(
+    program: Vec<Instruction>,
+    config: &SimConfig,
+    metadata: &ProgramMetadata,
+    data: &DataSection,
+) -> Result<ExecutionContext, CqamError> {
+    run_program_with_config_metadata_and_data(program, config, metadata, Some(data))
+}
+
 /// Run a complete CQAM program with configuration and program metadata.
 ///
 /// Precedence for qubit count:
@@ -53,7 +65,23 @@ pub fn run_program_with_config_and_metadata(
     config: &SimConfig,
     metadata: &ProgramMetadata,
 ) -> Result<ExecutionContext, CqamError> {
+    run_program_with_config_metadata_and_data(program, config, metadata, None)
+}
+
+fn run_program_with_config_metadata_and_data(
+    program: Vec<Instruction>,
+    config: &SimConfig,
+    metadata: &ProgramMetadata,
+    data: Option<&DataSection>,
+) -> Result<ExecutionContext, CqamError> {
     let mut ctx = ExecutionContext::new(program);
+
+    // Pre-load .data section into CMEM
+    if let Some(ds) = data {
+        if !ds.cells.is_empty() {
+            ctx.cmem.load_data(&ds.cells);
+        }
+    }
     let mut fork_mgr = ForkManager::new();
     let max_cycles = config.max_cycles.unwrap_or(1000);
     let enable_interrupts = config.enable_interrupts.unwrap_or(true);

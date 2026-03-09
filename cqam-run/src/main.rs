@@ -24,7 +24,7 @@
 
 use std::process;
 use cqam_run::loader::load_program;
-use cqam_run::runner::run_program_with_config_and_metadata;
+use cqam_run::runner::run_program_with_data;
 use cqam_run::report::print_report;
 use cqam_run::simconfig::SimConfig;
 
@@ -195,7 +195,7 @@ fn main() {
         eprintln!("Loaded {} instructions from {}", parsed.instructions.len(), cli.input);
     }
 
-    let ctx = match run_program_with_config_and_metadata(parsed.instructions, &config, &parsed.metadata) {
+    let ctx = match run_program_with_data(parsed.instructions, &config, &parsed.metadata, &parsed.data_section) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Runtime error: {}", e);

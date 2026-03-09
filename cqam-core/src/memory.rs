@@ -57,6 +57,15 @@ impl CMem {
         self.cells.iter().all(|&c| c == 0)
     }
 
+    /// Pre-load a slice of values into CMEM starting at address 0.
+    ///
+    /// Used by the runner to install `.data` section content before execution.
+    pub fn load_data(&mut self, data: &[i64]) {
+        for (i, &val) in data.iter().enumerate() {
+            self.cells[i] = val;
+        }
+    }
+
     /// Iterate over all non-zero (addr, value) pairs.
     /// Useful for printing memory dumps without iterating all 64K cells.
     pub fn non_zero_entries(&self) -> impl Iterator<Item = (u16, i64)> + '_ {

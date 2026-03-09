@@ -4,6 +4,8 @@
 //! values. All parse functions return `Result<Instruction, CqamError>` and
 //! report errors with 1-based line numbers.
 
+use std::collections::HashMap;
+
 use crate::error::CqamError;
 use crate::instruction::Instruction;
 
@@ -23,6 +25,20 @@ pub struct ProgramMetadata {
     pub qubits: Option<u8>,
 }
 
+/// Pre-loaded data from a `.data` section.
+///
+/// Each cell maps to one CMEM slot (one i64 per cell). Labels record the
+/// starting address and length so that code can reference them with `@label`
+/// and `@label.len`.
+#[derive(Debug, Clone, Default)]
+pub struct DataSection {
+    /// Flat vector of i64 values to be loaded into CMEM[0..cells.len()].
+    pub cells: Vec<i64>,
+
+    /// label → (base_address, length_in_cells).
+    pub labels: HashMap<String, (u16, u16)>,
+}
+
 /// Result of parsing a complete CQAM program.
 ///
 /// Contains both the instruction stream and any pragma metadata.
@@ -33,6 +49,9 @@ pub struct ParsedProgram {
 
     /// Metadata from `#!` pragma directives.
     pub metadata: ProgramMetadata,
+
+    /// Pre-loaded data from the `.data` section (empty if none).
+    pub data_section: DataSection,
 }
 
 // =============================================================================
@@ -799,24 +818,236 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
 /// assert!(matches!(parsed.instructions[2], Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }));
 /// ```
 pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
-    let mut instructions = Vec::new();
     let mut metadata = ProgramMetadata::default();
 
+    // --- Pass 1: Split lines into sections, extract pragmas ----------------
+    #[derive(PartialEq)]
+    enum Section { Code, Data }
+    let mut current_section = Section::Code;
+    let mut data_lines: Vec<(usize, &str)> = Vec::new();   // (1-based line num, line)
+    let mut code_lines: Vec<(usize, &str)> = Vec::new();
+
     for (idx, line) in source.lines().enumerate() {
-        let trimmed = line.trim_start();
-        // Check for pragma directive before comment stripping
+        let line_num = idx + 1;
+        let trimmed = line.trim();
+
+        // Pragma directives belong to no section
         if let Some(stripped) = trimmed.strip_prefix("#!") {
-            let pragma_content = stripped.trim();
-            parse_pragma(pragma_content, idx + 1, &mut metadata)?;
+            parse_pragma(stripped.trim(), line_num, &mut metadata)?;
             continue;
         }
 
-        let instr = parse_instruction_at(line, idx + 1)?;
+        // Section directives
+        if trimmed.eq_ignore_ascii_case(".data") {
+            current_section = Section::Data;
+            continue;
+        }
+        if trimmed.eq_ignore_ascii_case(".code") {
+            current_section = Section::Code;
+            continue;
+        }
+
+        match current_section {
+            Section::Data => data_lines.push((line_num, line)),
+            Section::Code => code_lines.push((line_num, line)),
+        }
+    }
+
+    // --- Pass 2: Parse data directives, build label table ------------------
+    let data_section = parse_data_section(&data_lines)?;
+
+    // --- Pass 3: Substitute @label tokens, parse instructions --------------
+    let mut instructions = Vec::new();
+    for (line_num, line) in code_lines {
+        let substituted = substitute_data_refs(line, &data_section);
+        let instr = parse_instruction_at(&substituted, line_num)?;
         if !matches!(instr, Instruction::Nop) {
             instructions.push(instr);
         }
     }
-    Ok(ParsedProgram { instructions, metadata })
+
+    Ok(ParsedProgram { instructions, metadata, data_section })
+}
+
+/// Parse `.data` section lines into a [`DataSection`].
+///
+/// Supported directives:
+///   - `label:` — names the next allocation (must precede a data directive)
+///   - `.ascii "string"` — stores one ASCII byte per cell, NUL-terminated
+///   - `.asciiz "string"` — alias for `.ascii`
+///   - `.i64 val1, val2, ...` — stores literal i64 values
+///   - `.f64 val1, val2, ...` — stores f64 values bit-cast to i64
+fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection, CqamError> {
+    let mut ds = DataSection::default();
+    let mut pending_label: Option<(String, usize)> = None; // (name, line_num)
+
+    for &(line_num, raw_line) in lines {
+        let line = strip_comments(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        // Label definition: `name:`
+        if !line.starts_with('.') && line.ends_with(':') {
+            let name = line[..line.len() - 1].trim();
+            if name.is_empty() {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: ".data label requires a name".to_string(),
+                });
+            }
+            if ds.labels.contains_key(name) {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("duplicate .data label '{}'", name),
+                });
+            }
+            pending_label = Some((name.to_string(), line_num));
+            continue;
+        }
+
+        // Data directives
+        let base_addr = ds.cells.len() as u16;
+        let cells_before = ds.cells.len();
+
+        if let Some(rest) = line.strip_prefix(".ascii") {
+            parse_ascii_directive(rest.trim_start_matches('z'), line_num, &mut ds.cells)?;
+        } else if let Some(rest) = line.strip_prefix(".i64") {
+            parse_i64_directive(rest, line_num, &mut ds.cells)?;
+        } else if let Some(rest) = line.strip_prefix(".f64") {
+            parse_f64_directive(rest, line_num, &mut ds.cells)?;
+        } else {
+            return Err(CqamError::ParseError {
+                line: line_num,
+                message: format!("unknown .data directive: {}", line),
+            });
+        }
+
+        let count = (ds.cells.len() - cells_before) as u16;
+
+        // Register the pending label at this base address
+        if let Some((name, _)) = pending_label.take() {
+            ds.labels.insert(name, (base_addr, count));
+        }
+    }
+
+    if let Some((name, ln)) = pending_label {
+        return Err(CqamError::ParseError {
+            line: ln,
+            message: format!(".data label '{}' has no data directive", name),
+        });
+    }
+
+    Ok(ds)
+}
+
+/// Parse `.ascii "..."` — one ASCII byte per cell, auto NUL-terminated.
+fn parse_ascii_directive(
+    rest: &str,
+    line_num: usize,
+    cells: &mut Vec<i64>,
+) -> Result<(), CqamError> {
+    let rest = rest.trim();
+    if !rest.starts_with('"') || !rest.ends_with('"') || rest.len() < 2 {
+        return Err(CqamError::ParseError {
+            line: line_num,
+            message: ".ascii requires a quoted string".to_string(),
+        });
+    }
+    let inner = &rest[1..rest.len() - 1];
+    let mut chars = inner.chars().peekable();
+    while let Some(ch) = chars.next() {
+        if ch == '\\' {
+            match chars.next() {
+                Some('n') => cells.push(10),   // newline
+                Some('t') => cells.push(9),    // tab
+                Some('\\') => cells.push(92),  // backslash
+                Some('"') => cells.push(34),   // quote
+                Some('0') => cells.push(0),    // NUL
+                Some(c) => {
+                    return Err(CqamError::ParseError {
+                        line: line_num,
+                        message: format!("unknown escape '\\{}'", c),
+                    });
+                }
+                None => {
+                    return Err(CqamError::ParseError {
+                        line: line_num,
+                        message: "trailing backslash in string".to_string(),
+                    });
+                }
+            }
+        } else {
+            cells.push(ch as i64);
+        }
+    }
+    // NUL terminator (so PRINT_STR can also detect end by zero)
+    cells.push(0);
+    Ok(())
+}
+
+/// Parse `.i64 val1, val2, ...`
+fn parse_i64_directive(
+    rest: &str,
+    line_num: usize,
+    cells: &mut Vec<i64>,
+) -> Result<(), CqamError> {
+    for tok in rest.split(',') {
+        let tok = tok.trim();
+        if tok.is_empty() {
+            continue;
+        }
+        let val: i64 = tok.parse().map_err(|_| CqamError::ParseError {
+            line: line_num,
+            message: format!(".i64: invalid integer '{}'", tok),
+        })?;
+        cells.push(val);
+    }
+    Ok(())
+}
+
+/// Parse `.f64 val1, val2, ...` — stores f64 bit-patterns as i64.
+fn parse_f64_directive(
+    rest: &str,
+    line_num: usize,
+    cells: &mut Vec<i64>,
+) -> Result<(), CqamError> {
+    for tok in rest.split(',') {
+        let tok = tok.trim();
+        if tok.is_empty() {
+            continue;
+        }
+        let val: f64 = tok.parse().map_err(|_| CqamError::ParseError {
+            line: line_num,
+            message: format!(".f64: invalid float '{}'", tok),
+        })?;
+        cells.push(val.to_bits() as i64);
+    }
+    Ok(())
+}
+
+/// Replace `@label` with the CMEM base address and `@label.len` with the
+/// cell count for all data labels found in the line.
+fn substitute_data_refs(line: &str, ds: &DataSection) -> String {
+    if ds.labels.is_empty() || !line.contains('@') {
+        return line.to_string();
+    }
+
+    let mut result = line.to_string();
+
+    // Process longest labels first to avoid partial substitution
+    let mut labels: Vec<_> = ds.labels.iter().collect();
+    labels.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+    for (name, (base, len)) in &labels {
+        // @label.len must be replaced before @label to avoid partial match
+        let len_token = format!("@{}.len", name);
+        result = result.replace(&len_token, &len.to_string());
+        let addr_token = format!("@{}", name);
+        result = result.replace(&addr_token, &base.to_string());
+    }
+
+    result
 }
 
 /// Parse a single pragma line (without the `#!` prefix).
