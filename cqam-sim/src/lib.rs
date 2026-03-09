@@ -59,4 +59,5 @@ pub mod kernels {
     pub mod fourier_inv;
     pub mod controlled_u;
     pub mod diagonal;
+    pub mod permutation;
 }

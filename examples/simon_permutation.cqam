@@ -1,0 +1,285 @@
+# examples/simon_permutation.cqam
+# Simon's Algorithm with Exact 2-to-1 Oracle via PERMUTATION
+#
+# Algorithm: Given a function f: {0,1}^n -> {0,1}^n with f(x) = f(x XOR s)
+# for an unknown hidden string s, find s using O(n) quantum queries.
+#
+# This example implements a correct 2-to-1 function oracle as a PERMUTATION,
+# replacing the approximate phase-shift oracle in simon.cqam.
+#
+# Setup: n=2 (4 qubits total: 2 query + 2 response), s = 3 (binary 11).
+#
+# The function f satisfies f(x) = f(x XOR 11):
+#   f(00) = 00 = f(11)
+#   f(01) = 01 = f(10)
+#
+# Oracle permutation: U_f|x>|y> = |x>|y XOR f(x)>
+#   This is unitary because f(x) is well-defined and XOR is invertible.
+#   State index k = (x << 2) | y, sigma(k) = (x << 2) | (y XOR f(x)).
+#
+#   k  x   y   f(x)  y^f(x)  sigma(k)
+#   0  00  00   00     00      0
+#   1  00  01   00     01      1
+#   2  00  10   00     10      2
+#   3  00  11   00     11      3
+#   4  01  00   01     01      5
+#   5  01  01   01     00      4
+#   6  01  10   01     11      7
+#   7  01  11   01     10      6
+#   8  10  00   01     01      9
+#   9  10  01   01     00      8
+#  10  10  10   01     11     11
+#  11  10  11   01     10     10
+#  12  11  00   00     00     12
+#  13  11  01   00     01     13
+#  14  11  10   00     10     14
+#  15  11  11   00     11     15
+#
+# Protocol (one round):
+#   1. Prepare |0>|0>
+#   2. Apply H^n to query register (upper 2 qubits)
+#   3. Apply oracle U_f via PERMUTATION
+#   4. Apply H^n to query register
+#   5. Measure query register -> y such that y . s = 0 (mod 2)
+#
+# With s=11, valid y values satisfying y . s = 0 are:
+#   y=00: 00 . 11 = 0 (valid)
+#   y=11: 11 . 11 = 1+1 = 0 mod 2 (valid)
+#   y=01: 01 . 11 = 1 (invalid)
+#   y=10: 10 . 11 = 1 (invalid)
+#
+# So measurement should yield y in {00, 11} with equal probability.
+# From y=11 we can deduce s=11 directly (the only nonzero solution
+# to y . s = 0 with y=11 is s=11).
+#
+# We run 4 rounds to increase confidence.
+#
+# Gate-level justification:
+#   QHADM with partial mask is required for Hadamard on query register only.
+#   The oracle uses PERMUTATION (register-level).
+#
+#! qubits 4
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Simon's Algorithm (PERMUTATION Oracle) ===\n"
+inp_fmt:
+    .ascii "Inputs: n=%d, secret_s=%d (binary 11), rounds=%d\n"
+round_fmt:
+    .ascii "  Round %d: measured y=%d, y.s mod 2=%d\n"
+res_fmt:
+    .ascii "Results: recovered=%d, secret=%d, match=%d\n"
+
+.code
+
+# --- Print banner and inputs ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDI R2, 2               # n = 2
+    ILDI R3, 3               # s = 3 (binary 11)
+    ILDI R4, 4               # rounds
+    ECALL PRINT_STR
+
+# ===========================================================================
+# Store oracle permutation at CMEM[200..215]
+# ===========================================================================
+    ILDI R5, 0
+    ISTR R5, 200        # sigma(0) = 0
+    ILDI R5, 1
+    ISTR R5, 201        # sigma(1) = 1
+    ILDI R5, 2
+    ISTR R5, 202        # sigma(2) = 2
+    ILDI R5, 3
+    ISTR R5, 203        # sigma(3) = 3
+    ILDI R5, 5
+    ISTR R5, 204        # sigma(4) = 5
+    ILDI R5, 4
+    ISTR R5, 205        # sigma(5) = 4
+    ILDI R5, 7
+    ISTR R5, 206        # sigma(6) = 7
+    ILDI R5, 6
+    ISTR R5, 207        # sigma(7) = 6
+    ILDI R5, 9
+    ISTR R5, 208        # sigma(8) = 9
+    ILDI R5, 8
+    ISTR R5, 209        # sigma(9) = 8
+    ILDI R5, 11
+    ISTR R5, 210        # sigma(10) = 11
+    ILDI R5, 10
+    ISTR R5, 211        # sigma(11) = 10
+    ILDI R5, 12
+    ISTR R5, 212        # sigma(12) = 12
+    ILDI R5, 13
+    ISTR R5, 213        # sigma(13) = 13
+    ILDI R5, 14
+    ISTR R5, 214        # sigma(14) = 14
+    ILDI R5, 15
+    ISTR R5, 215        # sigma(15) = 15
+
+# --- Algorithm parameters ---
+    ILDI R8, 200          # R8 = oracle base address
+    ILDI R9, 0            # R9 = unused ctx
+    ILDI R11, 3           # R11 = query register Hadamard mask (qubits 0,1 = MSBs)
+                          # mask 0b0011 = bits 0,1 -> qubits 0,1 (MSBs)
+
+# Store the secret for verification
+    ILDI R13, 3           # R13 = secret s = 3
+
+# Initialize round counter and y-value storage
+    ILDI R12, 4           # R12 = remaining rounds
+    ISTR R12, 100         # CMEM[100] = remaining rounds
+    ILDI R5, 0
+    ISTR R5, 101          # CMEM[101] = round counter
+
+# ===========================================================================
+# Query rounds
+# ===========================================================================
+LABEL: simon_round
+
+# Step 1: Prepare |0000>
+    QPREP Q0, 1
+
+# Step 2: Hadamard on query register (qubits 0,1 = upper 2 qubits)
+    QHADM Q0, Q0, R11
+
+# Step 3: Apply oracle U_f via PERMUTATION
+    QKERNEL Q0, Q0, 10, R8, R9
+
+# Step 4: Hadamard on query register again
+    QHADM Q0, Q0, R11
+
+# Step 5: Destructive measurement
+    QOBSERVE H0, Q0, SAMPLE
+    HREDUCE H0, R7, 0    # R7 = measured state (full 4-qubit outcome)
+
+# Extract y = upper 2 bits (query register)
+    ISHR R6, R7, 2        # R6 = y = measured >> 2
+
+# Compute y . s = popcount(y AND s) mod 2
+    IAND R10, R6, R13     # R10 = y AND s
+# Popcount of 2-bit value: count bits
+    ILDI R14, 0           # R14 = bit count
+    ILDI R15, 1
+    IAND R5, R10, R15     # R5 = LSB
+    IADD R14, R14, R5
+    ISHR R10, R10, 1      # shift right by 1
+    IAND R5, R10, R15
+    IADD R14, R14, R5     # R14 = popcount(y AND s)
+    ILDI R15, 2
+    IMOD R14, R14, R15    # R14 = y . s mod 2 (should be 0)
+
+# Update round counter
+    ILDM R5, 101
+    ILDI R15, 1
+    IADD R5, R5, R15
+    ISTR R5, 101
+
+# Print round result
+    ILDI R0, @round_fmt
+    ILDI R1, @round_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 101           # round number
+    IADD R3, R6, R9        # y value (R9=0)
+    IADD R4, R14, R9       # y.s value
+    ECALL PRINT_STR
+
+# Store y value for post-processing
+    ILDM R5, 101           # round number (1-based)
+    ILDI R15, 1
+    ISUB R5, R5, R15       # 0-based index
+    ILDI R15, 110
+    IADD R5, R5, R15       # CMEM address 110 + index
+    ISTRX R6, R5           # Store y value
+
+# Decrement remaining
+    ILDM R12, 100
+    ILDI R15, 1
+    ISUB R12, R12, R15
+    ISTR R12, 100
+
+    JIF R12, simon_round
+
+# ===========================================================================
+# Classical post-processing
+# ===========================================================================
+# With s=11 (binary), valid y values are 00 and 11.
+# If we measure y=11, then s=11 is the unique nonzero solution to y.s=0.
+# If we measure y=00, it gives no information (trivial equation).
+#
+# Strategy: XOR all nonzero y values to recover s.
+# For s=3 (11), the nonzero y that satisfies y.s=0 is y=3 (11).
+# So recovered_s = first nonzero y value.
+
+    ILDI R14, 0           # R14 = recovered s candidate
+    ILDI R5, 110
+    ILDX R6, R5           # y_0
+    IXOR R14, R14, R6
+    ILDI R15, 1
+    IADD R5, R5, R15
+    ILDX R6, R5           # y_1
+    IXOR R14, R14, R6
+    IADD R5, R5, R15
+    ILDX R6, R5           # y_2
+    IXOR R14, R14, R6
+    IADD R5, R5, R15
+    ILDX R6, R5           # y_3
+    IXOR R14, R14, R6
+
+# If XOR of all y's is 0, try using a single nonzero y
+    ILDI R15, 0
+    IEQ R10, R14, R15
+    JIF R10, try_single_y
+    JMP have_candidate
+
+LABEL: try_single_y
+# Use the first nonzero y value
+    ILDI R5, 110
+    ILDX R14, R5          # try y_0
+    IEQ R10, R14, R15
+    JIF R10, try_y1
+    JMP have_candidate
+LABEL: try_y1
+    ILDI R5, 111
+    ILDX R14, R5          # try y_1
+    IEQ R10, R14, R15
+    JIF R10, try_y2
+    JMP have_candidate
+LABEL: try_y2
+    ILDI R5, 112
+    ILDX R14, R5          # try y_2
+    IEQ R10, R14, R15
+    JIF R10, try_y3
+    JMP have_candidate
+LABEL: try_y3
+    ILDI R5, 113
+    ILDX R14, R5          # try y_3
+
+LABEL: have_candidate
+# R14 = recovered s candidate
+    IEQ R10, R14, R13     # R10 = (recovered == secret)
+
+# --- Store and print results ---
+    ISTR R14, 0           # CMEM[0] = recovered
+    ISTR R13, 1           # CMEM[1] = secret
+    ISTR R10, 2           # CMEM[2] = match
+
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ILDM R2, 0
+    ILDM R3, 1
+    ILDM R4, 2
+    ECALL PRINT_STR
+
+    HALT

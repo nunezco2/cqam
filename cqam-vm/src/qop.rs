@@ -21,6 +21,7 @@ use cqam_sim::kernels::phase::PhaseShift;
 use cqam_sim::kernels::fourier_inv::FourierInv;
 use cqam_sim::kernels::controlled_u::ControlledU;
 use cqam_sim::kernels::diagonal::DiagonalUnitary;
+use cqam_sim::kernels::permutation::Permutation;
 use rand::Rng;
 use crate::context::ExecutionContext;
 
@@ -246,6 +247,39 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                             diagonal.push((re, im));
                         }
                         Box::new(DiagonalUnitary { diagonal })
+                    }
+                    kernel_id::PERMUTATION => {
+                        // R[ctx0] = CMEM base address for permutation table
+                        // R[ctx1] = unused (dimension inferred from register)
+                        let base = param0 as u16;
+                        let dim = qr.dimension();
+
+                        if dim > 65536 {
+                            return Err(CqamError::TypeMismatch {
+                                instruction: "QKERNEL/PERMUTATION".to_string(),
+                                detail: format!(
+                                    "permutation table needs {} entries but CMEM has only 65536 cells",
+                                    dim
+                                ),
+                            });
+                        }
+
+                        // Read permutation table from CMEM: dim entries, each a plain i64
+                        let mut table = Vec::with_capacity(dim);
+                        for k in 0..dim {
+                            let addr = base.wrapping_add(k as u16);
+                            let val = ctx.cmem.load(addr);
+                            table.push(val as usize);
+                        }
+
+                        // Construct and validate permutation
+                        let perm = Permutation::new(table).map_err(|e| {
+                            CqamError::TypeMismatch {
+                                instruction: "QKERNEL/PERMUTATION".to_string(),
+                                detail: e,
+                            }
+                        })?;
+                        Box::new(perm)
                     }
                     _ => {
                         return Err(CqamError::UnknownKernel(

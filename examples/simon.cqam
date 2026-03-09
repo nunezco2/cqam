@@ -11,6 +11,11 @@
 #   6. Collect n equations and solve classically
 #
 # Parametric: N_total = #! qubits (must be even), n = N_total / 2.
+#
+# Note: this example uses a phase-shift oracle to encode the period
+# structure. For a correct 2-to-1 function oracle implemented as a
+# PERMUTATION, see examples/simon_permutation.cqam.
+#
 # Gate-level justification: QHADM with a partial mask (lower n qubits)
 # is required because the algorithm needs superposition on only the
 # query register, not the response register.

@@ -12,6 +12,9 @@
 # The modular exponentiation oracle is approximated by rotation and
 # phase-shift kernels whose parameters encode the period structure.
 #
+# For an exact modular multiplication oracle using the PERMUTATION kernel,
+# see examples/shor_modmult.cqam.
+#
 #! qubits 8
 #
 # All operations are register-level — no gate-level ops required.
