@@ -20,6 +20,7 @@ use cqam_sim::kernels::rotate::Rotate;
 use cqam_sim::kernels::phase::PhaseShift;
 use cqam_sim::kernels::fourier_inv::FourierInv;
 use cqam_sim::kernels::controlled_u::ControlledU;
+use cqam_sim::kernels::diagonal::DiagonalUnitary;
 use rand::Rng;
 use crate::context::ExecutionContext;
 
@@ -220,6 +221,31 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                             param_im,
                             target_qubits,
                         })
+                    }
+                    kernel_id::DIAGONAL_UNITARY => {
+                        // R[ctx0] = CMEM base address for diagonal entries
+                        // R[ctx1] = dimension (must equal Q[src].dimension())
+                        let base = param0 as u16;
+                        let dim = param1 as usize;
+                        let qr_dim = qr.dimension();
+                        if dim != qr_dim {
+                            return Err(CqamError::TypeMismatch {
+                                instruction: "QKERNEL/DIAGONAL_UNITARY".to_string(),
+                                detail: format!(
+                                    "dim_reg={} but Q[src] dimension={}",
+                                    dim, qr_dim
+                                ),
+                            });
+                        }
+                        // Read diagonal entries from CMEM
+                        let mut diagonal = Vec::with_capacity(dim);
+                        for k in 0..dim {
+                            let addr = base.wrapping_add((2 * k) as u16);
+                            let re = f64::from_bits(ctx.cmem.load(addr) as u64);
+                            let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
+                            diagonal.push((re, im));
+                        }
+                        Box::new(DiagonalUnitary { diagonal })
                     }
                     _ => {
                         return Err(CqamError::UnknownKernel(

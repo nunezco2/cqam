@@ -1,0 +1,347 @@
+# examples/diagonal_hamiltonian_sim.cqam
+# Time Evolution under a Diagonal Hamiltonian
+#
+# Algorithm: Simulate the time evolution of a quantum state under
+# a diagonal Hamiltonian H = diag(E_0, E_1, ..., E_{N-1}).
+# The time evolution operator is:
+#   U(t) = exp(-i*H*t) = diag(exp(-i*E_0*t), exp(-i*E_1*t), ...)
+#
+# This is a DIAGONAL UNITARY and is the simplest form of Hamiltonian
+# simulation. It demonstrates precise energy-dependent phase evolution.
+#
+# Why DIAGONAL_UNITARY is required:
+# The energy spectrum E_k can be ANY function of k. The PHASE_SHIFT kernel
+# applies exp(i*|z|*k) which assumes energies are LINEAR in k (like a
+# harmonic oscillator with equal spacing). Real physical Hamiltonians have
+# non-uniform spectra. DIAGONAL_UNITARY is the ONLY kernel that can
+# express arbitrary energy spectra.
+#
+# Physical model: 4-qubit system (16 energy levels) with a hydrogen-like
+# spectrum (simplified): E_n = -13.6 / (n+1)^2  for n = 0..15
+#
+# Initial state: uniform superposition (all energy eigenstates equally weighted)
+# After time evolution: each eigenstate acquires a phase proportional to
+# its energy. Measuring in the computational basis (which happens to be
+# the energy basis for a diagonal Hamiltonian) shows that probabilities
+# are UNCHANGED (unitary evolution preserves populations in the energy basis).
+#
+# However, the COHERENCES (off-diagonal density matrix elements) oscillate.
+# We demonstrate this by:
+#   1. Evolving for time t=1.0
+#   2. Showing P(ground state) is unchanged (1/16)
+#   3. Showing the IQFT of the evolved state reveals the energy spectrum
+#      (peaks in frequency domain correspond to energy differences)
+#
+#! qubits 4
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Diagonal Hamiltonian Simulation ===\n"
+inp_fmt:
+    .ascii "Inputs: levels=%d, t=1.0, E_n=-13.6/(n+1)^2\n"
+pop_fmt:
+    .ascii "P(ground) before=%f, after=%f\n"
+peak_fmt:
+    .ascii "After IQFT: P(|0>)=%f, P(|1>)=%f\n"
+res_fmt:
+    .ascii "Results: argmax_freq=%d\n"
+
+.code
+
+    ILDI R15, 1          # constant 1
+
+# ===========================================================================
+# Compute the diagonal entries for U(t=1.0):
+#   d_n = exp(-i * E_n * t) = (cos(E_n*t), -sin(E_n*t))
+#
+# E_n = -13.6 / (n+1)^2
+# So d_n = exp(i * 13.6 / (n+1)^2) = (cos(13.6/(n+1)^2), sin(13.6/(n+1)^2))
+# (the minus signs cancel: -i * (-13.6/(n+1)^2) = i * 13.6/(n+1)^2)
+#
+# Pre-computed values (cos(13.6/(n+1)^2), sin(13.6/(n+1)^2)):
+#   n=0:  phase=13.6/1   =13.600 -> cos/sin computed mod 2*pi
+#   n=1:  phase=13.6/4   = 3.400
+#   n=2:  phase=13.6/9   = 1.511
+#   n=3:  phase=13.6/16  = 0.850
+#   n=4:  phase=13.6/25  = 0.544
+#   n=5:  phase=13.6/36  = 0.378
+#   n=6:  phase=13.6/49  = 0.278
+#   n=7:  phase=13.6/64  = 0.213
+#   n=8:  phase=13.6/81  = 0.168
+#   n=9:  phase=13.6/100 = 0.136
+#   n=10: phase=13.6/121 = 0.112
+#   n=11: phase=13.6/144 = 0.094
+#   n=12: phase=13.6/169 = 0.080
+#   n=13: phase=13.6/196 = 0.069
+#   n=14: phase=13.6/225 = 0.060
+#   n=15: phase=13.6/256 = 0.053
+#
+# Stored at CMEM[200..231]
+# ===========================================================================
+
+    ILDI R0, 10000
+    CVTIF F14, R0        # F14 = 10000.0
+    FLDI F13, 0          # F13 = 0.0
+
+# We store each entry using pre-computed 4-digit precision values.
+# Python verification:
+# import math
+# for n in range(16):
+#   phase = 13.6 / (n+1)**2
+#   print(f"n={n}: ({round(math.cos(phase)*10000)}, {round(math.sin(phase)*10000)})")
+
+# n=0: phase=13.6, cos/sin: (0.5117, 0.8592) -> (5117, 8592)
+    ILDI R0, 5117
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 200
+    ILDI R0, 8592
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 201
+
+# n=1: phase=3.4, (-0.9668, -0.2555) -> (-9668, -2555)
+    ILDI R0, 9668
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSUB F0, F13, F0
+    FSTR F0, 202
+    ILDI R0, 2555
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSUB F0, F13, F0
+    FSTR F0, 203
+
+# n=2: phase=1.511, (0.0596, 0.9982) -> (596, 9982)
+    ILDI R0, 596
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 204
+    ILDI R0, 9982
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 205
+
+# n=3: phase=0.850, (0.6600, 0.7513) -> (6600, 7513)
+    ILDI R0, 6600
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 206
+    ILDI R0, 7513
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 207
+
+# n=4: phase=0.544, (0.8556, 0.5176) -> (8556, 5176)
+    ILDI R0, 8556
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 208
+    ILDI R0, 5176
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 209
+
+# n=5: phase=0.378, (0.9295, 0.3689) -> (9295, 3689)
+    ILDI R0, 9295
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 210
+    ILDI R0, 3689
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 211
+
+# n=6: phase=0.278, (0.9617, 0.2741) -> (9617, 2741)
+    ILDI R0, 9617
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 212
+    ILDI R0, 2741
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 213
+
+# n=7: phase=0.212, (0.9775, 0.2109) -> (9775, 2109)
+    ILDI R0, 9775
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 214
+    ILDI R0, 2109
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 215
+
+# n=8: phase=0.168, (0.9859, 0.1671) -> (9859, 1671)
+    ILDI R0, 9859
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 216
+    ILDI R0, 1671
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 217
+
+# n=9: phase=0.136, (0.9908, 0.1356) -> (9908, 1356)
+    ILDI R0, 9908
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 218
+    ILDI R0, 1356
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 219
+
+# n=10: phase=0.112, (0.9937, 0.1122) -> (9937, 1122)
+    ILDI R0, 9937
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 220
+    ILDI R0, 1122
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 221
+
+# n=11: phase=0.094, (0.9955, 0.0944) -> (9955, 944)
+    ILDI R0, 9955
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 222
+    ILDI R0, 944
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 223
+
+# n=12: phase=0.080, (0.9968, 0.0804) -> (9968, 804)
+    ILDI R0, 9968
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 224
+    ILDI R0, 804
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 225
+
+# n=13: phase=0.069, (0.9976, 0.0693) -> (9976, 693)
+    ILDI R0, 9976
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 226
+    ILDI R0, 693
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 227
+
+# n=14: phase=0.060, (0.9982, 0.0604) -> (9982, 604)
+    ILDI R0, 9982
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 228
+    ILDI R0, 604
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 229
+
+# n=15: phase=0.053, (0.9986, 0.0531) -> (9986, 531)
+    ILDI R0, 9986
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 230
+    ILDI R0, 531
+    CVTIF F0, R0
+    FDIV F0, F0, F14
+    FSTR F0, 231
+
+# ===========================================================================
+# Print banner and inputs
+# ===========================================================================
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @inp_fmt
+    ILDI R1, @inp_fmt.len
+    ISUB R1, R1, R15
+    ILDI R2, 16
+    ECALL PRINT_STR
+
+# ===========================================================================
+# Prepare initial state: uniform superposition (equal weight in all
+# energy eigenstates, like a sudden quench from a different basis)
+# ===========================================================================
+    QPREP Q0, 0          # Q0 = |+>^4 (uniform over 16 levels)
+
+# ===========================================================================
+# Measure P(ground state) = P(|0>) BEFORE time evolution
+# Should be 1/16 = 0.0625
+# ===========================================================================
+    ILDI R0, 0
+    QSAMPLE H0, Q0, 1, R0, R0
+    HREDUCE H0, F0, 8    # F0 = P(|0>) before
+    FSTR F0, 0           # save for later
+
+# ===========================================================================
+# Apply time evolution: U(t=1.0)
+# ===========================================================================
+    ILDI R0, 200
+    ILDI R1, 16
+    QKERNEL Q0, Q0, 9, R0, R1   # Q0 = U(t)|+>
+
+# ===========================================================================
+# Measure P(ground state) AFTER time evolution
+# Should still be 1/16 = 0.0625 (diagonal unitary preserves populations)
+# ===========================================================================
+    ILDI R0, 0
+    QSAMPLE H1, Q0, 1, R0, R0
+    HREDUCE H1, F1, 8    # F1 = P(|0>) after
+
+# Print population comparison
+    ILDI R0, @pop_fmt
+    ILDI R1, @pop_fmt.len
+    ISUB R1, R1, R15
+    FLDM F1, 0           # F1 = P(|0>) before (from saved)
+    # Reload after from H1
+    ILDI R0, 0
+    QSAMPLE H1, Q0, 1, R0, R0
+    HREDUCE H1, F2, 8    # F2 = P(|0>) after
+
+    ILDI R0, @pop_fmt
+    ILDI R1, @pop_fmt.len
+    ISUB R1, R1, R15
+    # F1 = before, F2 = after
+    ECALL PRINT_STR
+
+# ===========================================================================
+# Spectral analysis: apply IQFT to the evolved state.
+# The IQFT maps the phase pattern into the frequency domain.
+# Peaks in the resulting distribution correspond to the energy structure.
+# ===========================================================================
+    ILDI R0, 0
+    QKERNEL Q0, Q0, 7, R0, R0   # IQFT (kernel 7)
+
+    # Measure peaks in the frequency domain
+    ILDI R0, 0
+    QSAMPLE H2, Q0, 1, R0, R0
+    HREDUCE H2, F1, 8    # F1 = P(|0>) in freq domain
+
+    ILDI R0, 1
+    QSAMPLE H3, Q0, 1, R0, R0
+    HREDUCE H3, F2, 8    # F2 = P(|1>) in freq domain
+
+    ILDI R0, @peak_fmt
+    ILDI R1, @peak_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# Final destructive measurement to find dominant frequency
+    QOBSERVE H4, Q0
+    HREDUCE H4, R2, 12   # R2 = argmax (dominant frequency bin)
+
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

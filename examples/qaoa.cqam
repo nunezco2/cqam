@@ -1,14 +1,20 @@
 # examples/qaoa.cqam
-# Quantum Approximate Optimization Algorithm (QAOA) — MaxCut
+# Quantum Approximate Optimization Algorithm (QAOA) — Simplified Cost Function
 #
 # Algorithm: Solve combinatorial optimization by alternating:
 #   1. Problem unitary: exp(-i * gamma * C) — encodes the cost function
 #   2. Mixer unitary: exp(-i * beta * B) — drives exploration
 # Repeated for p rounds with different (gamma, beta) parameters.
 #
-# CQAM implementation: phase_shift kernel encodes the cost Hamiltonian
-# (diagonal), rotation kernel acts as the mixer. All operations are
-# register-level — no gate-level ops required.
+# CQAM implementation: phase_shift kernel encodes a SIMPLIFIED cost
+# Hamiltonian (linear in the state index), rotation kernel acts as the
+# mixer. All operations are register-level.
+#
+# LIMITATION: The PHASE_SHIFT kernel (kernel 6) applies exp(i*|z|*k) which
+# is linear in k. Real MaxCut cost functions depend on the graph structure
+# and are NOT linear in the state index. For a physically correct QAOA
+# implementation using DIAGONAL_UNITARY (kernel 9) with a real graph
+# cost function, see examples/qaoa_maxcut.cqam.
 #
 #! qubits 8
 
