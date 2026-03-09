@@ -1142,7 +1142,7 @@ fn mnemonic_all_assigned_opcodes() {
 #[test]
 fn mnemonic_unassigned_returns_none() {
     // Test several unassigned opcode values
-    for code in &[0x2F_u8, 0x3F, 0x80, 0xFE, 0xFF] {
+    for code in &[0x3F_u8, 0x80, 0xFE, 0xFF] {
         assert_eq!(
             mnemonic(*code),
             None,

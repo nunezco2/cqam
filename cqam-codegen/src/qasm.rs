@@ -336,6 +336,11 @@ impl QasmFormat for Instruction {
                 vec![format!("// R{} = IQCFG (qubit count from pragma)", dst)]
             }
 
+            Instruction::Ecall { proc_id } => {
+                let name = cqam_core::instruction::proc_id_name(*proc_id);
+                vec![format!("// ECALL {} (host I/O)", name)]
+            }
+
             // -- Control flow ------------------------------------------------
 
             Instruction::Jmp { target } => {
@@ -771,6 +776,17 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         // -- Configuration query --
         Instruction::IQCfg { dst } => {
             used.int_regs.insert(*dst);
+        }
+
+        // -- Environment call: reads registers per calling convention --
+        Instruction::Ecall { proc_id } => {
+            use cqam_core::instruction::proc_id as pid;
+            match *proc_id {
+                pid::PRINT_INT | pid::PRINT_CHAR => { used.int_regs.insert(0); }
+                pid::PRINT_FLOAT => { used.float_regs.insert(0); }
+                pid::PRINT_STR => { used.int_regs.insert(0); used.int_regs.insert(1); }
+                _ => {}
+            }
         }
 
         // -- Control flow --

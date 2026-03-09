@@ -195,6 +195,13 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Environment call: 2 cycles (dispatch + I/O), no register writes
+        Instruction::Ecall { .. } => ResourceDelta {
+            time: 2,
+            space: 0,
+            ..Default::default()
+        },
+
         // Control flow: 1 cycle, no register/memory effects
         Instruction::Jmp { .. }
         | Instruction::Jif { .. }

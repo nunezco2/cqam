@@ -185,6 +185,36 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             Ok(Instruction::IQCfg { dst })
         }
 
+        // -- Environment call -------------------------------------------------
+        "ECALL" => {
+            let arg = remainder.trim();
+            if arg.is_empty() {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "ECALL requires a procedure name or ID".to_string(),
+                });
+            }
+            use crate::instruction::proc_id;
+            let pid = match arg {
+                "PRINT_INT" => proc_id::PRINT_INT,
+                "PRINT_FLOAT" => proc_id::PRINT_FLOAT,
+                "PRINT_STR" => proc_id::PRINT_STR,
+                "PRINT_CHAR" => proc_id::PRINT_CHAR,
+                "DUMP_REGS" => proc_id::DUMP_REGS,
+                _ => arg.parse::<u8>().map_err(|_| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("ECALL: unknown procedure '{}'", arg),
+                })?,
+            };
+            if pid > 15 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("ECALL: proc_id {} exceeds max 15", pid),
+                });
+            }
+            Ok(Instruction::Ecall { proc_id: pid })
+        }
+
         // -- Control flow -----------------------------------------------------
         "JMP" => {
             let label = remainder.trim();

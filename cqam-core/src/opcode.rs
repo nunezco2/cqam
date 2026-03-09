@@ -80,6 +80,9 @@ pub mod op {
     pub const RETI: u8 = 0x2D;
     pub const SETIV: u8 = 0x2E;
 
+    // -- Environment call (0x2F) -----------------------------------------------
+    pub const ECALL: u8 = 0x2F;
+
     // -- Quantum operations (0x30-0x34) ---------------------------------------
     pub const QPREP: u8 = 0x30;
     pub const QKERNEL: u8 = 0x31;
@@ -226,6 +229,7 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::HFork => Ok(encode_n(op::HFORK)),
         Instruction::HMerge => Ok(encode_n(op::HMERGE)),
         Instruction::Reti => Ok(encode_n(op::RETI)),
+        Instruction::Ecall { proc_id } => encode_rr(op::ECALL, *proc_id, 0),
 
         // -- RRR-format (3-register) ------------------------------------------
         Instruction::IAdd { dst, lhs, rhs } => encode_rrr(op::IADD, *dst, *lhs, *rhs),
@@ -485,6 +489,10 @@ pub fn decode_with_debug(
         op::HFORK => Ok(Instruction::HFork),
         op::HMERGE => Ok(Instruction::HMerge),
         op::RETI => Ok(Instruction::Reti),
+        op::ECALL => {
+            let proc_id = extract_reg4(word, 20);
+            Ok(Instruction::Ecall { proc_id })
+        }
 
         // -- RRR-format (3-register) ------------------------------------------
         op::IADD => decode_rrr(word, |dst, lhs, rhs| Instruction::IAdd { dst, lhs, rhs }),
@@ -1037,6 +1045,7 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::HREDUCE => Some("HREDUCE"),
         op::RETI => Some("RETI"),
         op::SETIV => Some("SETIV"),
+        op::ECALL => Some("ECALL"),
         _ => None,
     }
 }

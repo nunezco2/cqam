@@ -202,6 +202,11 @@ pub enum Instruction {
     /// maximum for the active backend.
     IQCfg { dst: u8 },
 
+    /// Environment call: invoke a built-in host procedure.
+    /// Does not push the call stack (executes synchronously, falls through to PC+1).
+    /// Arguments are passed via registers per the calling convention.
+    Ecall { proc_id: u8 },
+
     // -- Control flow ---------------------------------------------------------
 
     /// Unconditional jump to label.
@@ -621,6 +626,34 @@ pub fn observe_mode_name(mode: u8) -> &'static str {
         observe_mode::PROB => "prob",
         observe_mode::AMP => "amp",
         observe_mode::SAMPLE => "sample",
+        _ => "unknown",
+    }
+}
+
+/// Built-in procedure IDs for ECALL instruction.
+pub mod proc_id {
+    /// Print R[0] as a signed decimal integer followed by newline.
+    pub const PRINT_INT: u8 = 0;
+    /// Print F[0] as a floating-point number followed by newline.
+    pub const PRINT_FLOAT: u8 = 1;
+    /// Print formatted string from CMEM. R[0] = base address, R[1] = length.
+    /// Format specifiers: %d = next int arg (R[2], R[3], ...),
+    /// %f = next float arg (F[1], F[2], ...), %% = literal %.
+    pub const PRINT_STR: u8 = 2;
+    /// Print R[0] as a single ASCII character (no newline).
+    pub const PRINT_CHAR: u8 = 3;
+    /// Debug dump: print all non-zero registers to stderr.
+    pub const DUMP_REGS: u8 = 4;
+}
+
+/// Helper: name string for a procedure ID (for display/debug).
+pub fn proc_id_name(id: u8) -> &'static str {
+    match id {
+        proc_id::PRINT_INT => "PRINT_INT",
+        proc_id::PRINT_FLOAT => "PRINT_FLOAT",
+        proc_id::PRINT_STR => "PRINT_STR",
+        proc_id::PRINT_CHAR => "PRINT_CHAR",
+        proc_id::DUMP_REGS => "DUMP_REGS",
         _ => "unknown",
     }
 }

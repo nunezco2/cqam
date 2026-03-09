@@ -76,6 +76,9 @@ pub enum CqamError {
 
     /// Unknown distribution ID in QPREP instruction.
     UnknownDistribution(u8),
+
+    /// Invalid built-in procedure ID for ECALL.
+    InvalidProcedure(u8),
 }
 
 impl fmt::Display for CqamError {
@@ -163,6 +166,9 @@ impl fmt::Display for CqamError {
             }
             CqamError::UnknownDistribution(id) => {
                 write!(f, "Unknown distribution ID: {}", id)
+            }
+            CqamError::InvalidProcedure(id) => {
+                write!(f, "Invalid ECALL procedure ID: {}", id)
             }
         }
     }

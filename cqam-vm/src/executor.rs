@@ -422,6 +422,87 @@ pub fn execute_instruction(
         }
 
         // =====================================================================
+        // Environment call
+        // =====================================================================
+
+        Instruction::Ecall { proc_id } => {
+            use cqam_core::instruction::proc_id as pid;
+            match *proc_id {
+                pid::PRINT_INT => {
+                    let val = ctx.iregs.get(0)?;
+                    println!("{}", val);
+                }
+                pid::PRINT_FLOAT => {
+                    let val = ctx.fregs.get(0)?;
+                    println!("{}", val);
+                }
+                pid::PRINT_CHAR => {
+                    let code = ctx.iregs.get(0)? as u8;
+                    print!("{}", code as char);
+                }
+                pid::PRINT_STR => {
+                    let base = ctx.iregs.get(0)? as u16;
+                    let len = ctx.iregs.get(1)? as usize;
+                    let fmt: Vec<u8> = (0..len)
+                        .map(|i| ctx.cmem.load(base.wrapping_add(i as u16)) as u8)
+                        .collect();
+                    let mut int_cursor = 2u8;
+                    let mut float_cursor = 1u8;
+                    let mut output = String::new();
+                    let mut i = 0;
+                    while i < fmt.len() {
+                        if fmt[i] == b'%' && i + 1 < fmt.len() {
+                            match fmt[i + 1] {
+                                b'd' => {
+                                    if let Ok(v) = ctx.iregs.get(int_cursor) {
+                                        output.push_str(&format!("{}", v));
+                                    }
+                                    int_cursor += 1;
+                                    i += 2;
+                                }
+                                b'f' => {
+                                    if let Ok(v) = ctx.fregs.get(float_cursor) {
+                                        output.push_str(&format!("{}", v));
+                                    }
+                                    float_cursor += 1;
+                                    i += 2;
+                                }
+                                b'%' => {
+                                    output.push('%');
+                                    i += 2;
+                                }
+                                _ => {
+                                    output.push('%');
+                                    output.push(fmt[i + 1] as char);
+                                    i += 2;
+                                }
+                            }
+                        } else {
+                            output.push(fmt[i] as char);
+                            i += 1;
+                        }
+                    }
+                    print!("{}", output);
+                }
+                pid::DUMP_REGS => {
+                    for r in 0..16u8 {
+                        if let Ok(v) = ctx.iregs.get(r) {
+                            if v != 0 { eprintln!("  R{:2} = {}", r, v); }
+                        }
+                    }
+                    for r in 0..16u8 {
+                        if let Ok(v) = ctx.fregs.get(r) {
+                            if v != 0.0 { eprintln!("  F{:2} = {}", r, v); }
+                        }
+                    }
+                }
+                _ => {
+                    return Err(CqamError::InvalidProcedure(*proc_id));
+                }
+            }
+        }
+
+        // =====================================================================
         // Control flow
         // =====================================================================
 

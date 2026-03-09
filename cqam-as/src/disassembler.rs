@@ -155,6 +155,14 @@ fn format_instruction(instr: &Instruction) -> String {
 
         // Configuration query
         Instruction::IQCfg { dst } => format!("IQCFG R{}", dst),
+        Instruction::Ecall { proc_id } => {
+            let name = cqam_core::instruction::proc_id_name(*proc_id);
+            if name != "unknown" {
+                format!("ECALL {}", name)
+            } else {
+                format!("ECALL {}", proc_id)
+            }
+        }
 
         // Control flow
         Instruction::Jmp { target } => format!("JMP {}", target),
