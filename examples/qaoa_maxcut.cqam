@@ -129,7 +129,7 @@ cut_fmt:
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
     ISUB R1, R1, R15
-    ILDI R2, 4           # nodes
+    IQCFG R2              # R2 = qubit count (= nodes) from config
     ILDI R3, 4           # edges
     ECALL PRINT_STR
 

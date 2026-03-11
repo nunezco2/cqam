@@ -69,6 +69,12 @@ pub enum CqamError {
     /// Memory address out of range during register-indirect access.
     AddressOutOfRange { instruction: String, address: i64 },
 
+    /// Qubit or state index out of range for a quantum register.
+    QuantumIndexOutOfRange { instruction: String, index: usize, limit: usize },
+
+    /// Qubit budget exceeded (e.g., tensor product would exceed MAX_SV_QUBITS).
+    QubitLimitExceeded { instruction: String, required: u8, max: u8 },
+
     /// Error during fork/merge thread operations.
     ///
     /// Covers fork depth limit exceeded, thread panic, thread join failure.
@@ -159,6 +165,20 @@ impl fmt::Display for CqamError {
                     f,
                     "Address out of range in {}: {} is not a valid CMEM address (0..65535)",
                     instruction, address
+                )
+            }
+            CqamError::QuantumIndexOutOfRange { instruction, index, limit } => {
+                write!(
+                    f,
+                    "Index out of range in {}: {} exceeds register dimension {}",
+                    instruction, index, limit
+                )
+            }
+            CqamError::QubitLimitExceeded { instruction, required, max } => {
+                write!(
+                    f,
+                    "Qubit limit exceeded in {}: requires {} qubits, maximum is {}",
+                    instruction, required, max
                 )
             }
             CqamError::ForkError(msg) => {

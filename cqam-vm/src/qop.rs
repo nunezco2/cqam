@@ -164,7 +164,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
                 dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
                 dist_id::BELL => QuantumRegister::new_bell(force_dm),
-                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm),
+                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm)
+                    .map_err(|e| CqamError::TypeMismatch {
+                        instruction: "QPREP/GHZ".to_string(),
+                        detail: e,
+                    })?,
                 _ => {
                     return Err(CqamError::UnknownDistribution(*dist));
                 }
@@ -472,9 +476,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         let index = ctx.iregs.get(*ctx0)? as usize;
                         let dim = qr.dimension();
                         if index >= dim {
-                            return Err(CqamError::AddressOutOfRange {
+                            return Err(CqamError::QuantumIndexOutOfRange {
                                 instruction: "QOBSERVE/PROB".to_string(),
-                                address: index as i64,
+                                index,
+                                limit: dim,
                             });
                         }
                         let prob = qr.get_element(index, index).0;
@@ -485,9 +490,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         let col = ctx.iregs.get(*ctx1)? as usize;
                         let dim = qr.dimension();
                         if row >= dim || col >= dim {
-                            return Err(CqamError::AddressOutOfRange {
+                            return Err(CqamError::QuantumIndexOutOfRange {
                                 instruction: "QOBSERVE/AMP".to_string(),
-                                address: row.max(col) as i64,
+                                index: row.max(col),
+                                limit: dim,
                             });
                         }
                         let (re, im) = qr.get_element(row, col);
@@ -541,9 +547,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         let index = ctx.iregs.get(*ctx0)? as usize;
                         let dim = qr.dimension();
                         if index >= dim {
-                            return Err(CqamError::AddressOutOfRange {
+                            return Err(CqamError::QuantumIndexOutOfRange {
                                 instruction: "QSAMPLE/PROB".to_string(),
-                                address: index as i64,
+                                index,
+                                limit: dim,
                             });
                         }
                         let prob = qr.get_element(index, index).0;
@@ -554,9 +561,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         let col = ctx.iregs.get(*ctx1)? as usize;
                         let dim = qr.dimension();
                         if row >= dim || col >= dim {
-                            return Err(CqamError::AddressOutOfRange {
+                            return Err(CqamError::QuantumIndexOutOfRange {
                                 instruction: "QSAMPLE/AMP".to_string(),
-                                address: row.max(col) as i64,
+                                index: row.max(col),
+                                limit: dim,
                             });
                         }
                         let (re, im) = qr.get_element(row, col);
@@ -612,7 +620,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
                 dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
                 dist_id::BELL => QuantumRegister::new_bell(force_dm),
-                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm),
+                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm)
+                    .map_err(|e| CqamError::TypeMismatch {
+                        instruction: "QPREPR/GHZ".to_string(),
+                        detail: e,
+                    })?,
                 _ => {
                     return Err(CqamError::UnknownDistribution(dist_id_val));
                 }
@@ -710,9 +722,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     });
                 }
                 if ctrl >= qr.num_qubits() || tgt >= qr.num_qubits() {
-                    return Err(CqamError::AddressOutOfRange {
+                    return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QCNOT".to_string(),
-                        address: ctrl.max(tgt) as i64,
+                        index: ctrl.max(tgt) as usize,
+                        limit: qr.num_qubits() as usize,
                     });
                 }
 
@@ -739,9 +752,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
             if let Some(ref qr) = ctx.qregs[*src as usize] {
                 if qubit >= qr.num_qubits() {
-                    return Err(CqamError::AddressOutOfRange {
+                    return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QROT".to_string(),
-                        address: qubit as i64,
+                        index: qubit as usize,
+                        limit: qr.num_qubits() as usize,
                     });
                 }
 
@@ -778,10 +792,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
             if let Some(qr) = ctx.qregs[*src_q as usize].take() {
                 if qubit >= qr.num_qubits() {
+                    let nq = qr.num_qubits();
                     ctx.qregs[*src_q as usize] = Some(qr);
-                    return Err(CqamError::AddressOutOfRange {
+                    return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QMEAS".to_string(),
-                        address: qubit as i64,
+                        index: qubit as usize,
+                        limit: nq as usize,
                     });
                 }
 
@@ -817,7 +833,17 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             })?;
 
-            let result = qr0.tensor_product(&qr1);
+            let result = qr0.tensor_product(&qr1).map_err(|_e| {
+                CqamError::QubitLimitExceeded {
+                    instruction: "QTENSOR".to_string(),
+                    required: qr0.num_qubits() + qr1.num_qubits(),
+                    max: if ctx.config.force_density_matrix {
+                        cqam_sim::density_matrix::MAX_QUBITS
+                    } else {
+                        cqam_sim::statevector::MAX_SV_QUBITS
+                    },
+                }
+            })?;
 
             let purity = result.purity();
 
@@ -903,9 +929,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     });
                 }
                 if ctrl >= qr.num_qubits() || tgt >= qr.num_qubits() {
-                    return Err(CqamError::AddressOutOfRange {
+                    return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QCZ".to_string(),
-                        address: ctrl.max(tgt) as i64,
+                        index: ctrl.max(tgt) as usize,
+                        limit: qr.num_qubits() as usize,
                     });
                 }
 
@@ -938,9 +965,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     });
                 }
                 if qubit_a >= qr.num_qubits() || qubit_b >= qr.num_qubits() {
-                    return Err(CqamError::AddressOutOfRange {
+                    return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QSWAP".to_string(),
-                        address: qubit_a.max(qubit_b) as i64,
+                        index: qubit_a.max(qubit_b) as usize,
+                        limit: qr.num_qubits() as usize,
                     });
                 }
 
@@ -1013,9 +1041,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             };
 
             if num_qubits == 0 || num_qubits > max_qubits {
-                return Err(CqamError::AddressOutOfRange {
+                return Err(CqamError::QubitLimitExceeded {
                     instruction: "QPREPN".to_string(),
-                    address: num_qubits as i64,
+                    required: num_qubits,
+                    max: max_qubits,
                 });
             }
 
@@ -1023,7 +1052,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
                 dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
                 dist_id::BELL => QuantumRegister::new_bell(force_dm),
-                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm),
+                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm)
+                    .map_err(|e| CqamError::TypeMismatch {
+                        instruction: "QPREPN/GHZ".to_string(),
+                        detail: e,
+                    })?,
                 _ => {
                     return Err(CqamError::UnknownDistribution(*dist));
                 }
@@ -1048,7 +1081,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     });
                 }
 
-                let result = qr.partial_trace_b(num_qubits_a);
+                let result = qr.partial_trace_b(num_qubits_a).map_err(|e| {
+                    CqamError::TypeMismatch {
+                        instruction: "QPTRACE".to_string(),
+                        detail: e,
+                    }
+                })?;
 
                 let purity = result.purity();
 
@@ -1069,10 +1107,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
             if let Some(qr) = ctx.qregs[*src as usize].take() {
                 if qubit >= qr.num_qubits() {
+                    let nq = qr.num_qubits();
                     ctx.qregs[*src as usize] = Some(qr);
-                    return Err(CqamError::AddressOutOfRange {
+                    return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QRESET".to_string(),
-                        address: qubit as i64,
+                        index: qubit as usize,
+                        limit: nq as usize,
                     });
                 }
 

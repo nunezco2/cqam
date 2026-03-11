@@ -75,18 +75,21 @@ impl Statevector {
     }
 
     /// Create a GHZ state (|0...0> + |1...1>)/sqrt(2).
-    pub fn new_ghz(num_qubits: u8) -> Self {
-        assert!(
-            (2..=MAX_SV_QUBITS).contains(&num_qubits),
-            "num_qubits must be 2..={}, got {}",
-            MAX_SV_QUBITS, num_qubits
-        );
+    ///
+    /// Returns Err if num_qubits < 2 or > MAX_SV_QUBITS.
+    pub fn new_ghz(num_qubits: u8) -> Result<Self, String> {
+        if num_qubits < 2 || num_qubits > MAX_SV_QUBITS {
+            return Err(format!(
+                "GHZ state requires 2..={} qubits, got {}",
+                MAX_SV_QUBITS, num_qubits
+            ));
+        }
         let dim = 1usize << num_qubits;
         let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
         let mut amplitudes = vec![complex::ZERO; dim];
         amplitudes[0] = (inv_sqrt2, 0.0);
         amplitudes[dim - 1] = (inv_sqrt2, 0.0);
-        Self { num_qubits, amplitudes }
+        Ok(Self { num_qubits, amplitudes })
     }
 
     /// Construct from an explicit amplitude vector.
@@ -457,13 +460,16 @@ impl Statevector {
     }
 
     /// Tensor product: |psi_A> tensor |psi_B>.
-    pub fn tensor_product(&self, other: &Statevector) -> Statevector {
+    ///
+    /// Returns Err if the combined qubit count exceeds MAX_SV_QUBITS.
+    pub fn tensor_product(&self, other: &Statevector) -> Result<Statevector, String> {
         let n_total = self.num_qubits + other.num_qubits;
-        assert!(
-            n_total <= MAX_SV_QUBITS,
-            "tensor_product: combined qubits {} + {} = {} exceeds MAX_SV_QUBITS ({})",
-            self.num_qubits, other.num_qubits, n_total, MAX_SV_QUBITS
-        );
+        if n_total > MAX_SV_QUBITS {
+            return Err(format!(
+                "tensor product: {} + {} = {} qubits exceeds maximum {}",
+                self.num_qubits, other.num_qubits, n_total, MAX_SV_QUBITS
+            ));
+        }
 
         let dim_a = self.dimension();
         let dim_b = other.dimension();
@@ -486,10 +492,71 @@ impl Statevector {
             amplitudes
         };
 
-        Statevector {
+        Ok(Statevector {
             num_qubits: n_total,
             amplitudes,
+        })
+    }
+
+    /// Partial trace over subsystem B, returning the reduced density matrix ρ_A.
+    ///
+    /// For a pure state |ψ⟩ of n qubits, subsystem A = first `num_qubits_a` qubits,
+    /// subsystem B = remaining (n - num_qubits_a) qubits.
+    ///
+    /// ρ_A[i,j] = Σ_k ψ[i·dim_b + k] · conj(ψ[j·dim_b + k])
+    ///
+    /// This is O(dim_a² × dim_b) and does NOT require building the full density matrix.
+    pub fn partial_trace_b(&self, num_qubits_a: u8) -> Result<DensityMatrix, String> {
+        if num_qubits_a == 0 || num_qubits_a >= self.num_qubits {
+            return Err(format!(
+                "partial_trace_b: num_qubits_a must be 1..{}, got {}",
+                self.num_qubits, num_qubits_a
+            ));
         }
+
+        let dim_a = 1usize << num_qubits_a;
+        let dim_b = 1usize << (self.num_qubits - num_qubits_a);
+
+        let rho_a: Vec<C64> = if dim_a * dim_a >= PAR_THRESHOLD {
+            let amps = &self.amplitudes;
+            (0..dim_a).into_par_iter().flat_map(|i| {
+                (0..dim_a).map(|j| {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim_b {
+                        let psi_ik = amps[i * dim_b + k];
+                        let psi_jk = amps[j * dim_b + k];
+                        // conj(psi_jk) * psi_ik  (note: ρ_A[i,j] = Σ_k ψ_ik · ψ_jk*)
+                        let conj_jk = (psi_jk.0, -psi_jk.1);
+                        sum = cx_add(sum, cx_mul(psi_ik, conj_jk));
+                    }
+                    sum
+                }).collect::<Vec<_>>()
+            }).collect()
+        } else {
+            let mut rho_a = vec![complex::ZERO; dim_a * dim_a];
+            for i in 0..dim_a {
+                for j in 0..dim_a {
+                    let mut sum = complex::ZERO;
+                    for k in 0..dim_b {
+                        let psi_ik = self.amplitudes[i * dim_b + k];
+                        let psi_jk = self.amplitudes[j * dim_b + k];
+                        let conj_jk = (psi_jk.0, -psi_jk.1);
+                        sum = cx_add(sum, cx_mul(psi_ik, conj_jk));
+                    }
+                    rho_a[i * dim_a + j] = sum;
+                }
+            }
+            rho_a
+        };
+
+        DensityMatrix::from_raw(num_qubits_a, rho_a)
+    }
+
+    /// Convert to a DensityMatrix: rho = |psi><psi|.
+    ///
+    /// Returns Err if the qubit count exceeds the DensityMatrix limit.
+    pub fn try_to_density_matrix(&self) -> Result<DensityMatrix, String> {
+        DensityMatrix::from_statevector(&self.amplitudes)
     }
 }
 

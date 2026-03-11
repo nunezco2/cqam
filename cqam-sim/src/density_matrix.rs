@@ -34,6 +34,27 @@ pub struct DensityMatrix {
 // =============================================================================
 
 impl DensityMatrix {
+    /// Construct from pre-computed matrix data.
+    ///
+    /// `data` must have length `(2^num_qubits)^2`. Returns Err if
+    /// `num_qubits` exceeds MAX_QUBITS or data length is wrong.
+    pub fn from_raw(num_qubits: u8, data: Vec<C64>) -> Result<Self, String> {
+        if num_qubits > MAX_QUBITS {
+            return Err(format!(
+                "DensityMatrix: {} qubits exceeds maximum {}",
+                num_qubits, MAX_QUBITS
+            ));
+        }
+        let dim = 1usize << num_qubits;
+        if data.len() != dim * dim {
+            return Err(format!(
+                "DensityMatrix: data length {} != expected {}",
+                data.len(), dim * dim
+            ));
+        }
+        Ok(Self { num_qubits, data })
+    }
+
     /// Create the computational zero state |0...0><0...0|.
     ///
     /// # Panics

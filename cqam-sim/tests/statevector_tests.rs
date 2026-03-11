@@ -45,7 +45,7 @@ fn test_sv_bell() {
 
 #[test]
 fn test_sv_ghz() {
-    let sv = Statevector::new_ghz(3);
+    let sv = Statevector::new_ghz(3).unwrap();
     let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
     assert!((sv.amplitude(0).0 - inv_sqrt2).abs() < 1e-12);
     for k in 1..7 {
@@ -170,7 +170,7 @@ fn test_sv_purity_always_one() {
         Statevector::new_zero_state(2),
         Statevector::new_uniform(2),
         Statevector::new_bell(),
-        Statevector::new_ghz(3),
+        Statevector::new_ghz(3).unwrap(),
     ];
     for (i, sv) in states.iter().enumerate() {
         assert!(
@@ -213,7 +213,7 @@ fn test_sv_to_dm_roundtrip_probabilities() {
 fn test_sv_tensor_product() {
     let sv0 = Statevector::new_zero_state(1);
     let sv1 = Statevector::new_zero_state(1);
-    let product = sv0.tensor_product(&sv1);
+    let product = sv0.tensor_product(&sv1).unwrap();
 
     assert_eq!(product.num_qubits(), 2);
     assert!((product.amplitude(0).0 - 1.0).abs() < 1e-12);

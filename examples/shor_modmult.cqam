@@ -85,7 +85,7 @@ res_fmt:
     ILDI R2, 2               # a = 2
     ILDI R3, 15              # N = 15
     ILDI R4, 4               # expected period
-    ILDI R5, 4               # qubits
+    IQCFG R5              # R5 = qubit count from config
     ECALL PRINT_STR
 
 # ===========================================================================

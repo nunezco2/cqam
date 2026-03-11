@@ -47,7 +47,7 @@ res_fmt:
     ILDI R1, @inp_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDI R2, 4
+    IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
 # --- Hamiltonian parameters ---

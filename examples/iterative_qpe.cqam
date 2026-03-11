@@ -43,7 +43,7 @@ res:
     ILDI R1, @inp.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDI R2, 2
+    IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
 # --- Constants ---

@@ -62,7 +62,7 @@ res_fmt:
     ILDI R1, @inp_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    ILDI R2, 5               # total qubits
+    IQCFG R2              # R2 = qubit count from config
     ILDI R3, 16              # positions (2^4)
     ILDI R4, 10              # steps
     ECALL PRINT_STR

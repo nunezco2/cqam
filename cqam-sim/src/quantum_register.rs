@@ -129,11 +129,13 @@ impl QuantumRegister {
     }
 
     /// Create the GHZ state (|0...0> + |1...1>)/sqrt(2).
-    pub fn new_ghz(num_qubits: u8, force_dm: bool) -> Self {
+    ///
+    /// Returns Err if num_qubits < 2.
+    pub fn new_ghz(num_qubits: u8, force_dm: bool) -> Result<Self, String> {
         if force_dm {
-            QuantumRegister::Mixed(DensityMatrix::new_ghz(num_qubits))
+            Ok(QuantumRegister::Mixed(DensityMatrix::new_ghz(num_qubits)))
         } else {
-            QuantumRegister::Pure(Statevector::new_ghz(num_qubits))
+            Ok(QuantumRegister::Pure(Statevector::new_ghz(num_qubits)?))
         }
     }
 
@@ -207,19 +209,26 @@ impl QuantumRegister {
 impl QuantumRegister {
     /// Tensor product of two registers.
     /// (Pure, Pure) -> Pure; any Mixed -> Mixed.
-    pub fn tensor_product(&self, other: &QuantumRegister) -> QuantumRegister {
+    /// Returns Err if the combined qubit count exceeds backend limits.
+    pub fn tensor_product(&self, other: &QuantumRegister) -> Result<QuantumRegister, String> {
         match (self, other) {
             (QuantumRegister::Pure(a), QuantumRegister::Pure(b)) => {
-                QuantumRegister::Pure(a.tensor_product(b))
+                Ok(QuantumRegister::Pure(a.tensor_product(b)?))
             }
             (QuantumRegister::Mixed(a), QuantumRegister::Mixed(b)) => {
-                QuantumRegister::Mixed(a.tensor_product(b))
+                Ok(QuantumRegister::Mixed(a.tensor_product(b)))
             }
             (QuantumRegister::Pure(a), QuantumRegister::Mixed(b)) => {
-                QuantumRegister::Mixed(a.to_density_matrix().tensor_product(b))
+                let dm = a.try_to_density_matrix().map_err(|e|
+                    format!("cannot promote to density matrix for tensor product: {}", e)
+                )?;
+                Ok(QuantumRegister::Mixed(dm.tensor_product(b)))
             }
             (QuantumRegister::Mixed(a), QuantumRegister::Pure(b)) => {
-                QuantumRegister::Mixed(a.tensor_product(&b.to_density_matrix()))
+                let dm = b.try_to_density_matrix().map_err(|e|
+                    format!("cannot promote to density matrix for tensor product: {}", e)
+                )?;
+                Ok(QuantumRegister::Mixed(a.tensor_product(&dm)))
             }
         }
     }
@@ -231,14 +240,16 @@ impl QuantumRegister {
 
 impl QuantumRegister {
     /// Partial trace over subsystem B. Result is always Mixed.
-    pub fn partial_trace_b(&self, num_qubits_a: u8) -> QuantumRegister {
+    /// Returns Err if num_qubits_a is out of bounds or the result exceeds DM limits.
+    pub fn partial_trace_b(&self, num_qubits_a: u8) -> Result<QuantumRegister, String> {
         match self {
             QuantumRegister::Pure(sv) => {
-                let dm = sv.to_density_matrix();
-                QuantumRegister::Mixed(dm.partial_trace_b(num_qubits_a))
+                // Use statevector-native partial trace (no full DM conversion needed)
+                let dm = sv.partial_trace_b(num_qubits_a)?;
+                Ok(QuantumRegister::Mixed(dm))
             }
             QuantumRegister::Mixed(dm) => {
-                QuantumRegister::Mixed(dm.partial_trace_b(num_qubits_a))
+                Ok(QuantumRegister::Mixed(dm.partial_trace_b(num_qubits_a)))
             }
         }
     }
@@ -246,10 +257,13 @@ impl QuantumRegister {
     /// Ensure this register is in Mixed representation.
     /// If Pure, promotes to Mixed(sv.to_density_matrix()).
     /// If already Mixed, no-op.
-    pub fn ensure_mixed(&mut self) {
+    /// Returns Err if the statevector exceeds DensityMatrix qubit limits.
+    pub fn ensure_mixed(&mut self) -> Result<(), String> {
         if let QuantumRegister::Pure(sv) = self {
-            *self = QuantumRegister::Mixed(sv.to_density_matrix());
+            let dm = sv.try_to_density_matrix()?;
+            *self = QuantumRegister::Mixed(dm);
         }
+        Ok(())
     }
 }
 
