@@ -103,15 +103,15 @@ impl ProgramStateWord {
         self.pf = result;
     }
 
-    /// Update quantum state flags from purity metric.
+    /// Update quantum state flags from purity metric and entanglement detection.
     ///
     /// Sets qf=true, sf based on whether purity < 1.0 (mixed state),
-    /// ef=false (entanglement detection deferred to M-1/M-2).
+    /// ef from the caller's entanglement scan.
     /// Raises int_quantum_err when purity drops below the threshold.
-    pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64) {
+    pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64, entangled: bool) {
         self.qf = true;
         self.sf = purity < 1.0 - 1e-10; // mixed state indicator
-        self.ef = false; // placeholder until M-1/M-2
+        self.ef = entangled;
         self.df = false;
         self.cf = false;
 

@@ -569,6 +569,30 @@ fn test_entanglement_entropy_uniform_pure_state() {
 // Display test
 // =============================================================================
 
+// =============================================================================
+// Entanglement detection tests (is_any_qubit_entangled)
+// =============================================================================
+
+#[test]
+fn test_dm_entanglement_product() {
+    // |00><00| is a product state -- no entanglement.
+    let dm = DensityMatrix::new_zero_state(2);
+    assert!(!dm.is_any_qubit_entangled(),
+        "|00><00| is a product state, should not be entangled");
+}
+
+#[test]
+fn test_dm_entanglement_bell() {
+    // Bell state DM is maximally entangled.
+    let dm = DensityMatrix::new_bell();
+    assert!(dm.is_any_qubit_entangled(),
+        "Bell state DM should be entangled");
+}
+
+// =============================================================================
+// Display test
+// =============================================================================
+
 #[test]
 fn test_display_does_not_panic() {
     let dm = DensityMatrix::new_zero_state(2);

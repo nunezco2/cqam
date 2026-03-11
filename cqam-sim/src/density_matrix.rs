@@ -13,6 +13,9 @@ use rayon::prelude::*;
 /// Minimum dimension to use parallel iteration. Below this, sequential is faster.
 const PAR_THRESHOLD: usize = 256;
 
+/// Tolerance for entanglement detection via single-qubit reduced purity.
+const EF_EPSILON: f64 = 1e-10;
+
 /// Maximum number of qubits supported by the full density matrix.
 pub const MAX_QUBITS: u8 = 16;
 
@@ -530,6 +533,66 @@ impl DensityMatrix {
         } else {
             self.data.iter().map(|z| cx_norm_sq(*z)).sum()
         }
+    }
+
+    /// Returns true if any qubit's single-qubit reduced state has purity < 1 - epsilon.
+    ///
+    /// For each qubit k, computes the 2x2 reduced density matrix by tracing out
+    /// all other qubits. If any qubit has reduced purity < 1 - EF_EPSILON, the
+    /// state is entangled (or mixed in a way that appears entangled at the
+    /// single-qubit level). Early-exits on the first entangled qubit found.
+    pub fn is_any_qubit_entangled(&self) -> bool {
+        let n = self.num_qubits as usize;
+        if n < 2 {
+            return false;
+        }
+        let dim = self.dimension();
+
+        for k in 0..n {
+            // Bit position for qubit k (MSB-first convention)
+            let bit = n - 1 - k;
+            let mask = 1usize << bit;
+
+            let mut rho_k_00: (f64, f64) = (0.0, 0.0);
+            let mut rho_k_11: (f64, f64) = (0.0, 0.0);
+            let mut rho_k_01: (f64, f64) = (0.0, 0.0);
+
+            // Iterate over all 2^(n-1) configurations m of the other qubits.
+            // For each m, compute the indices with bit `bit` set to 0 and 1.
+            for m_compact in 0..(dim >> 1) {
+                // Insert a 0 at position `bit` in m_compact to get the full index
+                let low = m_compact & ((1 << bit) - 1);
+                let high = m_compact >> bit;
+                let idx0 = (high << (bit + 1)) | low;        // bit k = 0
+                let idx1 = idx0 | mask;                       // bit k = 1
+
+                // rho_k[0][0] += rho[idx0][idx0]
+                let v00 = self.data[idx0 * dim + idx0];
+                rho_k_00.0 += v00.0;
+                rho_k_00.1 += v00.1;
+
+                // rho_k[1][1] += rho[idx1][idx1]
+                let v11 = self.data[idx1 * dim + idx1];
+                rho_k_11.0 += v11.0;
+                rho_k_11.1 += v11.1;
+
+                // rho_k[0][1] += rho[idx0][idx1]
+                let v01 = self.data[idx0 * dim + idx1];
+                rho_k_01.0 += v01.0;
+                rho_k_01.1 += v01.1;
+            }
+
+            // purity = rho_k_00.re^2 + rho_k_11.re^2 + 2*|rho_k_01|^2
+            // (imaginary parts of diagonal entries should be ~0 for valid DM,
+            //  but we use only .re for robustness)
+            let purity = rho_k_00.0 * rho_k_00.0 + rho_k_11.0 * rho_k_11.0
+                + 2.0 * (rho_k_01.0 * rho_k_01.0 + rho_k_01.1 * rho_k_01.1);
+
+            if purity < 1.0 - EF_EPSILON {
+                return true;
+            }
+        }
+        false
     }
 
     /// Shannon entropy of the diagonal probability distribution, normalized

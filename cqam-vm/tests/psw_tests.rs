@@ -25,10 +25,10 @@ fn test_predicate_flag() {
 fn test_quantum_flag_update_no_interrupt() {
     let mut psw = ProgramStateWord::new();
     // Pure state (purity=1.0) with threshold 0.95 should not trigger alarm
-    psw.update_from_qmeta(1.0, 0.95);
+    psw.update_from_qmeta(1.0, 0.95, false);
     assert!(psw.qf);
     assert!(!psw.sf); // purity=1.0 means pure state, sf=false
-    assert!(!psw.ef); // ef is always false until M-1/M-2
+    assert!(!psw.ef); // not entangled
     assert!(!psw.int_quantum_err);
 }
 
@@ -36,7 +36,7 @@ fn test_quantum_flag_update_no_interrupt() {
 fn test_quantum_interrupt_triggered() {
     let mut psw = ProgramStateWord::new();
     // Low purity (0.3) below threshold (0.5) should trigger alarm
-    psw.update_from_qmeta(0.3, 0.5);
+    psw.update_from_qmeta(0.3, 0.5, false);
     assert!(psw.int_quantum_err);
     assert_eq!(
         psw.check_pending_traps(),
@@ -47,21 +47,21 @@ fn test_quantum_interrupt_triggered() {
 #[test]
 fn test_purity_threshold_pure_state_no_alarm() {
     let mut psw = ProgramStateWord::new();
-    psw.update_from_qmeta(1.0, 0.95);
+    psw.update_from_qmeta(1.0, 0.95, false);
     assert!(!psw.int_quantum_err);
 }
 
 #[test]
 fn test_purity_threshold_mixed_state_alarm() {
     let mut psw = ProgramStateWord::new();
-    psw.update_from_qmeta(0.8, 0.95);
+    psw.update_from_qmeta(0.8, 0.95, false);
     assert!(psw.int_quantum_err);
 }
 
 #[test]
 fn test_purity_threshold_disabled() {
     let mut psw = ProgramStateWord::new();
-    psw.update_from_qmeta(0.5, 0.0);
+    psw.update_from_qmeta(0.5, 0.0, false);
     assert!(!psw.int_quantum_err);
 }
 
@@ -69,12 +69,12 @@ fn test_purity_threshold_disabled() {
 fn test_purity_threshold_boundary() {
     let mut psw = ProgramStateWord::new();
     // At threshold: not below, so no alarm
-    psw.update_from_qmeta(0.95, 0.95);
+    psw.update_from_qmeta(0.95, 0.95, false);
     assert!(!psw.int_quantum_err);
 
     // Just below threshold: alarm
     let mut psw2 = ProgramStateWord::new();
-    psw2.update_from_qmeta(0.9499, 0.95);
+    psw2.update_from_qmeta(0.9499, 0.95, false);
     assert!(psw2.int_quantum_err);
 }
 

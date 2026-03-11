@@ -139,9 +139,10 @@ fn execute_masked_gate(
         }
 
         let purity = result.purity();
+        let entangled = result.is_entangled();
 
         ctx.qregs[dst as usize] = Some(result);
-        ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+        ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
         Ok(())
     } else {
         Err(CqamError::UninitializedRegister {
@@ -173,8 +174,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     return Err(CqamError::UnknownDistribution(*dist));
                 }
             };
+            // BELL and GHZ are entangled by construction
+            let entangled = matches!(*dist, dist_id::BELL | dist_id::GHZ);
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.ef = entangled;
             Ok(())
         }
 
@@ -347,9 +351,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 let result = qr.apply_kernel(k.as_ref())?;
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -398,9 +403,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let result = qr.apply_kernel(k.as_ref())?;
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -449,9 +455,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let result = qr.apply_kernel(k.as_ref())?;
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -589,8 +596,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
         Instruction::QLoad { dst_q, addr } => {
             if let Some(qr) = ctx.qmem.load(*addr) {
+                let entangled = qr.is_entangled();
                 ctx.qregs[*dst_q as usize] = Some(qr.clone());
                 ctx.psw.qf = true;
+                ctx.psw.ef = entangled;
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -629,8 +638,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     return Err(CqamError::UnknownDistribution(dist_id_val));
                 }
             };
+            let entangled = matches!(dist_id_val, dist_id::BELL | dist_id::GHZ);
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.ef = entangled;
             Ok(())
         }
 
@@ -705,8 +716,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             })?;
 
+            let entangled = qr.is_entangled();
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.ef = entangled;
             Ok(())
         }
 
@@ -734,9 +747,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 result.apply_two_qubit_gate(ctrl, tgt, &gate);
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -775,9 +789,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 result.apply_single_qubit_gate(qubit, &gate);
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -804,10 +819,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 let (outcome, post_qr) = qr.measure_qubit_with_rng(qubit, &mut ctx.rng);
 
                 let purity = post_qr.purity();
+                let entangled = post_qr.is_entangled();
                 ctx.iregs.set(*dst_r, outcome as i64)?;
                 ctx.qregs[*src_q as usize] = Some(post_qr);
 
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 ctx.psw.mark_measured();
                 ctx.psw.zf = outcome == 0;
                 Ok(())
@@ -846,9 +862,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             })?;
 
             let purity = result.purity();
+            let entangled = result.is_entangled();
 
             ctx.qregs[*dst as usize] = Some(result);
-            ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+            ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
             Ok(())
         }
 
@@ -905,9 +922,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 result.apply_unitary(&unitary);
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -941,9 +959,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 result.apply_two_qubit_gate(ctrl, tgt, &gate);
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -977,9 +996,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 result.apply_two_qubit_gate(qubit_a, qubit_b, &gate);
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -1022,9 +1042,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             })?;
 
+            let entangled = dm.is_any_qubit_entangled();
             ctx.qregs[*dst as usize] = Some(QuantumRegister::Mixed(dm));
             ctx.psw.qf = true;
             ctx.psw.sf = true; // mixed state
+            ctx.psw.ef = entangled;
             Ok(())
         }
 
@@ -1061,8 +1083,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     return Err(CqamError::UnknownDistribution(*dist));
                 }
             };
+            let entangled = matches!(*dist, dist_id::BELL | dist_id::GHZ);
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.ef = entangled;
             Ok(())
         }
 
@@ -1089,9 +1113,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 })?;
 
                 let purity = result.purity();
+                let entangled = result.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -1124,9 +1149,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
 
                 let purity = post_qr.purity();
+                let entangled = post_qr.is_entangled();
 
                 ctx.qregs[*dst as usize] = Some(post_qr);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {

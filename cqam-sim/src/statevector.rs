@@ -21,6 +21,9 @@ use rayon::prelude::*;
 /// Minimum dimension to use parallel iteration.
 const PAR_THRESHOLD: usize = 256;
 
+/// Tolerance for entanglement detection via single-qubit reduced purity.
+const EF_EPSILON: f64 = 1e-10;
+
 /// Maximum qubits for statevector backend.
 pub const MAX_SV_QUBITS: u8 = 24;
 
@@ -550,6 +553,107 @@ impl Statevector {
         };
 
         DensityMatrix::from_raw(num_qubits_a, rho_a)
+    }
+
+    /// Returns true if any qubit is entangled with the rest of the register.
+    ///
+    /// Uses single-qubit reduced purity scan: for each qubit k, compute the
+    /// 2x2 reduced density matrix by tracing out all other qubits, then check
+    /// if purity < 1 - epsilon.
+    ///
+    /// O(2^n) best case (early exit on first entangled qubit),
+    /// O(n * 2^n) worst case. Zero heap allocation.
+    pub fn is_any_qubit_entangled(&self) -> bool {
+        let n = self.num_qubits as usize;
+        if n < 2 {
+            return false;
+        }
+        let dim = self.dimension();
+        let amps = &self.amplitudes;
+
+        for k in 0..n {
+            // Bit position for qubit k (MSB-first convention matching gate application)
+            let bit = n - 1 - k;
+            let mask = 1usize << bit;
+
+            let mut rho_00: f64 = 0.0;
+            let mut rho_11: f64 = 0.0;
+            let mut rho_01_re: f64 = 0.0;
+            let mut rho_01_im: f64 = 0.0;
+
+            // Iterate over all 2^(n-1) basis-state pairs where bit `bit` is 0
+            for j0 in 0..dim {
+                if j0 & mask != 0 {
+                    continue;
+                }
+                let j1 = j0 | mask;
+                let a0 = amps[j0]; // psi[j0]
+                let a1 = amps[j1]; // psi[j1]
+
+                // rho_00 += |psi[j0]|^2
+                rho_00 += a0.0 * a0.0 + a0.1 * a0.1;
+                // rho_11 += |psi[j1]|^2
+                rho_11 += a1.0 * a1.0 + a1.1 * a1.1;
+                // rho_01 += psi[j0] * conj(psi[j1])
+                rho_01_re += a0.0 * a1.0 + a0.1 * a1.1;
+                rho_01_im += a0.1 * a1.0 - a0.0 * a1.1;
+            }
+
+            // purity = rho_00^2 + rho_11^2 + 2*|rho_01|^2
+            let purity = rho_00 * rho_00 + rho_11 * rho_11
+                + 2.0 * (rho_01_re * rho_01_re + rho_01_im * rho_01_im);
+
+            if purity < 1.0 - EF_EPSILON {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Compute the minimum single-qubit reduced purity across all qubits.
+    ///
+    /// Returns 1.0 for product states, 0.5 for maximally entangled states
+    /// (Bell/GHZ). Useful for diagnostics and testing.
+    pub fn min_single_qubit_purity(&self) -> f64 {
+        let n = self.num_qubits as usize;
+        if n < 2 {
+            return 1.0;
+        }
+        let dim = self.dimension();
+        let amps = &self.amplitudes;
+        let mut min_purity = 1.0_f64;
+
+        for k in 0..n {
+            let bit = n - 1 - k;
+            let mask = 1usize << bit;
+
+            let mut rho_00: f64 = 0.0;
+            let mut rho_11: f64 = 0.0;
+            let mut rho_01_re: f64 = 0.0;
+            let mut rho_01_im: f64 = 0.0;
+
+            for j0 in 0..dim {
+                if j0 & mask != 0 {
+                    continue;
+                }
+                let j1 = j0 | mask;
+                let a0 = amps[j0];
+                let a1 = amps[j1];
+
+                rho_00 += a0.0 * a0.0 + a0.1 * a0.1;
+                rho_11 += a1.0 * a1.0 + a1.1 * a1.1;
+                rho_01_re += a0.0 * a1.0 + a0.1 * a1.1;
+                rho_01_im += a0.1 * a1.0 - a0.0 * a1.1;
+            }
+
+            let purity = rho_00 * rho_00 + rho_11 * rho_11
+                + 2.0 * (rho_01_re * rho_01_re + rho_01_im * rho_01_im);
+
+            if purity < min_purity {
+                min_purity = purity;
+            }
+        }
+        min_purity
     }
 
     /// Convert to a DensityMatrix: rho = |psi><psi|.

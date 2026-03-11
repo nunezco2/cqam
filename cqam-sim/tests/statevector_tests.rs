@@ -370,3 +370,80 @@ fn test_quantum_register_get_element() {
         }
     }
 }
+
+// =============================================================================
+// Entanglement detection tests
+// =============================================================================
+
+#[test]
+fn test_entanglement_single_qubit() {
+    // A single-qubit statevector cannot be entangled.
+    let sv = Statevector::new_zero_state(1);
+    assert!(!sv.is_any_qubit_entangled(),
+        "single-qubit state should never be entangled");
+}
+
+#[test]
+fn test_entanglement_product_state() {
+    // |00> is a product state -- no entanglement.
+    let sv = Statevector::new_zero_state(2);
+    assert!(!sv.is_any_qubit_entangled(),
+        "|00> is a product state, should not be entangled");
+}
+
+#[test]
+fn test_entanglement_bell_state() {
+    // (|00> + |11>)/sqrt(2) is maximally entangled.
+    let sv = Statevector::new_bell();
+    assert!(sv.is_any_qubit_entangled(),
+        "Bell state should be entangled");
+    let min_purity = sv.min_single_qubit_purity();
+    assert!(
+        (min_purity - 0.5).abs() < 1e-10,
+        "Bell state min single-qubit purity should be 0.5, got {}",
+        min_purity
+    );
+}
+
+#[test]
+fn test_entanglement_superposition_no_entanglement() {
+    // |+> tensor |+> = (|00> + |01> + |10> + |11>)/2 is a product state
+    // of two superposed qubits -- NOT entangled.
+    let sv = Statevector::new_uniform(2);
+    assert!(!sv.is_any_qubit_entangled(),
+        "|+>|+> is a product state, should not be entangled");
+}
+
+#[test]
+fn test_entanglement_ghz_3qubit() {
+    // (|000> + |111>)/sqrt(2) is entangled across all 3 qubits.
+    let sv = Statevector::new_ghz(3).unwrap();
+    assert!(sv.is_any_qubit_entangled(),
+        "3-qubit GHZ state should be entangled");
+    let min_purity = sv.min_single_qubit_purity();
+    assert!(
+        (min_purity - 0.5).abs() < 1e-10,
+        "GHZ min single-qubit purity should be 0.5, got {}",
+        min_purity
+    );
+}
+
+#[test]
+fn test_entanglement_partial() {
+    // Bell(q0,q1) tensor |0>(q2): entanglement between q0 and q1, q2 is separable.
+    let bell = Statevector::new_bell();
+    let zero = Statevector::new_zero_state(1);
+    let sv = bell.tensor_product(&zero).unwrap();
+
+    assert_eq!(sv.num_qubits(), 3);
+    assert!(sv.is_any_qubit_entangled(),
+        "Bell(q0,q1) tensor |0>(q2) should detect entanglement between q0 and q1");
+
+    // min purity should be 0.5 (from the entangled pair), not 1.0
+    let min_purity = sv.min_single_qubit_purity();
+    assert!(
+        (min_purity - 0.5).abs() < 1e-10,
+        "Partial entanglement min purity should be 0.5 (from q0 or q1), got {}",
+        min_purity
+    );
+}

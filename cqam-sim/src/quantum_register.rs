@@ -84,6 +84,20 @@ impl QuantumRegister {
         self.get_element(row, col)
     }
 
+    /// Returns true if any qubit is entangled with the rest of the register.
+    ///
+    /// For single-qubit registers, always returns false.
+    /// Delegates to the appropriate backend's `is_any_qubit_entangled`.
+    pub fn is_entangled(&self) -> bool {
+        if self.num_qubits() < 2 {
+            return false;
+        }
+        match self {
+            QuantumRegister::Pure(sv) => sv.is_any_qubit_entangled(),
+            QuantumRegister::Mixed(dm) => dm.is_any_qubit_entangled(),
+        }
+    }
+
     /// Check validity of the quantum state.
     /// For Pure: always valid (statevector is normalized by construction).
     /// For Mixed: delegates to DensityMatrix::is_valid.

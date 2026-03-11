@@ -236,6 +236,23 @@ fn quantum_teleportation() {
 }
 
 // ===================================================================
+// EF flag: GHZ state sets entanglement flag
+// ===================================================================
+#[test]
+fn test_ef_flag_ghz() {
+    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    run_to_completion(&mut engine);
+
+    // After GHZ preparation and execution, the EF flag in the PSW should
+    // reflect that entanglement was detected. The GHZ program applies
+    // quantum operations that produce an entangled state, so ef should be true.
+    assert!(
+        engine.ctx.psw.ef,
+        "EF flag should be true after GHZ preparation (entangled state)"
+    );
+}
+
+// ===================================================================
 // GHZ with stepping: verify quantum state mid-execution
 // ===================================================================
 // This test uses breakpoints to stop at key points and inspect the quantum state.
