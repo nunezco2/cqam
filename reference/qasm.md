@@ -222,6 +222,15 @@ Templates are loaded from `{template_dir}/{kernel_name}.qasm` where
 | phase_shift (ID 6) | `phase_shift.qasm` | Phase shift gate |
 | fourier_inv (ID 7) | `fourier_inv.qasm` | Inverse QFT circuit |
 
+Kernels 8 (controlled_u), 9 (diagonal_unitary), and 10 (permutation) do not
+have QASM templates. They emit `@cqam` annotation comments:
+
+| Kernel | Annotation |
+|--------|------------|
+| controlled_u (ID 8) | `// @cqam.controlled_u: C-U^{2^k} on Q[src], ctrl=R[ctrl], params at CMEM[R[base]]` |
+| diagonal_unitary (ID 9) | `// @cqam.diagonal_unitary: apply diag from CMEM[R[base]], dim=R[dim]` |
+| permutation (ID 10) | `// @cqam.permutation: apply sigma from CMEM[R[base]]` |
+
 When no template is found for a kernel, the emitter generates a stub or
 annotation comment instead.
 

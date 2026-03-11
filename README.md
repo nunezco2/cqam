@@ -38,7 +38,8 @@ The full lifecycle of a hybrid computation in CQAM:
 3. **Quantum evolution.** `QKERNEL` applies a unitary transformation — selected
    by kernel ID and parameterised by classical registers. Kernels (Fourier,
    inverse Fourier, Grover iteration, diffusion, entanglement, rotation,
-   phase-shift) encapsulate multi-gate circuits as atomic ISA-level operations.
+   phase-shift, controlled-unitary, diagonal unitary, permutation) encapsulate
+   multi-gate circuits as atomic ISA-level operations.
    Individual qubit-level gates (QCNOT, QCZ, QSWAP, QROT, QHADM, QFLIP,
    QPHASE) provide fine-grained control. `QCUSTOM` applies a user-defined
    unitary read from classical memory. `QTENSOR` composes two registers via
@@ -98,7 +99,7 @@ Fidelity metrics available on density matrices:
 - `entanglement_entropy()`: von Neumann entropy of the reduced density matrix
   after partial trace, quantifying bipartite entanglement.
 
-Eight quantum kernels are provided as ISA-level operations:
+Eleven quantum kernels are provided as ISA-level operations:
 
 | Kernel ID | Name | Description |
 |-----------|------|-------------|
@@ -110,6 +111,9 @@ Eight quantum kernels are provided as ISA-level operations:
 | 5 | rotate | Diagonal rotation: U\[k\]\[k\] = exp(i \* theta \* k) |
 | 6 | phase_shift | Phase shift: U\[k\]\[k\] = exp(i \* \|z\| \* k), z from complex register |
 | 7 | fourier_inv | Inverse Quantum Fourier Transform |
+| 8 | controlled_u | Controlled-U: applies any sub-kernel conditioned on a control qubit |
+| 9 | diagonal_unitary | Diagonal unitary: applies arbitrary diagonal phases from CMEM |
+| 10 | permutation | Permutation: reorders basis states according to a permutation table in CMEM |
 
 ## Data Parallelism
 
@@ -126,7 +130,7 @@ Operations parallelized in `cqam-sim`:
 - **Statevector:** `apply_unitary`, `apply_single_qubit_gate`, `apply_two_qubit_gate`,
   `measure_qubit`, `tensor_product`, `diagonal_probabilities`
 - **Kernels:** the `apply_sv` methods of the `grover_iter`, `diffuse`, `rotate`, `phase_shift`,
-  and `fourier` kernels
+  `fourier`, `diagonal`, and `permutation` kernels
 
 Operations parallelized in `cqam-vm`:
 
@@ -164,7 +168,9 @@ macOS, and Windows.
                   │                                  │
                   │  Kernels: Fourier, Fourier_inv,  │
                   │   Grover, Diffuse, Rotate,       │
-                  │   PhaseShift, Entangle, Init     │
+                  │   PhaseShift, Entangle, Init,    │
+                  │   ControlledU, DiagonalUnitary,  │
+                  │   Permutation                    │
                   └─────────────────────────────────┘
 ```
 
@@ -178,7 +184,7 @@ The CQAM toolchain is implemented as a Rust workspace comprising seven crates:
 | Crate | Role | Description |
 |-------|------|-------------|
 | `cqam-core` | ISA definition | Instruction enum, text parser, pragma support, 32-bit opcode encoding and decoding, error types, register and memory abstractions |
-| `cqam-sim` | Quantum backend | Statevector and density matrix backends, `QuantumRegister` dispatch enum, complex arithmetic, the `Kernel` trait, eight concrete kernel implementations |
+| `cqam-sim` | Quantum backend | Statevector and density matrix backends, `QuantumRegister` dispatch enum, complex arithmetic, the `Kernel` trait, eleven concrete kernel implementations |
 | `cqam-vm` | Execution engine | Instruction dispatch, program status word, fork/merge parallelism, ISR table, resource accounting, purity-based fidelity monitoring |
 | `cqam-run` | CLI runner | Program loader, execution driver, state and resource reporting |
 | `cqam-as` | Assembler | Two-pass assembler (label resolution + encoding), binary `.cqb` format reader/writer, disassembler |
@@ -291,31 +297,127 @@ cargo run --bin cqam2qasm -- examples/qrng.cqam -o qrng.qasm --expand
 cargo run --bin cqam2qasm -- examples/swap_test.cqam --fragment
 ```
 
+## Assembly Language
+
+### Data Section
+
+CQAM programs may include a `.data` section before `.code` for declaring
+initialized classical memory (CMEM) contents. The assembler processes data
+directives and populates CMEM before execution begins.
+
+```
+.data
+    .org 200
+my_label:
+    .c64 1.0J0.0, -1.0J0.0,
+         0.5J0.5,  0.0J1.0
+
+    .org 1000
+msg:
+    .ascii "Hello, CQAM!\n"
+
+.code
+    ILDI R0, @my_label       # R0 = 200 (CMEM base address)
+    ILDI R1, @my_label.len   # R1 = 4 (number of complex entries)
+    ...
+```
+
+#### Directives
+
+| Directive | Description |
+|-----------|-------------|
+| `.org N` | Advance the allocation pointer to CMEM address N |
+| `.ascii "str"` | Store one ASCII byte per CMEM cell, NUL-terminated |
+| `.asciiz "str"` | Alias for `.ascii` |
+| `.i64 v1, v2, ...` | Store literal i64 values |
+| `.f64 v1, v2, ...` | Store f64 values as bit-cast i64 |
+| `.c64 z1, z2, ...` | Store complex values in `aJb` format (2 CMEM cells per entry) |
+
+#### Complex Literals (`.c64`)
+
+The `.c64` directive stores complex numbers in the format `realJimag` (or
+`realJImag` — case-insensitive separator). Each entry occupies two consecutive
+CMEM cells: `f64::to_bits(re) as i64` at the base address and
+`f64::to_bits(im) as i64` at base+1.
+
+Supported number formats include integers, decimals, and scientific notation:
+
+```
+.c64 1.0J0.0              # 1 + 0i
+.c64 -1.5J2.5             # -1.5 + 2.5i
+.c64 1.5e-3J-2.0e1        # 0.0015 - 20.0i
+.c64 0J1.0                # pure imaginary
+.c64 3.14J0               # pure real
+```
+
+**Line continuation:** A trailing comma continues the `.c64` directive on the
+next line. This avoids long lines when declaring large arrays:
+
+```
+.c64 1.0J0.0,  1.0J0.0,  1.0J0.0,  1.0J0.0,
+     1.0J0.0, -1.0J0.0,  1.0J0.0,  1.0J0.0
+```
+
+#### Label References
+
+Labels defined in `.data` can be referenced in `.code` with the `@` prefix:
+
+| Syntax | Resolves to |
+|--------|-------------|
+| `@label` | CMEM base address of the label |
+| `@label.len` | Logical entry count (for `.c64`, the number of complex entries, not CMEM cells) |
+
 ## Example Programs
 
-The `examples/` directory contains 18 programs demonstrating a range of
+The `examples/` directory contains 44 programs demonstrating a range of
 classical, quantum, and hybrid computations:
 
 | File | Description |
 |------|-------------|
-| `grover_16q.cqam` | Grover search on a 16-qubit register |
-| `ghz_verify.cqam` | GHZ state preparation and fidelity verification |
-| `qft_16q.cqam` | Quantum Fourier Transform on a 16-qubit register |
-| `phase_estimation.cqam` | Quantum phase estimation algorithm |
+| `adapt_vqe.cqam` | Adaptive VQE with operator pool selection |
 | `amplitude_estimation.cqam` | Quantum amplitude estimation |
-| `deutsch_jozsa.cqam` | Deutsch-Jozsa oracle evaluation |
 | `bernstein_vazirani.cqam` | Bernstein-Vazirani secret-finding algorithm |
-| `simon.cqam` | Simon's period-finding algorithm |
-| `shor_period.cqam` | Shor's period-finding subroutine (rotation-kernel approximation) |
+| `bitflip_repetition.cqam` | Bit-flip repetition code error correction |
+| `coined_quantum_walk.cqam` | Coined quantum walk on a cycle (permutation-based) |
+| `deutsch_jozsa.cqam` | Deutsch-Jozsa oracle evaluation |
+| `diagonal_hamiltonian_sim.cqam` | Time evolution under a diagonal Hamiltonian |
+| `durr_hoyer.cqam` | Durr-Hoyer quantum minimum finding |
+| `ecall_hello.cqam` | Hello world with ECALL PRINT_STR |
+| `eigenvalue_estimation.cqam` | Eigenvalue extraction via controlled phase shift |
+| `error_detection.cqam` | Quantum error detection with ancilla qubits |
+| `general_qpe.cqam` | General quantum phase estimation with C-U^{2^k} |
+| `ghz_verify.cqam` | GHZ state preparation and fidelity verification |
+| `grover_16q.cqam` | Grover search on a 16-qubit register |
+| `hhl.cqam` | HHL algorithm for linear systems |
+| `iterative_qpe.cqam` | Single-ancilla iterative QPE |
+| `phase_estimation.cqam` | Quantum phase estimation algorithm |
+| `phase_oracle_search.cqam` | Multi-target Grover with diagonal unitary oracle |
+| `qaoa.cqam` | Quantum Approximate Optimization Algorithm (rotation-based) |
+| `qaoa_maxcut.cqam` | QAOA MaxCut on 4-node graph (diagonal unitary cost layers) |
+| `qft_16q.cqam` | Quantum Fourier Transform on a 16-qubit register |
+| `qrng.cqam` | Quantum random number generator |
+| `qsvt.cqam` | Quantum Singular Value Transformation |
+| `quantum_approx_counting.cqam` | Approximate quantum counting |
+| `quantum_counting_general.cqam` | QPE on Grover operator for counting |
 | `quantum_counting.cqam` | Quantum counting via phase estimation |
+| `quantum_feature_map.cqam` | QML kernel estimation with quadratic feature map |
 | `quantum_teleport.cqam` | Quantum teleportation protocol |
+| `quantum_tomography.cqam` | Quantum state tomography |
+| `quantum_walk_permutation.cqam` | Coined quantum walk on 16-node cycle (permutation-based) |
+| `quantum_walk.cqam` | Discrete quantum walk on a line |
+| `reversible_adder.cqam` | Quantum adder as permutation |
+| `shor_modmult.cqam` | Shor's algorithm with permutation-based modular multiplication |
+| `shor_period.cqam` | Shor's period-finding subroutine (rotation-kernel approximation) |
+| `simon_permutation.cqam` | Simon's algorithm with 2-to-1 permutation oracle |
+| `simon.cqam` | Simon's period-finding algorithm |
 | `superdense_coding.cqam` | Superdense coding: 2 classical bits per qubit |
 | `swap_test.cqam` | SWAP test for state overlap estimation |
-| `quantum_walk.cqam` | Discrete quantum walk on a line |
-| `qrng.cqam` | Quantum random number generator |
-| `error_detection.cqam` | Quantum error detection with ancilla qubits |
+| `test_c64_directive.cqam` | Integration test for .c64 complex literal directive |
+| `test_controlled_sub.cqam` | Test controlled-U with sub-kernels 9 and 10 |
+| `test_diagonal.cqam` | DIAGONAL_UNITARY kernel test |
+| `test_permutation.cqam` | PERMUTATION kernel test |
+| `trotter_hamiltonian.cqam` | Trotterized Hamiltonian simulation |
 | `vqe_loop.cqam` | Variational quantum eigensolver classical-quantum loop |
-| `qaoa.cqam` | Quantum Approximate Optimization Algorithm |
 
 Run any example:
 

@@ -234,6 +234,10 @@ following formats.
 | `GROVER_ITER` | 4 | D * O | One Grover iteration: oracle phase-flip at ctx0, then diffusion |
 | `ROTATE` | 5 | exp(i*theta*k) | Diagonal rotation; theta from F-file via QKERNELF |
 | `PHASE_SHIFT` | 6 | exp(i*|z|*k) | Phase shift; amplitude from Z-file via QKERNELZ |
+| `FOURIER_INV` | 7 | QFT† | Inverse Quantum Fourier Transform |
+| `CONTROLLED_U` | 8 | C-U | Controlled-U: applies sub-kernel conditioned on a control qubit; C-U^{2^k} via CMEM parameter block |
+| `DIAGONAL_UNITARY` | 9 | diag(d_0,...,d_{N-1}) | Arbitrary diagonal unitary: d_k from CMEM as (re,im) f64 pairs |
+| `PERMUTATION` | 10 | P_sigma | Basis-state permutation: sigma(k) from CMEM as i64 values |
 
 ### 4.3 PSW Flag IDs (`flag_id` module, used by `HCEXEC`)
 

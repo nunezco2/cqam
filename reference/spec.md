@@ -209,18 +209,21 @@ registers report purity = 1.0 by definition.
 Purity-based fidelity monitoring: after each QKERNEL or QOBSERVE, if purity
 falls below `SimConfig::fidelity_threshold`, the VM sets `int_quantum_err`.
 
-### 6.4 Kernels (8 implemented)
+### 6.4 Kernels (11 implemented)
 
-| ID | Name        | Description |
-|----|-------------|-------------|
-| 0  | init        | Re-initialize to uniform superposition H^n|0> |
-| 1  | entangle    | CNOT cascade for GHZ-like entanglement |
-| 2  | fourier     | Quantum Fourier Transform |
-| 3  | diffuse     | Grover diffusion (inversion about the mean) |
-| 4  | grover_iter | Complete Grover iteration (oracle phase-flip + diffusion) |
-| 5  | rotate      | Diagonal rotation: U[k][k] = exp(i * theta * k); theta from F-file |
-| 6  | phase_shift | Phase shift: U[k][k] = exp(i * |z| * k); amplitude from Z-file |
-| 7  | fourier_inv | Inverse Quantum Fourier Transform |
+| ID | Name              | Description |
+|----|-------------------|-------------|
+| 0  | init              | Re-initialize to uniform superposition H^n|0> |
+| 1  | entangle          | CNOT cascade for GHZ-like entanglement |
+| 2  | fourier           | Quantum Fourier Transform |
+| 3  | diffuse           | Grover diffusion (inversion about the mean) |
+| 4  | grover_iter       | Complete Grover iteration (oracle phase-flip + diffusion) |
+| 5  | rotate            | Diagonal rotation: U[k][k] = exp(i * theta * k); theta from F-file |
+| 6  | phase_shift       | Phase shift: U[k][k] = exp(i * |z| * k); amplitude from Z-file |
+| 7  | fourier_inv       | Inverse Quantum Fourier Transform |
+| 8  | controlled_u      | Controlled-U: applies any sub-kernel conditioned on a control qubit, supports C-U^{2^k} |
+| 9  | diagonal_unitary  | Arbitrary diagonal unitary from CMEM complex pairs: d_k = (re, im) at CMEM[base+2k], CMEM[base+2k+1] |
+| 10 | permutation       | Basis-state permutation from CMEM: sigma(k) at CMEM[base+k] as plain i64 |
 
 ### 6.5 Observation Modes
 
@@ -569,4 +572,67 @@ Each transition produces a resource delta:
 ```
 step_r : Sigma x Program -> (Sigma, ResourceDelta)
 R_total = sum_{i=0}^{n-1} delta_i
+```
+
+## 11. Data Section
+
+CQAM programs support a `.data` section for declaring initialized CMEM contents
+at assembly time. The data section is processed before `.code` and populates
+CMEM cells that are available to the program at address 0 onward.
+
+### 11.1 Directives
+
+| Directive | Syntax | Description |
+|-----------|--------|-------------|
+| `.org` | `.org N` | Set allocation pointer to address N |
+| `.ascii` | `.ascii "string"` | One ASCII byte per cell, NUL-terminated |
+| `.i64` | `.i64 v1, v2, ...` | Literal i64 values |
+| `.f64` | `.f64 v1, v2, ...` | f64 values stored as `to_bits() as i64` |
+| `.c64` | `.c64 z1, z2, ...` | Complex values in `aJb` format; 2 cells per entry |
+
+### 11.2 Label Resolution
+
+Labels declared in `.data` (e.g., `mydata:`) create two reference forms
+available in `.code`:
+- `@mydata` -- resolves to the CMEM base address of that label
+- `@mydata.len` -- resolves to the logical entry count (for `.c64`, the number
+  of complex entries, not the raw cell count; for `.ascii`, the byte count
+  excluding the NUL terminator)
+
+### 11.3 `.c64` Format
+
+Complex literals use `realJimag` format. Both parts support scientific notation.
+A trailing comma continues the directive on the next line:
+
+```
+.c64 1.0J0.0               # 1 + 0i
+.c64 -1.5J2.5              # -1.5 + 2.5i
+.c64 1.5e-3J-2.0e1         # scientific notation
+.c64 0J1.0                 # pure imaginary
+
+.c64 1.0J0.0,  1.0J0.0,
+     1.0J0.0, -1.0J0.0     # continuation across lines
+```
+
+Each `.c64` entry occupies two consecutive CMEM cells: the real part as
+`f64::to_bits() as i64` at `base + 2k`, and the imaginary part at
+`base + 2k + 1`.
+
+### 11.4 Example
+
+```
+.data
+    .org 200
+diag:
+    .c64 1.0J0.0, -1.0J0.0,
+         1.0J0.0,  1.0J0.0
+
+    .org 1000
+msg:
+    .ascii "Result = %d\n"
+
+.code
+    ILDI R0, @diag         # R0 = 200 (CMEM base address of diag)
+    ILDI R1, @diag.len     # R1 = 4  (complex entry count)
+    QKERNEL Q1, Q0, 9, R0, R1
 ```

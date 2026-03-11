@@ -177,7 +177,33 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 | QKERNELZ | `QKERNELZ Q1, Q0, 6, Z0, Z1` | Apply kernel 6 (phase_shift) with complex params Z0, Z1 |
 
 Kernel IDs: 0=init, 1=entangle, 2=fourier, 3=diffuse, 4=grover_iter,
-5=rotate, 6=phase_shift, 7=fourier_inv.
+5=rotate, 6=phase_shift, 7=fourier_inv, 8=controlled_u, 9=diagonal_unitary,
+10=permutation.
+
+### CONTROLLED_U example (kernel 8)
+
+    # Controlled rotation: control qubit 0, sub-kernel=ROTATE (5)
+    # Parameter block at CMEM[200..203]:
+    #   [200]=5 (sub_kernel_id), [201]=0 (power k; applies C-U^{2^k}),
+    #   [202]=theta_re bits,     [203]=theta_im bits
+    ILDI R8, 0               # control qubit index
+    ILDI R9, 200             # CMEM base of parameter block
+    QKERNEL Q1, Q0, 8, R8, R9
+
+### DIAGONAL_UNITARY example (kernel 9)
+
+    # Apply diagonal phases from .c64 data declared in .data section
+    # diag: .c64 1.0J0.0, -1.0J0.0, 1.0J0.0, 1.0J0.0
+    ILDI R0, @diag           # CMEM base of diagonal entries
+    ILDI R1, @diag.len       # number of complex entries (= dimension)
+    QKERNEL Q1, Q0, 9, R0, R1
+
+### PERMUTATION example (kernel 10)
+
+    # Apply cyclic permutation sigma = [1, 2, 3, 0] from CMEM[100..103]
+    ILDI R0, 100             # CMEM base of permutation table
+    ILDI R1, 0               # unused (dimension inferred from register size)
+    QKERNEL Q1, Q0, 10, R0, R1
 
 ## Qubit-Level Gate Operations
 
@@ -355,6 +381,42 @@ Reduction function IDs: 0=round, 1=floor, 2=ceil, 3=trunc, 4=abs, 5=negate,
 The `expect` function computes sum_k eigenvalue_k * p_k, reading n eigenvalues
 from CMEM starting at R[ctx]. The HREDUCE instruction passes R[ctx] as the
 context via the standard HR encoding (see reference/opcodes.md).
+
+## Data Section
+
+The `.data` section allows declaring initialized CMEM contents at assembly time.
+Labels in `.data` are referenced in `.code` via `@label` (base address) and
+`@label.len` (logical entry count).
+
+    .data
+        .org 200
+    diag:
+        .c64 1.0J0.0, -1.0J0.0,
+             1.0J0.0,  1.0J0.0
+
+        .org 1000
+    msg:
+        .ascii "Result = %d\n"
+
+    .code
+        ILDI R0, @diag         # R0 = 200 (base address)
+        ILDI R1, @diag.len     # R1 = 4 (complex entry count)
+        QKERNEL Q1, Q0, 9, R0, R1
+
+### .c64 complex literal format
+
+    .c64 1.0J0.0               # 1 + 0i
+    .c64 -1.5J2.5              # -1.5 + 2.5i
+    .c64 1.5e-3J-2.0e1         # scientific notation
+    .c64 0J1.0                 # pure imaginary
+
+A trailing comma continues on the next line:
+
+    .c64 1.0J0.0,  1.0J0.0,
+         1.0J0.0, -1.0J0.0
+
+Each entry occupies two consecutive CMEM cells: real part at `base + 2k`,
+imaginary part at `base + 2k + 1`, both stored as `f64::to_bits() as i64`.
 
 ---
 For more details, see `cqam-core/src/instruction.rs` and `reference/opcodes.md`.

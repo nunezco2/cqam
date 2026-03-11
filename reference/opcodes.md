@@ -149,7 +149,10 @@ Reserved: 0x2F (interrupt), 0x50 (reserved), 0x58-0xFF (future).
 | 4  | grover_iter | Oracle phase-flip + diffusion step |
 | 5  | rotate      | Diagonal rotation: U[k][k] = exp(i * theta * k) |
 | 6  | phase_shift | Phase shift: U[k][k] = exp(i * |z| * k) |
-| 7  | fourier_inv | Inverse Quantum Fourier Transform |
+| 7  | fourier_inv      | Inverse Quantum Fourier Transform |
+| 8  | controlled_u     | Controlled-U: apply sub-kernel conditioned on control qubit |
+| 9  | diagonal_unitary | Arbitrary diagonal unitary from CMEM complex pairs |
+| 10 | permutation      | Basis-state permutation from CMEM table |
 
 ## 6. PSW Flag IDs (HCEXEC flag field)
 
