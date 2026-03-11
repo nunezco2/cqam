@@ -43,7 +43,7 @@ res_fmt:
     ISUB R1, R1, R15
     ILDI R2, 15
     ILDI R3, 7
-    ILDI R4, 8
+    IQCFG R4              # R4 = qubit count from config
     ECALL PRINT_STR
 
 # --- Problem parameters: factor N using a^x mod N ---

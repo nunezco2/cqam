@@ -45,7 +45,7 @@ res_fmt:
     ILDI R15, 1
     ISUB R1, R1, R15
     ILDI R2, 13
-    ILDI R3, 16
+    IQCFG R3              # R3 = qubit count from config
     ECALL PRINT_STR
 
 # --- Setup: define the secret period ---

@@ -36,7 +36,7 @@ res_fmt:
     ILDI R15, 1
     ISUB R1, R1, R15
     ILDI R2, 8
-    ILDI R3, 8
+    IQCFG R3              # R3 = qubit count from config
     ECALL PRINT_STR
 
 # --- Setup ---
