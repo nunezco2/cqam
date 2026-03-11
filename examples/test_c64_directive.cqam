@@ -1,0 +1,367 @@
+# examples/test_c64_directive.cqam
+# Test the .c64 directive for storing complex number literals in .data
+#
+# This test verifies:
+#   1. .c64 with basic complex values works with DIAGONAL_UNITARY (kernel 9)
+#   2. @label.len resolves to the number of complex ENTRIES, not cells
+#   3. Scientific notation parses correctly
+#   4. Edge cases: pure real, pure imaginary, negative both parts, lowercase j
+#   5. Results match the existing test_diagonal.cqam (which uses manual FSTR)
+#
+# For 2 qubits (4 states), the diagonal unitary flips phase of |1>:
+#   d = [(1,0), (-1,0), (1,0), (1,0)]
+#
+# After oracle on uniform superposition, probabilities are unchanged (0.25 each).
+# After one Grover diffusion, |1> is amplified.
+# For N=4, M=1: theta = arcsin(sqrt(1/4)) = pi/6
+# After 1 iteration: sin^2(3*pi/6) = sin^2(pi/2) = 1.0, so P(|1>) = 1.0
+#
+#! qubits 2
+
+.data
+    .org 1000
+banner:
+    .ascii "=== .c64 Directive Test ===\n"
+len_pass:
+    .ascii "LEN CHECK: PASS (@diag.len = %d)\n"
+len_fail:
+    .ascii "LEN CHECK: FAIL (@diag.len = %d, expected 4)\n"
+pre_msg:
+    .ascii "Pre-oracle  P(|1>) = %f\n"
+post_msg:
+    .ascii "Post-oracle P(|1>) = %f\n"
+grv_msg:
+    .ascii "Grover iter P(|1>) = %f\n"
+meas_msg:
+    .ascii "Measured mode = %d\n"
+diag_pass:
+    .ascii "DIAGONAL TEST: PASS\n"
+diag_fail:
+    .ascii "DIAGONAL TEST: FAIL (measured %d, expected 1)\n"
+sci_pass:
+    .ascii "SCI NOTATION: PASS\n"
+sci_fail:
+    .ascii "SCI NOTATION: FAIL\n"
+edge_pass:
+    .ascii "EDGE CASES: PASS\n"
+edge_fail:
+    .ascii "EDGE CASES: FAIL\n"
+overall_pass:
+    .ascii "RESULT: ALL TESTS PASSED\n"
+overall_fail:
+    .ascii "RESULT: SOME TESTS FAILED\n"
+
+# Phase-flip oracle: d_k = (1,0) except d_1 = (-1,0)
+diag:
+    .c64 1.0J0.0, -1.0J0.0, 1.0J0.0, 1.0J0.0
+
+# Scientific notation test values
+sci:
+    .c64 1.5e-3J-2.0e1, 0.0e0J0.0e0
+
+# Edge cases: pure imaginary, pure real, negative both, lowercase j
+edge_pimag:
+    .c64 0J1.0
+edge_preal:
+    .c64 3.14J0
+edge_neg:
+    .c64 -1.5J-2.5
+edge_lowj:
+    .c64 1.0j0.0
+
+.code
+
+    ILDI R15, 1          # constant 1
+    ILDI R14, 0          # R14 = overall failure count
+
+# ===========================================================================
+# Test 1: Verify @diag.len = 4 (number of complex entries, not 8 cells)
+# ===========================================================================
+    ILDI R0, @diag.len
+    ILDI R1, 4
+    IEQ R2, R0, R1       # R2 = (@diag.len == 4)
+    JIF R2, len_ok
+
+    # FAIL
+    ILDI R0, @len_fail
+    ILDI R1, @len_fail.len
+    ISUB R1, R1, R15
+    ILDI R2, @diag.len
+    ECALL PRINT_STR
+    IADD R14, R14, R15   # increment failure count
+    JMP len_done
+
+LABEL: len_ok
+    ILDI R0, @len_pass
+    ILDI R1, @len_pass.len
+    ISUB R1, R1, R15
+    ILDI R2, @diag.len
+    ECALL PRINT_STR
+
+LABEL: len_done
+
+# ===========================================================================
+# Test 2: Use .c64 data with DIAGONAL_UNITARY
+# ===========================================================================
+    ILDI R8, 2
+    QPREPN Q0, 0, R8     # uniform superposition over 2 qubits (4 states)
+
+    # P(|1>) before oracle (should be 0.25)
+    ILDI R9, 1
+    QSAMPLE H0, Q0, 1, R9, R9
+    HREDUCE H0, F1, 8
+    ILDI R0, @pre_msg
+    ILDI R1, @pre_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    # Apply diagonal oracle from .c64 data
+    ILDI R0, @diag
+    ILDI R1, @diag.len
+    QKERNEL Q0, Q0, 9, R0, R1
+
+    # P(|1>) after oracle (should still be 0.25 -- phase flip preserves probs)
+    ILDI R9, 1
+    QSAMPLE H1, Q0, 1, R9, R9
+    HREDUCE H1, F1, 8
+    ILDI R0, @post_msg
+    ILDI R1, @post_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    # Apply Grover diffusion (kernel 3)
+    ILDI R0, 0
+    ILDI R1, 0
+    QKERNEL Q0, Q0, 3, R0, R1
+
+    # P(|1>) after one Grover iteration
+    ILDI R9, 1
+    QSAMPLE H2, Q0, 1, R9, R9
+    HREDUCE H2, F1, 8
+    ILDI R0, @grv_msg
+    ILDI R1, @grv_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    # Final measurement -- use MODE (func=11) to get basis state with max prob
+    QOBSERVE H3, Q0
+    HREDUCE H3, R2, 11   # R2 = mode (basis state key with highest probability)
+    ILDI R0, @meas_msg
+    ILDI R1, @meas_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    # Check mode == 1
+    ILDI R3, 1
+    IEQ R4, R2, R3
+    JIF R4, diag_ok
+
+    # FAIL
+    ILDI R0, @diag_fail
+    ILDI R1, @diag_fail.len
+    ISUB R1, R1, R15
+    # R2 already holds the measured value for %d
+    ECALL PRINT_STR
+    IADD R14, R14, R15
+    JMP diag_done
+
+LABEL: diag_ok
+    ILDI R0, @diag_pass
+    ILDI R1, @diag_pass.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+LABEL: diag_done
+
+# ===========================================================================
+# Test 3: Verify scientific notation parsed correctly
+# Verify CMEM at @sci contains the right bit patterns by loading and comparing
+# ===========================================================================
+    ILDI R13, 0          # R13 = local failure flag for sci test
+
+    # Load re of first entry: should be 1.5e-3 = 0.0015
+    FLDM F0, @sci         # F0 = re(first) = 1.5e-3
+
+    # Test: 1.5e-3 * 10000 = 15.0 -> truncate to int = 15
+    ILDI R0, 10000
+    CVTIF F2, R0           # F2 = 10000.0
+    FMUL F3, F0, F2        # F3 = 1.5e-3 * 10000 = 15.0
+    CVTFI R3, F3           # R3 should be 15
+    ILDI R4, 15
+    IEQ R5, R3, R4
+    JIF R5, sci_ok_1
+    ILDI R13, 1
+LABEL: sci_ok_1
+
+    # Load im of first entry: should be -20.0
+    # @sci is the base; im is at @sci + 1
+    ILDI R6, @sci
+    IADD R6, R6, R15      # R6 = @sci + 1
+    FLDX F0, R6           # F0 = im(first) = -20.0
+    CVTFI R3, F0           # R3 = -20
+    ILDI R4, -20
+    IEQ R5, R3, R4
+    JIF R5, sci_ok_2
+    ILDI R13, 1
+LABEL: sci_ok_2
+
+    # Check second entry: 0.0e0 + 0.0e0*J -> re=0, im=0
+    ILDI R6, @sci
+    ILDI R7, 2
+    IADD R6, R6, R7       # R6 = @sci + 2 (re of second entry)
+    FLDX F0, R6           # F0 = re(second) = 0.0
+    FLDI F4, 0
+    FEQ R5, F0, F4
+    JIF R5, sci_ok_3
+    ILDI R13, 1
+LABEL: sci_ok_3
+
+    ILDI R6, @sci
+    ILDI R7, 3
+    IADD R6, R6, R7       # R6 = @sci + 3 (im of second entry)
+    FLDX F0, R6
+    FEQ R5, F0, F4
+    JIF R5, sci_ok_4
+    ILDI R13, 1
+LABEL: sci_ok_4
+
+    # Print sci result
+    ILDI R5, 0
+    IEQ R5, R13, R5       # R5 = (R13 == 0) = pass?
+    JIF R5, sci_pass_print
+
+    ILDI R0, @sci_fail
+    ILDI R1, @sci_fail.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+    IADD R14, R14, R15
+    JMP sci_done
+
+LABEL: sci_pass_print
+    ILDI R0, @sci_pass
+    ILDI R1, @sci_pass.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+LABEL: sci_done
+
+# ===========================================================================
+# Test 4: Edge cases -- verify CMEM contents
+# ===========================================================================
+    ILDI R13, 0          # R13 = local failure flag for edge test
+
+    # Pure imaginary: 0J1.0 -> re=0.0, im=1.0
+    FLDM F0, @edge_pimag
+    ILDI R6, @edge_pimag
+    IADD R6, R6, R15
+    FLDX F1, R6
+    FLDI F4, 0
+    FLDI F5, 1
+    FEQ R5, F0, F4        # re == 0.0?
+    JIF R5, edge_pimag_ok1
+    ILDI R13, 1
+LABEL: edge_pimag_ok1
+    FEQ R5, F1, F5        # im == 1.0?
+    JIF R5, edge_pimag_ok2
+    ILDI R13, 1
+LABEL: edge_pimag_ok2
+
+    # Pure real: 3.14J0 -> re=3.14, im=0.0
+    FLDM F0, @edge_preal
+    ILDI R6, @edge_preal
+    IADD R6, R6, R15
+    FLDX F1, R6
+    # Check im == 0.0
+    FEQ R5, F1, F4        # im == 0.0?
+    JIF R5, edge_preal_ok1
+    ILDI R13, 1
+LABEL: edge_preal_ok1
+    # Check re: 3.14 * 100 = 314.0 -> int = 314
+    ILDI R0, 100
+    CVTIF F2, R0
+    FMUL F3, F0, F2
+    CVTFI R3, F3
+    ILDI R4, 314
+    IEQ R5, R3, R4
+    JIF R5, edge_preal_ok2
+    ILDI R13, 1
+LABEL: edge_preal_ok2
+
+    # Negative both: -1.5J-2.5 -> re=-1.5, im=-2.5
+    FLDM F0, @edge_neg
+    ILDI R6, @edge_neg
+    IADD R6, R6, R15
+    FLDX F1, R6
+    # Check re: -1.5 * -2 = 3.0 -> int = 3
+    ILDI R0, -2
+    CVTIF F6, R0
+    FMUL F0, F0, F6       # -1.5 * -2 = 3.0
+    FMUL F1, F1, F6       # -2.5 * -2 = 5.0
+    CVTFI R3, F0
+    CVTFI R4, F1
+    ILDI R5, 3
+    IEQ R7, R3, R5
+    JIF R7, edge_neg_ok1
+    ILDI R13, 1
+LABEL: edge_neg_ok1
+    ILDI R5, 5
+    IEQ R7, R4, R5
+    JIF R7, edge_neg_ok2
+    ILDI R13, 1
+LABEL: edge_neg_ok2
+
+    # Lowercase j: 1.0j0.0 -> re=1.0, im=0.0
+    FLDM F0, @edge_lowj
+    ILDI R6, @edge_lowj
+    IADD R6, R6, R15
+    FLDX F1, R6
+    FLDI F5, 1
+    FEQ R5, F0, F5        # re == 1.0?
+    JIF R5, edge_lowj_ok1
+    ILDI R13, 1
+LABEL: edge_lowj_ok1
+    FEQ R5, F1, F4        # im == 0.0?
+    JIF R5, edge_lowj_ok2
+    ILDI R13, 1
+LABEL: edge_lowj_ok2
+
+    # Print edge case result
+    ILDI R5, 0
+    IEQ R5, R13, R5       # R5 = (R13 == 0) = pass?
+    JIF R5, edge_pass_print
+
+    ILDI R0, @edge_fail
+    ILDI R1, @edge_fail.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+    IADD R14, R14, R15
+    JMP edge_done
+
+LABEL: edge_pass_print
+    ILDI R0, @edge_pass
+    ILDI R1, @edge_pass.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+LABEL: edge_done
+
+# ===========================================================================
+# Overall result
+# ===========================================================================
+    ILDI R5, 0
+    IEQ R5, R14, R5       # R5 = (R14 == 0) = all pass?
+    JIF R5, all_pass
+
+    ILDI R0, @overall_fail
+    ILDI R1, @overall_fail.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+    HALT
+
+LABEL: all_pass
+    ILDI R0, @overall_pass
+    ILDI R1, @overall_pass.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

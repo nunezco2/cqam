@@ -877,11 +877,16 @@ pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
 ///   - `.asciiz "string"` — alias for `.ascii`
 ///   - `.i64 val1, val2, ...` — stores literal i64 values
 ///   - `.f64 val1, val2, ...` — stores f64 values bit-cast to i64
+///   - `.c64 z1, z2, ...` — stores complex values (aJb format), 2 cells each;
+///     a trailing comma continues on the next line
 fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection, CqamError> {
     let mut ds = DataSection::default();
     let mut pending_label: Option<(String, usize)> = None; // (name, line_num)
 
-    for &(line_num, raw_line) in lines {
+    let mut i = 0;
+    while i < lines.len() {
+        let (line_num, raw_line) = lines[i];
+        i += 1;
         let line = strip_comments(raw_line).trim();
         if line.is_empty() {
             continue;
@@ -909,6 +914,7 @@ fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection, CqamError>
         // Data directives
         let base_addr = ds.cells.len() as u16;
         let cells_before = ds.cells.len();
+        let mut logical_count: Option<u16> = None;
 
         if let Some(rest) = line.strip_prefix(".org") {
             // .org N — advance allocation pointer to address N
@@ -931,6 +937,27 @@ fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection, CqamError>
             parse_i64_directive(rest, line_num, &mut ds.cells)?;
         } else if let Some(rest) = line.strip_prefix(".f64") {
             parse_f64_directive(rest, line_num, &mut ds.cells)?;
+        } else if let Some(rest) = line.strip_prefix(".c64") {
+            // .c64 supports continuation: if a line ends with ',', the next
+            // non-empty, non-comment line is a continuation of the same directive.
+            let mut combined = rest.to_string();
+            while combined.trim_end().ends_with(',') && i < lines.len() {
+                let (_, next_raw) = lines[i];
+                let next = strip_comments(next_raw).trim();
+                if next.is_empty() {
+                    i += 1;
+                    continue;
+                }
+                // Stop if next line is a label or another directive
+                if next.starts_with('.') || next.ends_with(':') {
+                    break;
+                }
+                i += 1;
+                combined.push_str(", ");
+                combined.push_str(next);
+            }
+            let n = parse_c64_directive(&combined, line_num, &mut ds.cells)?;
+            logical_count = Some(n as u16);
         } else {
             return Err(CqamError::ParseError {
                 line: line_num,
@@ -938,7 +965,7 @@ fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection, CqamError>
             });
         }
 
-        let count = (ds.cells.len() - cells_before) as u16;
+        let count = logical_count.unwrap_or((ds.cells.len() - cells_before) as u16);
 
         // Register the pending label at this base address
         if let Some((name, _)) = pending_label.take() {
@@ -1039,6 +1066,59 @@ fn parse_f64_directive(
         cells.push(val.to_bits() as i64);
     }
     Ok(())
+}
+
+/// Parse a single complex literal in `aJb` format into (re, im).
+fn parse_complex_literal(tok: &str, line_num: usize) -> Result<(f64, f64), CqamError> {
+    let pos = tok.find(['j', 'J']).ok_or_else(|| CqamError::ParseError {
+        line: line_num,
+        message: format!(".c64: missing 'J' separator in complex literal '{}'", tok),
+    })?;
+    let re_str = &tok[..pos];
+    let im_str = &tok[pos + 1..];
+    if re_str.is_empty() {
+        return Err(CqamError::ParseError {
+            line: line_num,
+            message: format!(".c64: missing real part in complex literal '{}'", tok),
+        });
+    }
+    if im_str.is_empty() {
+        return Err(CqamError::ParseError {
+            line: line_num,
+            message: format!(".c64: missing imaginary part in complex literal '{}'", tok),
+        });
+    }
+    let re: f64 = re_str.parse().map_err(|_| CqamError::ParseError {
+        line: line_num,
+        message: format!(".c64: invalid real part '{}' in '{}'", re_str, tok),
+    })?;
+    let im: f64 = im_str.parse().map_err(|_| CqamError::ParseError {
+        line: line_num,
+        message: format!(".c64: invalid imaginary part '{}' in '{}'", im_str, tok),
+    })?;
+    Ok((re, im))
+}
+
+/// Parse `.c64 z1, z2, ...` — stores complex values (aJb format) as pairs of
+/// f64 bit-patterns. Returns the number of complex values parsed (NOT the
+/// number of cells, which is 2x that).
+fn parse_c64_directive(
+    rest: &str,
+    line_num: usize,
+    cells: &mut Vec<i64>,
+) -> Result<usize, CqamError> {
+    let mut value_count = 0;
+    for tok in rest.split(',') {
+        let tok = tok.trim();
+        if tok.is_empty() {
+            continue;
+        }
+        let (re, im) = parse_complex_literal(tok, line_num)?;
+        cells.push(re.to_bits() as i64);
+        cells.push(im.to_bits() as i64);
+        value_count += 1;
+    }
+    Ok(value_count)
 }
 
 /// Replace `@label` with the CMEM base address and `@label.len` with the

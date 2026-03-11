@@ -35,6 +35,17 @@
 #! qubits 4
 
 .data
+    .org 200
+hamiltonian:
+    .c64 0.5117398914J0.8591929955,  -0.9667981926J-0.2555411021,
+         0.0596478779J0.9982193717,   0.6570196862J0.7538985957,
+         0.8554510715J0.5178710987,   0.9294756003J0.3690068258,
+         0.9616541242J0.2743185826,   0.9775226599J0.2108869580,
+         0.9859356766J0.1671099850,   0.9907681776J0.1355692328,
+         0.9936876282J0.1121891413,   0.9955441949J0.0942779547,
+         0.9967592756J0.0804478270,   0.9975917116J0.0693621814,
+         0.9981735696J0.0604249044,   0.9985898620J0.0530975037
+
     .org 1000
 banner:
     .ascii "=== Diagonal Hamiltonian Simulation ===\n"
@@ -50,208 +61,6 @@ res_fmt:
 .code
 
     ILDI R15, 1          # constant 1
-
-# ===========================================================================
-# Compute the diagonal entries for U(t=1.0):
-#   d_n = exp(-i * E_n * t) = (cos(E_n*t), -sin(E_n*t))
-#
-# E_n = -13.6 / (n+1)^2
-# So d_n = exp(i * 13.6 / (n+1)^2) = (cos(13.6/(n+1)^2), sin(13.6/(n+1)^2))
-# (the minus signs cancel: -i * (-13.6/(n+1)^2) = i * 13.6/(n+1)^2)
-#
-# Pre-computed values (cos(13.6/(n+1)^2), sin(13.6/(n+1)^2)):
-#   n=0:  phase=13.6/1   =13.600 -> cos/sin computed mod 2*pi
-#   n=1:  phase=13.6/4   = 3.400
-#   n=2:  phase=13.6/9   = 1.511
-#   n=3:  phase=13.6/16  = 0.850
-#   n=4:  phase=13.6/25  = 0.544
-#   n=5:  phase=13.6/36  = 0.378
-#   n=6:  phase=13.6/49  = 0.278
-#   n=7:  phase=13.6/64  = 0.213
-#   n=8:  phase=13.6/81  = 0.168
-#   n=9:  phase=13.6/100 = 0.136
-#   n=10: phase=13.6/121 = 0.112
-#   n=11: phase=13.6/144 = 0.094
-#   n=12: phase=13.6/169 = 0.080
-#   n=13: phase=13.6/196 = 0.069
-#   n=14: phase=13.6/225 = 0.060
-#   n=15: phase=13.6/256 = 0.053
-#
-# Stored at CMEM[200..231]
-# ===========================================================================
-
-    ILDI R0, 10000
-    CVTIF F14, R0        # F14 = 10000.0
-    FLDI F13, 0          # F13 = 0.0
-
-# We store each entry using pre-computed 4-digit precision values.
-# Python verification:
-# import math
-# for n in range(16):
-#   phase = 13.6 / (n+1)**2
-#   print(f"n={n}: ({round(math.cos(phase)*10000)}, {round(math.sin(phase)*10000)})")
-
-# n=0: phase=13.6, cos/sin: (0.5117, 0.8592) -> (5117, 8592)
-    ILDI R0, 5117
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 200
-    ILDI R0, 8592
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 201
-
-# n=1: phase=3.4, (-0.9668, -0.2555) -> (-9668, -2555)
-    ILDI R0, 9668
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 202
-    ILDI R0, 2555
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 203
-
-# n=2: phase=1.511, (0.0596, 0.9982) -> (596, 9982)
-    ILDI R0, 596
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 204
-    ILDI R0, 9982
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 205
-
-# n=3: phase=0.850, (0.6600, 0.7513) -> (6600, 7513)
-    ILDI R0, 6600
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 206
-    ILDI R0, 7513
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 207
-
-# n=4: phase=0.544, (0.8556, 0.5176) -> (8556, 5176)
-    ILDI R0, 8556
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 208
-    ILDI R0, 5176
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 209
-
-# n=5: phase=0.378, (0.9295, 0.3689) -> (9295, 3689)
-    ILDI R0, 9295
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 210
-    ILDI R0, 3689
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 211
-
-# n=6: phase=0.278, (0.9617, 0.2741) -> (9617, 2741)
-    ILDI R0, 9617
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 212
-    ILDI R0, 2741
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 213
-
-# n=7: phase=0.212, (0.9775, 0.2109) -> (9775, 2109)
-    ILDI R0, 9775
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 214
-    ILDI R0, 2109
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 215
-
-# n=8: phase=0.168, (0.9859, 0.1671) -> (9859, 1671)
-    ILDI R0, 9859
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 216
-    ILDI R0, 1671
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 217
-
-# n=9: phase=0.136, (0.9908, 0.1356) -> (9908, 1356)
-    ILDI R0, 9908
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 218
-    ILDI R0, 1356
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 219
-
-# n=10: phase=0.112, (0.9937, 0.1122) -> (9937, 1122)
-    ILDI R0, 9937
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 220
-    ILDI R0, 1122
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 221
-
-# n=11: phase=0.094, (0.9955, 0.0944) -> (9955, 944)
-    ILDI R0, 9955
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 222
-    ILDI R0, 944
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 223
-
-# n=12: phase=0.080, (0.9968, 0.0804) -> (9968, 804)
-    ILDI R0, 9968
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 224
-    ILDI R0, 804
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 225
-
-# n=13: phase=0.069, (0.9976, 0.0693) -> (9976, 693)
-    ILDI R0, 9976
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 226
-    ILDI R0, 693
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 227
-
-# n=14: phase=0.060, (0.9982, 0.0604) -> (9982, 604)
-    ILDI R0, 9982
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 228
-    ILDI R0, 604
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 229
-
-# n=15: phase=0.053, (0.9986, 0.0531) -> (9986, 531)
-    ILDI R0, 9986
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 230
-    ILDI R0, 531
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 231
 
 # ===========================================================================
 # Print banner and inputs
@@ -285,8 +94,8 @@ res_fmt:
 # ===========================================================================
 # Apply time evolution: U(t=1.0)
 # ===========================================================================
-    ILDI R0, 200
-    ILDI R1, 16
+    ILDI R0, @hamiltonian
+    ILDI R1, @hamiltonian.len
     QKERNEL Q0, Q0, 9, R0, R1   # Q0 = U(t)|+>
 
 # ===========================================================================

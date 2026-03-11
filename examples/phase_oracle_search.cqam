@@ -22,6 +22,11 @@
 #! qubits 3
 
 .data
+    .org 200
+oracle:
+    .c64 1.0J0.0,  1.0J0.0,  1.0J0.0, -1.0J0.0,
+         1.0J0.0, -1.0J0.0, -1.0J0.0,  1.0J0.0
+
     .org 1000
 banner:
     .ascii "=== Multi-Target Phase Oracle Search ===\n"
@@ -34,51 +39,7 @@ res_fmt:
 
 .code
 
-# ===========================================================================
-# Build the phase oracle in CMEM[200..215]
-# 8 states for 3 qubits; d_k = -1 if popcount(k)==2, else +1
-#
-# k=0 (000): popcount=0 -> +1     k=4 (100): popcount=1 -> +1
-# k=1 (001): popcount=1 -> +1     k=5 (101): popcount=2 -> -1  *
-# k=2 (010): popcount=1 -> +1     k=6 (110): popcount=2 -> -1  *
-# k=3 (011): popcount=2 -> -1  *  k=7 (111): popcount=3 -> +1
-# ===========================================================================
-
     ILDI R15, 1          # constant 1
-
-# Store +1 for all states first (loop over 8 entries)
-    FLDI F0, 1           # re = 1.0
-    FLDI F1, 0           # im = 0.0
-    ILDI R0, 0           # k = 0
-    ILDI R1, 8           # limit
-    ILDI R2, 200         # base address
-    ILDI R3, 2           # stride
-
-LABEL: init_oracle
-    IEQ R4, R0, R1
-    JIF R4, init_done
-
-    IMUL R5, R0, R3      # 2*k
-    IADD R5, R5, R2      # 200 + 2*k
-    FSTRX F0, R5         # re = 1.0
-    IADD R5, R5, R15
-    FSTRX F1, R5         # im = 0.0
-
-    IADD R0, R0, R15
-    JMP init_oracle
-LABEL: init_done
-
-# Patch the marked states: k=3,5,6 get d_k = (-1, 0)
-    FLDI F2, -1          # F2 = -1.0
-
-    # k=3: CMEM[206] = -1.0
-    FSTR F2, 206
-
-    # k=5: CMEM[210] = -1.0
-    FSTR F2, 210
-
-    # k=6: CMEM[212] = -1.0
-    FSTR F2, 212
 
 # ===========================================================================
 # Print banner and inputs
@@ -103,8 +64,8 @@ LABEL: init_done
 # Grover iteration 1: Oracle + Diffusion
 # ===========================================================================
     # Apply multi-target oracle via DIAGONAL_UNITARY
-    ILDI R0, 200
-    ILDI R1, 8
+    ILDI R0, @oracle
+    ILDI R1, @oracle.len
     QKERNEL Q0, Q0, 9, R0, R1
 
     # Apply Grover diffusion (kernel 3)
@@ -136,8 +97,6 @@ LABEL: init_done
     ISUB R1, R1, R15
     ILDI R2, 1           # iteration count
     # F1 = P(solutions)
-    FADD F1, F6, F1      # Copy F6 to F1 (F1 was 0 from earlier)
-    # Actually F1 might not be 0 now. Let's just set it.
     FLDI F1, 0
     FADD F1, F6, F1      # F1 = F6 + 0 = F6
     ECALL PRINT_STR

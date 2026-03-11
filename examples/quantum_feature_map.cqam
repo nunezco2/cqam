@@ -31,6 +31,27 @@
 #! qubits 3
 
 .data
+    .org 200
+u_x:
+    .c64  1.0J0.0,               0.9553364891J0.2955202067,
+          0.3623577545J0.9320390860, -0.9040721420J0.4273798802,
+          0.0874989834J-0.9961646088, 0.3507832277J0.9364566873,
+         -0.1942890294J-0.9809407542, -0.5292884696J0.8484129085
+
+    .org 300
+u_xp:
+    .c64  1.0J0.0,               0.7648421873J0.6442176872,
+         -0.9422223407J0.3350375824,  0.9999118601J0.0132767401,
+          0.2039728304J-0.9789836122,  0.2190475661J-0.9757233579,
+          0.9976594272J0.0683549658,  -0.9671494927J0.2541506403
+
+    .org 400
+u_diff:
+    .c64  1.0J0.0,               0.9210609940J0.3894183423,
+         -0.0291995223J0.9995736030, -0.8967584163J-0.4425204433,
+          0.9931849187J0.1165492049,  -0.8390715291J-0.5440211109,
+         -0.2555411021J0.9667981926,   0.7270351621J0.6865653975
+
     .org 1000
 banner:
     .ascii "=== Quantum Feature Map (QML Kernel) ===\n"
@@ -46,264 +67,6 @@ kern_fmt:
 .code
 
     ILDI R15, 1          # constant 1
-    ILDI R0, 10000
-    CVTIF F14, R0        # F14 = 10000.0 (denominator for 4-digit precision)
-    FLDI F13, 0          # F13 = 0.0
-
-# ===========================================================================
-# U(x=0.3) diagonal at CMEM[200..215]
-# d_k = (cos(0.3*k^2), sin(0.3*k^2))
-# ===========================================================================
-
-# k=0: (1.0, 0.0)
-    FLDI F0, 1
-    FSTR F0, 200
-    FSTR F13, 201
-
-# k=1: (0.9553, 0.2955)
-    ILDI R0, 9553
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 202
-    ILDI R0, 2955
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 203
-
-# k=2: (0.3624, 0.9320)
-    ILDI R0, 3624
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 204
-    ILDI R0, 9320
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 205
-
-# k=3: (-0.9041, 0.4274)
-    ILDI R0, 9041
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 206
-    ILDI R0, 4274
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 207
-
-# k=4: (0.0875, -0.9962)
-    ILDI R0, 875
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 208
-    ILDI R0, 9962
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 209
-
-# k=5: (0.3466, 0.9380)
-    ILDI R0, 3466
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 210
-    ILDI R0, 9380
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 211
-
-# k=6: (-0.1943, -0.9809)
-    ILDI R0, 1943
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 212
-    ILDI R0, 9809
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 213
-
-# k=7: (-0.5336, 0.8457)
-    ILDI R0, 5336
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 214
-    ILDI R0, 8457
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 215
-
-# ===========================================================================
-# U(x'=0.7) diagonal at CMEM[300..315]
-# d_k = (cos(0.7*k^2), sin(0.7*k^2))
-# ===========================================================================
-
-# k=0: (1.0, 0.0)
-    FLDI F0, 1
-    FSTR F0, 300
-    FSTR F13, 301
-
-# k=1: (0.7648, 0.6442)
-    ILDI R0, 7648
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 302
-    ILDI R0, 6442
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 303
-
-# k=2: (-0.9422, 0.3350)
-    ILDI R0, 9422
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 304
-    ILDI R0, 3350
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 305
-
-# k=3: (0.9999, 0.0168)
-    ILDI R0, 9999
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 306
-    ILDI R0, 168
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 307
-
-# k=4: (0.2030, -0.9792)
-    ILDI R0, 2030
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 308
-    ILDI R0, 9792
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 309
-
-# k=5: (0.2194, -0.9756)
-    ILDI R0, 2194
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 310
-    ILDI R0, 9756
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 311
-
-# k=6: (0.9977, 0.0672)
-    ILDI R0, 9977
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 312
-    ILDI R0, 672
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 313
-
-# k=7: (-0.9670, 0.2547)
-    ILDI R0, 9670
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 314
-    ILDI R0, 2547
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 315
-
-# ===========================================================================
-# U_diff diagonal at CMEM[400..415]
-# d_k = (cos(0.4*k^2), sin(0.4*k^2))
-# ===========================================================================
-
-# k=0: (1.0, 0.0)
-    FLDI F0, 1
-    FSTR F0, 400
-    FSTR F13, 401
-
-# k=1: (0.9211, 0.3894)
-    ILDI R0, 9211
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 402
-    ILDI R0, 3894
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 403
-
-# k=2: (-0.0292, 0.9996)
-    ILDI R0, 292
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 404
-    ILDI R0, 9996
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 405
-
-# k=3: (-0.8968, -0.4425)
-    ILDI R0, 8968
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 406
-    ILDI R0, 4425
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 407
-
-# k=4: (0.9932, 0.1165)
-    ILDI R0, 9932
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 408
-    ILDI R0, 1165
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 409
-
-# k=5: (-0.8391, -0.5440)
-    ILDI R0, 8391
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 410
-    ILDI R0, 5440
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 411
-
-# k=6: (-0.2598, 0.9657)
-    ILDI R0, 2598
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSUB F0, F13, F0
-    FSTR F0, 412
-    ILDI R0, 9657
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 413
-
-# k=7: (0.7314, 0.6820)
-    ILDI R0, 7314
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 414
-    ILDI R0, 6820
-    CVTIF F0, R0
-    FDIV F0, F0, F14
-    FSTR F0, 415
 
 # ===========================================================================
 # Print banner and inputs
@@ -323,8 +86,8 @@ kern_fmt:
 # Create |phi(x)>: |+> -> U(x)|+>
 # ===========================================================================
     QPREP Q0, 0
-    ILDI R0, 200
-    ILDI R1, 8
+    ILDI R0, @u_x
+    ILDI R1, @u_x.len
     QKERNEL Q0, Q0, 9, R0, R1   # Q0 = |phi(x)>
 
     # P(|0>) should be 1/8 since diagonal unitary preserves amplitudes
@@ -341,8 +104,8 @@ kern_fmt:
 # Create |phi(x')>: |+> -> U(x')|+>
 # ===========================================================================
     QPREP Q1, 0
-    ILDI R0, 300
-    ILDI R1, 8
+    ILDI R0, @u_xp
+    ILDI R1, @u_xp.len
     QKERNEL Q1, Q1, 9, R0, R1   # Q1 = |phi(x')>
 
     ILDI R0, 0
@@ -366,8 +129,8 @@ kern_fmt:
 # Analytical: k(0.3, 0.7) ~ 0.1144
 # ===========================================================================
     QPREP Q2, 0          # Q2 = |+> (uniform)
-    ILDI R0, 400
-    ILDI R1, 8
+    ILDI R0, @u_diff
+    ILDI R1, @u_diff.len
     QKERNEL Q2, Q2, 9, R0, R1   # Q2 = U_diff|+>
 
     # Apply IQFT (kernel 7) to convert back to computational basis

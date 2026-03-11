@@ -1617,3 +1617,349 @@ fn test_unknown_pragma_ignored() {
     assert_eq!(parsed.metadata.qubits, None);
     assert_eq!(parsed.instructions.len(), 1);
 }
+
+// ===========================================================================
+// .c64 directive — complex number literals in .data section
+// ===========================================================================
+
+/// Helper: interpret a CMEM cell (i64) as an f64 by reversing the to_bits() cast.
+fn cell_as_f64(cell: i64) -> f64 {
+    f64::from_bits(cell as u64)
+}
+
+#[test]
+fn test_c64_basic_single_value() {
+    // A single complex value should occupy 2 cells, and @label.len should be 1.
+    let src = "\
+.data
+val:
+    .c64 3.0J4.0
+
+.code
+    ILDI R0, @val
+    ILDI R1, @val.len
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    // Check that the label was registered with len = 1 (one complex entry)
+    let (base, len) = parsed.data_section.labels["val"];
+    assert_eq!(len, 1, "@val.len should be 1 (one complex entry)");
+    // The entry occupies 2 cells: re at base, im at base+1
+    let re = cell_as_f64(parsed.data_section.cells[base as usize]);
+    let im = cell_as_f64(parsed.data_section.cells[base as usize + 1]);
+    assert_eq!(re, 3.0);
+    assert_eq!(im, 4.0);
+}
+
+#[test]
+fn test_c64_multiple_values() {
+    // Four complex entries = 8 cells, but @label.len = 4.
+    let src = "\
+.data
+diag:
+    .c64 1.0J0.0, -1.0J0.0, 1.0J0.0, 1.0J0.0
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (base, len) = parsed.data_section.labels["diag"];
+    assert_eq!(len, 4, "@diag.len should be 4 complex entries");
+    // Total cells consumed should be 8
+    assert!(parsed.data_section.cells.len() >= base as usize + 8);
+    // Verify each complex entry
+    let b = base as usize;
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b]),     1.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 1]), 0.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 2]), -1.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 3]), 0.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 4]), 1.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 5]), 0.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 6]), 1.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 7]), 0.0);
+}
+
+#[test]
+fn test_c64_scientific_notation() {
+    let src = "\
+.data
+sci:
+    .c64 1.5e-3J-2.0e1, 0.0e0J0.0e0
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (base, len) = parsed.data_section.labels["sci"];
+    assert_eq!(len, 2);
+    let b = base as usize;
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b]),     1.5e-3);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 1]), -2.0e1);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 2]), 0.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[b + 3]), 0.0);
+}
+
+#[test]
+fn test_c64_edge_pure_imaginary() {
+    let src = "\
+.data
+pimag:
+    .c64 0J1.0
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (base, len) = parsed.data_section.labels["pimag"];
+    assert_eq!(len, 1);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize]),     0.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize + 1]), 1.0);
+}
+
+#[test]
+fn test_c64_edge_pure_real() {
+    let src = "\
+.data
+preal:
+    .c64 3.14J0
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (base, _) = parsed.data_section.labels["preal"];
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize]),     3.14);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize + 1]), 0.0);
+}
+
+#[test]
+fn test_c64_edge_negative_both_parts() {
+    let src = "\
+.data
+neg:
+    .c64 -1.5J-2.5
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (base, _) = parsed.data_section.labels["neg"];
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize]),     -1.5);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize + 1]), -2.5);
+}
+
+#[test]
+fn test_c64_lowercase_j_separator() {
+    let src = "\
+.data
+low:
+    .c64 1.0j0.0
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (base, _) = parsed.data_section.labels["low"];
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize]),     1.0);
+    assert_eq!(cell_as_f64(parsed.data_section.cells[base as usize + 1]), 0.0);
+}
+
+#[test]
+fn test_c64_len_vs_f64_len() {
+    // .c64 with 4 entries: @label.len = 4, but 8 cells consumed.
+    // .f64 with 4 entries: @label.len = 4, and 4 cells consumed.
+    let src = "\
+.data
+cpx:
+    .c64 1.0J0.0, 0.0J1.0, -1.0J0.0, 0.0J-1.0
+flt:
+    .f64 1.0, 2.0, 3.0, 4.0
+
+.code
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    let (cpx_base, cpx_len) = parsed.data_section.labels["cpx"];
+    let (flt_base, flt_len) = parsed.data_section.labels["flt"];
+    // Both report 4 logical entries
+    assert_eq!(cpx_len, 4, ".c64 with 4 entries: @cpx.len = 4");
+    assert_eq!(flt_len, 4, ".f64 with 4 entries: @flt.len = 4");
+    // But .c64 uses 8 cells while .f64 uses 4.
+    // flt_base should start right after the 8 cells of cpx.
+    assert_eq!(flt_base, cpx_base + 8,
+        ".c64 with 4 entries occupies 8 cells, so .f64 starts 8 cells after .c64 base");
+}
+
+#[test]
+fn test_c64_label_ref_substitution() {
+    // Verify @label and @label.len are substituted correctly in instructions.
+    let src = "\
+.data
+    .org 200
+diag:
+    .c64 1.0J0.0, -1.0J0.0
+
+.code
+    ILDI R0, @diag
+    ILDI R1, @diag.len
+    HALT
+";
+    let parsed = parse_program(src).unwrap();
+    // @diag should resolve to 200
+    assert_eq!(parsed.instructions[0],
+        Instruction::ILdi { dst: 0, imm: 200 });
+    // @diag.len should resolve to 2 (two complex entries)
+    assert_eq!(parsed.instructions[1],
+        Instruction::ILdi { dst: 1, imm: 2 });
+}
+
+#[test]
+fn test_c64_error_missing_separator() {
+    let src = "\
+.data
+bad:
+    .c64 1.0_0.0
+
+.code
+    HALT
+";
+    assert!(parse_program(src).is_err(),
+        "Missing J separator should produce a parse error");
+}
+
+#[test]
+fn test_c64_error_missing_real_part() {
+    let src = "\
+.data
+bad:
+    .c64 J1.0
+
+.code
+    HALT
+";
+    assert!(parse_program(src).is_err(),
+        "Missing real part should produce a parse error");
+}
+
+#[test]
+fn test_c64_error_missing_imaginary_part() {
+    let src = "\
+.data
+bad:
+    .c64 1.0J
+
+.code
+    HALT
+";
+    assert!(parse_program(src).is_err(),
+        "Missing imaginary part should produce a parse error");
+}
+
+#[test]
+fn test_c64_error_invalid_real_part() {
+    let src = "\
+.data
+bad:
+    .c64 abcJ1.0
+
+.code
+    HALT
+";
+    assert!(parse_program(src).is_err(),
+        "Non-numeric real part should produce a parse error");
+}
+
+#[test]
+fn test_c64_error_invalid_imaginary_part() {
+    let src = "\
+.data
+bad:
+    .c64 1.0Jabc
+
+.code
+    HALT
+";
+    assert!(parse_program(src).is_err(),
+        "Non-numeric imaginary part should produce a parse error");
+}
+
+#[test]
+fn test_c64_line_continuation() {
+    // Trailing comma allows continuation on next line
+    let src = "\
+.data
+vals:
+    .c64 1.0J2.0,
+         3.0J4.0,
+         5.0J6.0
+
+.code
+    ILDI R0, @vals.len
+    HALT
+";
+    let parsed = parse_program(src).expect("continuation should parse");
+    // 3 complex entries -> @vals.len = 3
+    assert_eq!(parsed.instructions[0],
+        Instruction::ILdi { dst: 0, imm: 3 },
+        "continuation: @vals.len should be 3 (complex entries)");
+    // 6 CMEM cells total (3 entries × 2 cells each)
+    let (_, len) = parsed.data_section.labels["vals"];
+    assert_eq!(len, 3, "continuation: logical count should be 3");
+}
+
+#[test]
+fn test_c64_no_continuation_without_trailing_comma() {
+    // Without trailing comma, next line is NOT a continuation (will error as unknown directive)
+    let src = "\
+.data
+vals:
+    .c64 1.0J2.0
+         3.0J4.0
+
+.code
+    HALT
+";
+    assert!(parse_program(src).is_err(),
+        "without trailing comma, indented line should not be consumed as continuation");
+}
+
+#[test]
+fn test_c64_continuation_skips_blank_lines() {
+    let src = "\
+.data
+vals:
+    .c64 1.0J0.0,
+
+         -1.0J0.0
+
+.code
+    ILDI R0, @vals.len
+    HALT
+";
+    let parsed = parse_program(src).expect("continuation should skip blank lines");
+    assert_eq!(parsed.instructions[0],
+        Instruction::ILdi { dst: 0, imm: 2 });
+}
+
+#[test]
+fn test_c64_continuation_stops_at_label() {
+    // Continuation must stop when a label is encountered
+    let src = "\
+.data
+a:
+    .c64 1.0J0.0,
+b:
+    .c64 2.0J0.0
+
+.code
+    ILDI R0, @a.len
+    ILDI R1, @b.len
+    HALT
+";
+    let parsed = parse_program(src).expect("continuation stops at label");
+    // a has 1 entry (trailing comma but next line is a label)
+    assert_eq!(parsed.instructions[0],
+        Instruction::ILdi { dst: 0, imm: 1 });
+    assert_eq!(parsed.instructions[1],
+        Instruction::ILdi { dst: 1, imm: 1 });
+}

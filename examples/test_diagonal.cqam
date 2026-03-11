@@ -13,6 +13,13 @@
 #! qubits 4
 
 .data
+    .org 200
+diag:
+    .c64 1.0J0.0,  1.0J0.0,  1.0J0.0,  1.0J0.0,
+         1.0J0.0, -1.0J0.0,  1.0J0.0,  1.0J0.0,
+         1.0J0.0,  1.0J0.0,  1.0J0.0,  1.0J0.0,
+         1.0J0.0,  1.0J0.0,  1.0J0.0,  1.0J0.0
+
     .org 1000
 banner:
     .ascii "=== Diagonal Unitary Test ===\n"
@@ -28,42 +35,6 @@ res_msg:
     .ascii "Measured argmax = %d\n"
 
 .code
-
-# ===========================================================================
-# Setup: store diagonal entries in CMEM starting at address 200
-# d_k = (1, 0) for all k except d_5 = (-1, 0)
-# Layout: CMEM[200 + 2*k] = re(d_k), CMEM[200 + 2*k + 1] = im(d_k)
-# ===========================================================================
-
-    # Store d_0..d_15 = (1.0, 0.0) using a loop
-    ILDI R2, 0           # R2 = loop counter k
-    ILDI R3, 16          # R3 = dimension (loop limit)
-    ILDI R4, 1           # R4 = constant 1
-    ILDI R5, 200         # R5 = CMEM base address
-    ILDI R6, 2           # R6 = constant 2 (stride)
-    FLDI F0, 1           # F0 = 1.0 (re part)
-    FLDI F1, 0           # F1 = 0.0 (im part)
-
-LABEL: store_loop
-    IEQ R7, R2, R3       # R7 = (k == 16) ? 1 : 0
-    JIF R7, store_done
-
-    # addr = base + 2*k
-    IMUL R8, R2, R6      # R8 = 2*k
-    IADD R8, R8, R5      # R8 = 200 + 2*k
-    FSTRX F0, R8         # CMEM[200 + 2*k] = 1.0 (re)
-    IADD R8, R8, R4      # R8 = 200 + 2*k + 1
-    FSTRX F1, R8         # CMEM[200 + 2*k + 1] = 0.0 (im)
-
-    IADD R2, R2, R4      # k++
-    JMP store_loop
-
-LABEL: store_done
-
-    # Patch d_5 = (-1.0, 0.0): CMEM[200 + 2*5] = CMEM[210]
-    FLDI F2, -1          # F2 = -1.0
-    FSTR F2, 210         # CMEM[210] = -1.0 (re of d_5)
-    # im part at CMEM[211] is already 0.0 from the loop
 
 # ===========================================================================
 # Print banner
@@ -92,8 +63,8 @@ LABEL: store_done
     ECALL PRINT_STR      # %f reads F1
 
     # Apply diagonal oracle
-    ILDI R0, 200         # R0 = CMEM base address
-    ILDI R1, 16          # R1 = dimension
+    ILDI R0, @diag
+    ILDI R1, @diag.len
     QKERNEL Q0, Q0, 9, R0, R1   # Apply diagonal unitary
 
     # Sample P(|5>) after oracle (should still be 1/16 = 0.0625)
@@ -132,8 +103,8 @@ LABEL: store_done
 # Test 3: Second Grover iteration (oracle + diffusion)
 # ===========================================================================
     # Re-apply oracle
-    ILDI R0, 200
-    ILDI R1, 16
+    ILDI R0, @diag
+    ILDI R1, @diag.len
     QKERNEL Q0, Q0, 9, R0, R1
 
     # Diffusion

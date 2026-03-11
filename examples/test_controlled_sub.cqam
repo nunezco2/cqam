@@ -23,13 +23,17 @@
 #
 # CMEM layout:
 #   100-103: Permutation table (4 entries)
-#   110-117: Diagonal entries (4 complex pairs = 8 cells)
+#   110-117: Diagonal entries (4 complex pairs = 8 cells) via .c64
 #   200-204: C-U parameter block for C-PERM
 #   210-214: C-U parameter block for C-DIAG
 #
 #! qubits 3
 
 .data
+    .org 110
+c_diag_data:
+    .c64 1.0J0.0, -1.0J0.0, 1.0J0.0, 1.0J0.0
+
     .org 1000
 banner:
     .ascii "=== Controlled Sub-Kernel Test ===\n"
@@ -88,31 +92,6 @@ done_msg:
     ISTR R5, 102        # sigma(2) = 3
     ILDI R5, 0
     ISTR R5, 103        # sigma(3) = 0
-
-# ===========================================================================
-# Set up diagonal entries at CMEM[110..117]
-# d = [(1,0), (-1,0), (1,0), (1,0)] -- phase flip on target state |01>
-# Each entry is (re, im) stored as f64 bits via FSTR
-# ===========================================================================
-    FLDI F0, 1
-    FSTR F0, 110        # d[0].re = 1.0
-    FLDI F0, 0
-    FSTR F0, 111        # d[0].im = 0.0
-
-    FLDI F0, -1
-    FSTR F0, 112        # d[1].re = -1.0
-    FLDI F0, 0
-    FSTR F0, 113        # d[1].im = 0.0
-
-    FLDI F0, 1
-    FSTR F0, 114        # d[2].re = 1.0
-    FLDI F0, 0
-    FSTR F0, 115        # d[2].im = 0.0
-
-    FLDI F0, 1
-    FSTR F0, 116        # d[3].re = 1.0
-    FLDI F0, 0
-    FSTR F0, 117        # d[3].im = 0.0
 
 # ===========================================================================
 # Set up C-U parameter block for C-PERM at CMEM[200..204]
