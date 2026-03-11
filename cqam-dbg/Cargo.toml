@@ -1,0 +1,22 @@
+[package]
+name = "cqam-dbg"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+name = "cqam_dbg"
+path = "src/lib.rs"
+
+[[bin]]
+name = "cqam-dbg"
+path = "src/main.rs"
+
+[dependencies]
+cqam-core = { path = "../cqam-core" }
+cqam-vm   = { path = "../cqam-vm" }
+cqam-sim  = { path = "../cqam-sim" }
+cqam-as   = { path = "../cqam-as" }
+cqam-run  = { path = "../cqam-run" }
+
+ratatui   = "0.29"
+crossterm = "0.28"
