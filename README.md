@@ -369,55 +369,10 @@ Labels defined in `.data` can be referenced in `.code` with the `@` prefix:
 
 ## Example Programs
 
-The `examples/` directory contains 44 programs demonstrating a range of
-classical, quantum, and hybrid computations:
-
-| File | Description |
-|------|-------------|
-| `adapt_vqe.cqam` | Adaptive VQE with operator pool selection |
-| `amplitude_estimation.cqam` | Quantum amplitude estimation |
-| `bernstein_vazirani.cqam` | Bernstein-Vazirani secret-finding algorithm |
-| `bitflip_repetition.cqam` | Bit-flip repetition code error correction |
-| `coined_quantum_walk.cqam` | Coined quantum walk on a cycle (permutation-based) |
-| `deutsch_jozsa.cqam` | Deutsch-Jozsa oracle evaluation |
-| `diagonal_hamiltonian_sim.cqam` | Time evolution under a diagonal Hamiltonian |
-| `durr_hoyer.cqam` | Durr-Hoyer quantum minimum finding |
-| `ecall_hello.cqam` | Hello world with ECALL PRINT_STR |
-| `eigenvalue_estimation.cqam` | Eigenvalue extraction via controlled phase shift |
-| `error_detection.cqam` | Quantum error detection with ancilla qubits |
-| `general_qpe.cqam` | General quantum phase estimation with C-U^{2^k} |
-| `ghz_verify.cqam` | GHZ state preparation and fidelity verification |
-| `grover_16q.cqam` | Grover search on a 16-qubit register |
-| `hhl.cqam` | HHL algorithm for linear systems |
-| `iterative_qpe.cqam` | Single-ancilla iterative QPE |
-| `phase_estimation.cqam` | Quantum phase estimation algorithm |
-| `phase_oracle_search.cqam` | Multi-target Grover with diagonal unitary oracle |
-| `qaoa.cqam` | Quantum Approximate Optimization Algorithm (rotation-based) |
-| `qaoa_maxcut.cqam` | QAOA MaxCut on 4-node graph (diagonal unitary cost layers) |
-| `qft_16q.cqam` | Quantum Fourier Transform on a 16-qubit register |
-| `qrng.cqam` | Quantum random number generator |
-| `qsvt.cqam` | Quantum Singular Value Transformation |
-| `quantum_approx_counting.cqam` | Approximate quantum counting |
-| `quantum_counting_general.cqam` | QPE on Grover operator for counting |
-| `quantum_counting.cqam` | Quantum counting via phase estimation |
-| `quantum_feature_map.cqam` | QML kernel estimation with quadratic feature map |
-| `quantum_teleport.cqam` | Quantum teleportation protocol |
-| `quantum_tomography.cqam` | Quantum state tomography |
-| `quantum_walk_permutation.cqam` | Coined quantum walk on 16-node cycle (permutation-based) |
-| `quantum_walk.cqam` | Discrete quantum walk on a line |
-| `reversible_adder.cqam` | Quantum adder as permutation |
-| `shor_modmult.cqam` | Shor's algorithm with permutation-based modular multiplication |
-| `shor_period.cqam` | Shor's period-finding subroutine (rotation-kernel approximation) |
-| `simon_permutation.cqam` | Simon's algorithm with 2-to-1 permutation oracle |
-| `simon.cqam` | Simon's period-finding algorithm |
-| `superdense_coding.cqam` | Superdense coding: 2 classical bits per qubit |
-| `swap_test.cqam` | SWAP test for state overlap estimation |
-| `test_c64_directive.cqam` | Integration test for .c64 complex literal directive |
-| `test_controlled_sub.cqam` | Test controlled-U with sub-kernels 9 and 10 |
-| `test_diagonal.cqam` | DIAGONAL_UNITARY kernel test |
-| `test_permutation.cqam` | PERMUTATION kernel test |
-| `trotter_hamiltonian.cqam` | Trotterized Hamiltonian simulation |
-| `vqe_loop.cqam` | Variational quantum eigensolver classical-quantum loop |
+The `examples/` directory contains 44 `.cqam` programs spanning quantum
+algorithms (Grover, Shor, QPE, VQE, QAOA, HHL, Deutsch-Jozsa,
+Bernstein-Vazirani), quantum walks, error correction, teleportation,
+superdense coding, Hamiltonian simulation, and kernel integration tests.
 
 Run any example:
 
