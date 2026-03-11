@@ -207,6 +207,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     kernel_id::CONTROLLED_U => {
                         // R[ctx0] = control qubit index
                         // R[ctx1] = CMEM base address for 5-cell parameter block
+                        //   CMEM[base+0] = sub_kernel_id
+                        //   CMEM[base+1] = power
+                        //   CMEM[base+2] = param_re (f64 bits) or sub-data CMEM addr (i64)
+                        //   CMEM[base+3] = param_im (f64 bits) or unused
+                        //   CMEM[base+4] = target_qubits
                         let control_qubit = param0 as u8;
                         let base = param1 as u16;
                         let sub_kernel_id = ctx.cmem.load(base) as u8;
@@ -214,6 +219,52 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                         let param_re = f64::from_bits(ctx.cmem.load(base.wrapping_add(2)) as u64);
                         let param_im = f64::from_bits(ctx.cmem.load(base.wrapping_add(3)) as u64);
                         let target_qubits = ctx.cmem.load(base.wrapping_add(4)) as u8;
+
+                        // For CMEM-dependent sub-kernels, pre-build from CMEM data.
+                        // CMEM[base+2] holds the sub-data base address as a plain integer.
+                        let sub_kernel_override: Option<Box<dyn cqam_sim::kernel::Kernel>> =
+                            match sub_kernel_id {
+                                kernel_id::DIAGONAL_UNITARY => {
+                                    let sub_base = ctx.cmem.load(base.wrapping_add(2)) as u16;
+                                    let t = if target_qubits == 0 {
+                                        qr.num_qubits() - 1
+                                    } else {
+                                        target_qubits
+                                    };
+                                    let sub_dim = 1usize << t;
+                                    let mut diagonal = Vec::with_capacity(sub_dim);
+                                    for k in 0..sub_dim {
+                                        let addr = sub_base.wrapping_add((2 * k) as u16);
+                                        let re = f64::from_bits(ctx.cmem.load(addr) as u64);
+                                        let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
+                                        diagonal.push((re, im));
+                                    }
+                                    Some(Box::new(DiagonalUnitary { diagonal }))
+                                }
+                                kernel_id::PERMUTATION => {
+                                    let sub_base = ctx.cmem.load(base.wrapping_add(2)) as u16;
+                                    let t = if target_qubits == 0 {
+                                        qr.num_qubits() - 1
+                                    } else {
+                                        target_qubits
+                                    };
+                                    let sub_dim = 1usize << t;
+                                    let mut table = Vec::with_capacity(sub_dim);
+                                    for k in 0..sub_dim {
+                                        let addr = sub_base.wrapping_add(k as u16);
+                                        table.push(ctx.cmem.load(addr) as usize);
+                                    }
+                                    let perm = Permutation::new(table).map_err(|e| {
+                                        CqamError::TypeMismatch {
+                                            instruction: "QKERNEL/CONTROLLED_U(PERMUTATION)".to_string(),
+                                            detail: e,
+                                        }
+                                    })?;
+                                    Some(Box::new(perm))
+                                }
+                                _ => None,
+                            };
+
                         Box::new(ControlledU {
                             control_qubit,
                             sub_kernel_id,
@@ -221,6 +272,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                             param_re,
                             param_im,
                             target_qubits,
+                            sub_kernel_override,
                         })
                     }
                     kernel_id::DIAGONAL_UNITARY => {
@@ -330,6 +382,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                             param_re: fparam1,
                             param_im: 0.0,
                             target_qubits: 0,
+                            sub_kernel_override: None,
                         })
                     }
                     _ => {
@@ -380,6 +433,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                             param_re: zparam1.0,
                             param_im: zparam1.1,
                             target_qubits: 0,
+                            sub_kernel_override: None,
                         })
                     }
                     _ => {

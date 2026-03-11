@@ -41,25 +41,70 @@ pub struct ControlledU {
     /// Number of bottom qubits in the register to target with the sub-kernel.
     /// 0 means all (n-1) non-control qubits (backward compatible).
     pub target_qubits: u8,
+    /// Pre-built sub-kernel for CMEM-dependent kernels (DIAGONAL_UNITARY,
+    /// PERMUTATION) that cannot be constructed from scalar parameters alone.
+    /// When set, `build_sub_kernel()` is bypassed.
+    pub sub_kernel_override: Option<Box<dyn Kernel>>,
 }
 
 impl ControlledU {
-    /// Build the sub-kernel with power-folded parameters where possible.
-    fn build_sub_kernel(&self) -> Box<dyn Kernel> {
+    /// Build the sub-kernel from scalar parameters, with power-folded params
+    /// where possible. For CMEM-dependent kernels (DIAGONAL_UNITARY,
+    /// PERMUTATION), `sub_kernel_override` must be set instead.
+    fn build_sub_kernel_owned(&self) -> Result<Box<dyn Kernel>, String> {
         let scale = if self.power == 0 { 1.0 } else { (1u64 << self.power) as f64 };
         match self.sub_kernel_id {
-            kernel_id::INIT => Box::new(Init),
-            kernel_id::ENTANGLE => Box::new(Entangle),
-            kernel_id::FOURIER => Box::new(Fourier),
-            kernel_id::DIFFUSE => Box::new(Diffuse),
-            kernel_id::GROVER_ITER => Box::new(GroverIter::single(self.param_re as u16)),
-            kernel_id::ROTATE => Box::new(Rotate { theta: self.param_re * scale }),
-            kernel_id::PHASE_SHIFT => Box::new(PhaseShift {
+            kernel_id::INIT => Ok(Box::new(Init)),
+            kernel_id::ENTANGLE => Ok(Box::new(Entangle)),
+            kernel_id::FOURIER => Ok(Box::new(Fourier)),
+            kernel_id::DIFFUSE => Ok(Box::new(Diffuse)),
+            kernel_id::GROVER_ITER => Ok(Box::new(GroverIter::single(self.param_re as u16))),
+            kernel_id::ROTATE => Ok(Box::new(Rotate { theta: self.param_re * scale })),
+            kernel_id::PHASE_SHIFT => Ok(Box::new(PhaseShift {
                 amplitude: (self.param_re * scale, self.param_im * scale),
-            }),
-            kernel_id::FOURIER_INV => Box::new(FourierInv),
-            _ => Box::new(Init),
+            })),
+            kernel_id::FOURIER_INV => Ok(Box::new(FourierInv)),
+            _ => Err(format!(
+                "Controlled-U: unsupported sub-kernel ID {} without sub_kernel_override",
+                self.sub_kernel_id
+            )),
         }
+    }
+
+    /// Build the target-qubit sub-unitary matrix by probing the sub-kernel
+    /// with basis states. Uses `sub_kernel_override` if set, otherwise builds
+    /// the sub-kernel from scalar parameters.
+    fn build_target_unitary(&self, target_dim: usize) -> Result<Vec<(f64, f64)>, String> {
+        // Resolve the sub-kernel: prefer override, fall back to building from params.
+        let owned_kernel = if self.sub_kernel_override.is_none() {
+            Some(self.build_sub_kernel_owned()?)
+        } else {
+            None
+        };
+        let sub_ref: &dyn Kernel = match self.sub_kernel_override {
+            Some(ref k) => k.as_ref(),
+            None => owned_kernel.as_ref().unwrap().as_ref(),
+        };
+
+        let need_loop = !self.is_power_foldable() && self.power > 0;
+        let loop_count = if need_loop { 1u64 << self.power } else { 1 };
+
+        let mut target_u = vec![complex::ZERO; target_dim * target_dim];
+        for col in 0..target_dim {
+            let mut basis = vec![complex::ZERO; target_dim];
+            basis[col] = complex::ONE;
+            let sv = Statevector::from_amplitudes(basis)
+                .map_err(|e| format!("ControlledU sub-state error: {}", e))?;
+            let mut result_sv = sv;
+            for _ in 0..loop_count {
+                result_sv = sub_ref.apply_sv(&result_sv)?;
+            }
+            let result_amps = result_sv.amplitudes();
+            for row in 0..target_dim {
+                target_u[row * target_dim + col] = result_amps[row];
+            }
+        }
+        Ok(target_u)
     }
 
     /// Whether the power can be folded into the parameter.
@@ -123,34 +168,11 @@ impl Kernel for ControlledU {
         let ctrl_bit_pos = (n - 1 - self.control_qubit) as usize;
 
         // Build sub-unitary for the target qubits only (t-qubit system).
-        let sub_kernel = self.build_sub_kernel();
-        let need_loop = !self.is_power_foldable() && self.power > 0;
-        let loop_count = if need_loop { 1u64 << self.power } else { 1 };
-
-        let mut target_u = vec![complex::ZERO; target_dim * target_dim];
-        for col in 0..target_dim {
-            let mut basis = vec![complex::ZERO; target_dim];
-            basis[col] = complex::ONE;
-            let sv = Statevector::from_amplitudes(basis)
-                .map_err(|e| CqamError::TypeMismatch {
-                    instruction: "QKERNEL/CONTROLLED_U".to_string(),
-                    detail: e,
-                })?;
-
-            let mut result_sv = sv;
-            for _ in 0..loop_count {
-                result_sv = sub_kernel.apply_sv(&result_sv)
-                    .map_err(|_| CqamError::TypeMismatch {
-                        instruction: "QKERNEL/CONTROLLED_U".to_string(),
-                        detail: "sub-kernel does not support statevector probing".to_string(),
-                    })?;
-            }
-
-            let result_amps = result_sv.amplitudes();
-            for row in 0..target_dim {
-                target_u[row * target_dim + col] = result_amps[row];
-            }
-        }
+        let target_u = self.build_target_unitary(target_dim)
+            .map_err(|e| CqamError::TypeMismatch {
+                instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                detail: e,
+            })?;
 
         // Build full C_U matrix.
         // For |ctrl=0⟩: identity.
@@ -217,25 +239,7 @@ impl Kernel for ControlledU {
         let amps = input.amplitudes();
 
         // Build sub-kernel unitary on target qubits
-        let sub_kernel = self.build_sub_kernel();
-        let need_loop = !self.is_power_foldable() && self.power > 0;
-        let loop_count = if need_loop { 1u64 << self.power } else { 1 };
-
-        let mut target_u = vec![complex::ZERO; target_dim * target_dim];
-        for col in 0..target_dim {
-            let mut basis = vec![complex::ZERO; target_dim];
-            basis[col] = complex::ONE;
-            let sv = Statevector::from_amplitudes(basis)
-                .map_err(|e| format!("ControlledU sub-state error: {}", e))?;
-            let mut result_sv = sv;
-            for _ in 0..loop_count {
-                result_sv = sub_kernel.apply_sv(&result_sv)?;
-            }
-            let result_amps = result_sv.amplitudes();
-            for row in 0..target_dim {
-                target_u[row * target_dim + col] = result_amps[row];
-            }
-        }
+        let target_u = self.build_target_unitary(target_dim)?;
 
         // Apply: for each |ctrl=1⟩ amplitude, transform target bits using target_u,
         // keeping spectator bits fixed.
@@ -312,6 +316,7 @@ mod tests {
             param_re: 1.0,
             param_im: 0.0,
             target_qubits: 0,
+            sub_kernel_override: None,
         };
         let result = cu.apply_sv(&sv).unwrap();
         let amps = result.amplitudes();
@@ -333,6 +338,7 @@ mod tests {
             param_re: std::f64::consts::PI,
             param_im: 0.0,
             target_qubits: 0,
+            sub_kernel_override: None,
         };
         let result = cu.apply_sv(&sv).unwrap();
         let amps = result.amplitudes();
@@ -352,6 +358,7 @@ mod tests {
             param_re: 1.0,
             param_im: 0.0,
             target_qubits: 0,
+            sub_kernel_override: None,
         };
         let result_sv = cu.apply_sv(&sv).unwrap();
         let result_dm = cu.apply(&dm).unwrap();
@@ -386,6 +393,7 @@ mod tests {
             param_re: std::f64::consts::PI,
             param_im: 0.0,
             target_qubits: 1, // only bottom 1 qubit
+            sub_kernel_override: None,
         };
 
         let result = cu.apply_sv(&sv).unwrap();
@@ -415,6 +423,7 @@ mod tests {
             param_re: std::f64::consts::PI,
             param_im: 0.0,
             target_qubits: 1,
+            sub_kernel_override: None,
         };
 
         let result = cu.apply_sv(&sv).unwrap();
@@ -442,6 +451,7 @@ mod tests {
             param_re: 1.0,
             param_im: 0.0,
             target_qubits: 1,
+            sub_kernel_override: None,
         };
 
         let result_sv = cu.apply_sv(&sv).unwrap();
