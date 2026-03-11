@@ -105,14 +105,21 @@ impl ProgramStateWord {
 
     /// Update quantum state flags from purity metric and entanglement detection.
     ///
-    /// Sets qf=true, sf based on whether purity < 1.0 (mixed state),
-    /// ef from the caller's entanglement scan.
+    /// Sets qf=true (callers always have a live register), sf based on
+    /// whether purity < 1.0 (mixed state), ef from entanglement scan.
+    /// QOBSERVE manages qf separately via register occupancy scan.
     /// Raises int_quantum_err when purity drops below the threshold.
     pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64, entangled: bool) {
         self.qf = true;
         self.sf = purity < 1.0 - 1e-10; // mixed state indicator
         self.ef = entangled;
-        self.df = false;
+
+        // DF is sticky: only set (pure->mixed transition), never cleared here.
+        if purity < 1.0 - 1e-10 {
+            self.df = true;
+        }
+
+        // CF is transient: any new quantum kernel supersedes stale measurement signal.
         self.cf = false;
 
         if threshold > 0.0 && purity < threshold {
@@ -120,10 +127,24 @@ impl ProgramStateWord {
         }
     }
 
-    /// Mark a quantum register as measured/collapsed.
-    pub fn mark_measured(&mut self) {
+    /// Mark that decoherence has occurred (sticky flag).
+    pub fn mark_decohered(&mut self) {
         self.df = true;
+    }
+
+    /// Mark that a measurement result has been collapsed into a hybrid register.
+    pub fn mark_collapsed(&mut self) {
         self.cf = true;
+    }
+
+    /// Clear the collapsed flag (e.g., after HREDUCE consumes the result).
+    pub fn clear_collapsed(&mut self) {
+        self.cf = false;
+    }
+
+    /// Clear the decoherence flag (e.g., after QPREP re-initialises the register).
+    pub fn clear_decoherence(&mut self) {
+        self.df = false;
     }
 
     /// Clear all maskable trap/interrupt flags.
@@ -164,6 +185,10 @@ impl ProgramStateWord {
             5 => self.sf,
             6 => self.ef,
             7 => self.hf,
+            8 => self.df,
+            9 => self.cf,
+            10 => self.forked,
+            11 => self.merged,
             _ => false,
         }
     }

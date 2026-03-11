@@ -378,3 +378,127 @@ fn bv_with_watchpoint() {
     let recovered = engine.ctx.cmem.load(1);
     assert_eq!(recovered, 21, "recovered secret should be 21");
 }
+
+// ===================================================================
+// PSW flag tests: DF, CF, FK, MG
+// ===================================================================
+
+/// After Bernstein-Vazirani runs to completion, QOBSERVE has occurred so
+/// DF (sticky decoherence flag) must be true. CF may be false because
+/// HREDUCE clears it after consuming the measurement result.
+#[test]
+fn test_df_cf_after_observe() {
+    let (mut engine, _) = load_and_build(&example_path("examples/bernstein_vazirani.cqam"));
+    run_to_completion(&mut engine);
+
+    // QOBSERVE sets DF (sticky). DF is only cleared by QPREP or PSW::clear(),
+    // neither of which occurs after QOBSERVE in this program.
+    assert!(
+        engine.ctx.psw.df,
+        "DF should be true after QOBSERVE (sticky decoherence flag)"
+    );
+
+    // The program runs HREDUCE after QOBSERVE, which clears CF.
+    // No subsequent QOBSERVE/QMEAS re-sets it before HALT.
+    assert!(
+        !engine.ctx.psw.cf,
+        "CF should be false: HREDUCE clears the transient collapsed flag"
+    );
+}
+
+/// DF is sticky across kernels but cleared by QPREP. Use GHZ with a
+/// breakpoint after QPREP to confirm DF is false at that point, then
+/// run to completion where QOBSERVE sets DF=true.
+#[test]
+fn test_df_sticky_across_kernels() {
+    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+
+    // Find the first QPREP Q0, 3 (GHZ preparation) instruction.
+    let qprep_pc = engine
+        .ctx
+        .program
+        .iter()
+        .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: 3 }))
+        .expect("Should find QPREP Q0, 3 in GHZ program");
+
+    // Set a breakpoint right after QPREP (to inspect flags post-preparation).
+    let bp_id = engine.breakpoints.add_address(qprep_pc + 1);
+
+    // Run until the breakpoint.
+    loop {
+        let result = engine.step_one();
+        match result.stopped_reason {
+            None => continue,
+            Some(StopReason::Breakpoint(id)) if id == bp_id => break,
+            Some(other) => panic!("Unexpected stop before breakpoint: {:?}", other),
+        }
+    }
+
+    // At the breakpoint (right after QPREP), DF should be false because
+    // QPREP calls clear_decoherence().
+    assert!(
+        !engine.ctx.psw.df,
+        "DF should be false right after QPREP (QPREP clears decoherence)"
+    );
+    assert!(
+        !engine.ctx.psw.cf,
+        "CF should be false right after QPREP"
+    );
+
+    // Continue to completion. The GHZ program performs QOBSERVE, which
+    // sets DF=true and it should remain set through subsequent operations
+    // (QKERNEL may clear CF but DF is sticky).
+    engine.breakpoints.remove(bp_id);
+    loop {
+        let result = engine.step_one();
+        match result.stopped_reason {
+            None => continue,
+            Some(StopReason::Halted) | Some(StopReason::EndOfProgram) => break,
+            Some(other) => panic!("Unexpected stop: {:?}", other),
+        }
+    }
+
+    // After QOBSERVE has run, DF must be true (sticky).
+    // Note: the GHZ program runs further QPREPs after the first QOBSERVE
+    // (for Q1, Q3 etc.) which clear DF. However, there is a final QOBSERVE
+    // on Q3 (line 135) after HMERGE, so DF should be true at the end.
+    assert!(
+        engine.ctx.psw.df,
+        "DF should be true after program completion (final QOBSERVE sets it)"
+    );
+}
+
+/// Verify FK and MG flags through the GHZ program's HFORK/HMERGE block.
+/// After HMERGE completes and the program reaches HALT, FK should be
+/// false and MG should be true (HMERGE sets MG and clears FK).
+/// However, note that any subsequent HFORK after HMERGE would clear MG.
+/// The GHZ program has: HFORK ... HMERGE ... QOBSERVE ... HALT
+/// So at HALT: FK=false, MG=true (no subsequent HFORK after HMERGE).
+#[test]
+fn test_fk_mg_with_hfork_hmerge() {
+    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    run_to_completion(&mut engine);
+
+    // The GHZ program executes HFORK then HMERGE. After HMERGE:
+    //   FK (forked) = false  (HMERGE clears it)
+    //   MG (merged) = true   (HMERGE sets it)
+    // No subsequent HFORK occurs before HALT, so these values persist.
+    assert!(
+        !engine.ctx.psw.forked,
+        "FK should be false after HMERGE (HMERGE clears forked)"
+    );
+    assert!(
+        engine.ctx.psw.merged,
+        "MG should be true after HMERGE (HMERGE sets merged)"
+    );
+
+    // Also verify via get_flag() with numeric IDs.
+    assert!(
+        !engine.ctx.psw.get_flag(10),
+        "get_flag(10) = FK should be false"
+    );
+    assert!(
+        engine.ctx.psw.get_flag(11),
+        "get_flag(11) = MG should be true"
+    );
+}

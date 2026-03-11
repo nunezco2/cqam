@@ -80,6 +80,22 @@ pub const FG_TRAP_SET: Color = Color::Indexed(196);
 pub const BG_TRAP_HALT: Color = Color::Indexed(52);
 
 // =============================================================================
+// 2.4b PSW flag group backgrounds
+// =============================================================================
+
+/// Classical flags (ZF, NF, OF, PF) background: dark blue (17).
+pub const BG_FLAG_CLASSICAL: Color = Color::Indexed(17);
+
+/// Quantum flags (QF, SF, EF) background: dark green (22).
+pub const BG_FLAG_QUANTUM: Color = Color::Indexed(22);
+
+/// Hybrid/measurement flags (HF, DF, CF, FK, MG) background: dark magenta (53).
+pub const BG_FLAG_HYBRID: Color = Color::Indexed(53);
+
+/// Trap flags background: dark red (52).
+pub const BG_FLAG_TRAP: Color = Color::Indexed(52);
+
+// =============================================================================
 // 2.5 Quantum state coloring -- five-stop heat map
 // =============================================================================
 
@@ -217,6 +233,45 @@ pub fn style_flag_set() -> Style {
 /// PSW flag CLR style: dark gray.
 pub fn style_flag_clr() -> Style {
     Style::default().fg(FG_FLAG_CLR)
+}
+
+/// PSW flag SET with group background.
+pub fn style_flag_set_bg(bg: Color) -> Style {
+    Style::default()
+        .fg(FG_FLAG_SET)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD)
+}
+
+/// PSW flag CLR with group background.
+pub fn style_flag_clr_bg(bg: Color) -> Style {
+    Style::default().fg(FG_FLAG_CLR).bg(bg)
+}
+
+/// Flag changed with group background.
+pub fn style_flag_changed_bg(bg: Color) -> Style {
+    Style::default()
+        .fg(FG_REG_CHANGED)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD)
+}
+
+/// Trap flag SET with group background.
+pub fn style_trap_set_bg(bg: Color) -> Style {
+    Style::default()
+        .fg(FG_TRAP_SET)
+        .bg(bg)
+        .add_modifier(Modifier::BOLD)
+}
+
+/// Trap flag CLR with group background.
+pub fn style_trap_clr_bg(bg: Color) -> Style {
+    Style::default().fg(FG_FLAG_CLR).bg(bg)
+}
+
+/// Separator span with group background (for spacing between flags).
+pub fn style_sep_bg(bg: Color) -> Style {
+    Style::default().bg(bg)
 }
 
 /// Trap flag SET style: bold red.

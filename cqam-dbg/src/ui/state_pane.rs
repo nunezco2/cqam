@@ -37,6 +37,15 @@ pub fn render(frame: &mut Frame, area: Rect, app: &AppState) {
 
     let mut lines: Vec<ListItem> = Vec::new();
 
+    // PSW flags (top for visibility).
+    build_psw_lines(app, &mut lines);
+
+    // Trap flags.
+    build_trap_lines(app, &mut lines);
+
+    // Blank separator.
+    lines.push(ListItem::new(Line::from("")));
+
     // R-file: 4 per row.
     build_ireg_lines(app, &mut lines);
 
@@ -51,15 +60,6 @@ pub fn render(frame: &mut Frame, area: Rect, app: &AppState) {
 
     // Q-file summary: 4 per row.
     build_qreg_lines(app, &mut lines);
-
-    // Blank separator.
-    lines.push(ListItem::new(Line::from("")));
-
-    // PSW flags.
-    build_psw_lines(app, &mut lines);
-
-    // Trap flags.
-    build_trap_lines(app, &mut lines);
 
     // Blank separator.
     lines.push(ListItem::new(Line::from("")));
@@ -181,88 +181,61 @@ fn build_qreg_lines(app: &AppState, lines: &mut Vec<ListItem<'static>>) {
     }
 }
 
-/// Build PSW flag display line.
+/// Build PSW flag display lines, grouped by resource type with colored backgrounds.
 fn build_psw_lines(app: &AppState, lines: &mut Vec<ListItem<'static>>) {
     let psw = &app.engine.ctx.psw;
     let snap = &app.engine.prev_snapshot;
     let ctx = &app.engine.ctx;
 
-    let flag_names = ["ZF", "NF", "OF", "PF", "QF", "SF", "EF", "HF"];
-    let flag_values = [psw.zf, psw.nf, psw.of, psw.pf, psw.qf, psw.sf, psw.ef, psw.hf];
+    // Group definitions: (label, background, flag_names, flag_values, starting flag_id)
+    let groups: &[(&str, ratatui::style::Color, &[&str], &[bool], usize)] = &[
+        ("Classical", theme::BG_FLAG_CLASSICAL, &["ZF", "NF", "OF", "PF"], &[psw.zf, psw.nf, psw.of, psw.pf], 0),
+        ("Quantum", theme::BG_FLAG_QUANTUM, &["QF", "SF", "EF"], &[psw.qf, psw.sf, psw.ef], 4),
+        ("Hybrid", theme::BG_FLAG_HYBRID, &["HF", "DF", "CF", "FK", "MG"], &[psw.hf, psw.df, psw.cf, psw.forked, psw.merged], 7),
+    ];
 
-    let mut spans = vec![Span::styled("PSW     ", theme::style_dimmed())];
-    for (i, (&name, &value)) in flag_names.iter().zip(flag_values.iter()).enumerate() {
-        let changed = snap.psw_flag_changed(ctx, i);
-        let flag_str = if value { "1" } else { "0" };
-        let base_style = if value {
-            theme::style_flag_set()
-        } else {
-            theme::style_flag_clr()
-        };
-        let style = if changed {
-            theme::style_reg_changed()
-        } else {
-            base_style
-        };
-        spans.push(Span::styled(format!("{}={}", name, flag_str), style));
-        spans.push(Span::styled("  ", theme::style_normal()));
+    let mut spans = vec![Span::styled("PSW  ", theme::style_dimmed())];
+    for &(label, bg, names, values, id_offset) in groups {
+        spans.push(Span::styled(format!(" {} ", label), theme::style_sep_bg(bg)));
+        for (j, (&name, &value)) in names.iter().zip(values.iter()).enumerate() {
+            let flag_id = id_offset + j;
+            let changed = snap.psw_flag_changed(ctx, flag_id);
+            let flag_str = if value { "1" } else { "0" };
+            let style = if changed {
+                theme::style_flag_changed_bg(bg)
+            } else if value {
+                theme::style_flag_set_bg(bg)
+            } else {
+                theme::style_flag_clr_bg(bg)
+            };
+            spans.push(Span::styled(format!("{}={}", name, flag_str), style));
+            spans.push(Span::styled(" ", theme::style_sep_bg(bg)));
+        }
+        spans.push(Span::styled(" ", theme::style_normal()));
     }
     lines.push(ListItem::new(Line::from(spans)));
 }
 
-/// Build trap flag display line.
+/// Build trap flag display line with colored background.
 fn build_trap_lines(app: &AppState, lines: &mut Vec<ListItem<'static>>) {
     let psw = &app.engine.ctx.psw;
+    let bg = theme::BG_FLAG_TRAP;
 
-    let mut spans = vec![Span::styled("Traps   ", theme::style_dimmed())];
+    let trap_names = ["halt", "arith", "qerr", "sync"];
+    let trap_values = [psw.trap_halt, psw.trap_arith, psw.int_quantum_err, psw.int_sync_fail];
 
-    // Halt trap -- special danger styling.
-    let halt_style = if psw.trap_halt {
-        theme::style_trap_halt()
-    } else {
-        theme::style_flag_clr()
-    };
-    spans.push(Span::styled(
-        format!("halt={}", if psw.trap_halt { "1" } else { "0" }),
-        halt_style,
-    ));
-    spans.push(Span::styled("  ", theme::style_normal()));
-
-    // Arithmetic trap.
-    let arith_style = if psw.trap_arith {
-        theme::style_trap_set()
-    } else {
-        theme::style_flag_clr()
-    };
-    spans.push(Span::styled(
-        format!("arith={}", if psw.trap_arith { "1" } else { "0" }),
-        arith_style,
-    ));
-    spans.push(Span::styled("  ", theme::style_normal()));
-
-    // Quantum error.
-    let qerr_style = if psw.int_quantum_err {
-        theme::style_trap_set()
-    } else {
-        theme::style_flag_clr()
-    };
-    spans.push(Span::styled(
-        format!("qerr={}", if psw.int_quantum_err { "1" } else { "0" }),
-        qerr_style,
-    ));
-    spans.push(Span::styled("  ", theme::style_normal()));
-
-    // Sync failure.
-    let sync_style = if psw.int_sync_fail {
-        theme::style_trap_set()
-    } else {
-        theme::style_flag_clr()
-    };
-    spans.push(Span::styled(
-        format!("sync={}", if psw.int_sync_fail { "1" } else { "0" }),
-        sync_style,
-    ));
-
+    let mut spans = vec![Span::styled("Traps", theme::style_dimmed())];
+    spans.push(Span::styled(" ", theme::style_sep_bg(bg)));
+    for (&name, &value) in trap_names.iter().zip(trap_values.iter()) {
+        let flag_str = if value { "1" } else { "0" };
+        let style = if value {
+            theme::style_trap_set_bg(bg)
+        } else {
+            theme::style_trap_clr_bg(bg)
+        };
+        spans.push(Span::styled(format!("{}={}", name, flag_str), style));
+        spans.push(Span::styled(" ", theme::style_sep_bg(bg)));
+    }
     lines.push(ListItem::new(Line::from(spans)));
 }
 

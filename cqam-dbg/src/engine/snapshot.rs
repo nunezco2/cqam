@@ -17,8 +17,8 @@ pub struct RegisterSnapshot {
     pub fregs: [f64; 16],
     /// Complex register values: Z0--Z15.
     pub zregs: [(f64, f64); 16],
-    /// PSW flags in flag_id order: ZF, NF, OF, PF, QF, SF, EF, HF.
-    pub psw_flags: [bool; 8],
+    /// PSW flags in flag_id order: ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG.
+    pub psw_flags: [bool; 12],
 }
 
 impl RegisterSnapshot {
@@ -48,6 +48,10 @@ impl RegisterSnapshot {
             ctx.psw.sf,
             ctx.psw.ef,
             ctx.psw.hf,
+            ctx.psw.df,
+            ctx.psw.cf,
+            ctx.psw.forked,
+            ctx.psw.merged,
         ];
 
         Self {
@@ -80,7 +84,7 @@ impl RegisterSnapshot {
 
     /// Check if PSW flag `flag_id` changed between this snapshot and current state.
     pub fn psw_flag_changed(&self, ctx: &ExecutionContext, flag_id: usize) -> bool {
-        if flag_id >= 8 {
+        if flag_id >= 12 {
             return false;
         }
         let current = ctx.psw.get_flag(flag_id as u8);

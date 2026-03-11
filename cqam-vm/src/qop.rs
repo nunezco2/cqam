@@ -179,6 +179,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
             ctx.psw.ef = entangled;
+            ctx.psw.clear_decoherence();
+            ctx.psw.cf = false;
             Ok(())
         }
 
@@ -529,7 +531,9 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     }
                 };
                 ctx.hregs.set(*dst_h, hval)?;
-                ctx.psw.mark_measured();
+                ctx.psw.mark_decohered();
+                ctx.psw.mark_collapsed();
+                ctx.psw.qf = ctx.qregs.iter().any(|q| q.is_some());
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -642,6 +646,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
             ctx.psw.ef = entangled;
+            ctx.psw.clear_decoherence();
+            ctx.psw.cf = false;
             Ok(())
         }
 
@@ -824,7 +830,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 ctx.qregs[*src_q as usize] = Some(post_qr);
 
                 ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
-                ctx.psw.mark_measured();
+                ctx.psw.mark_decohered();
+                ctx.psw.mark_collapsed();
                 ctx.psw.zf = outcome == 0;
                 Ok(())
             } else {
@@ -1087,6 +1094,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
             ctx.psw.ef = entangled;
+            ctx.psw.clear_decoherence();
+            ctx.psw.cf = false;
             Ok(())
         }
 

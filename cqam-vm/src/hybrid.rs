@@ -30,11 +30,13 @@ pub fn execute_hybrid(
             fork_ctx.pc = ctx.pc + 1; // Fork starts at next instruction
             fork_ctx.psw.hf = true;
             fork_ctx.psw.forked = true;
+            fork_ctx.psw.merged = false;
 
             fork_mgr.spawn_fork(fork_ctx)?;
 
             ctx.psw.hf = true;
             ctx.psw.forked = true;
+            ctx.psw.merged = false;
             Ok(false)
         }
 
@@ -44,6 +46,7 @@ pub fn execute_hybrid(
             }
             ctx.psw.hf = true;
             ctx.psw.merged = true;
+            ctx.psw.forked = false;
             Ok(false)
         }
 
@@ -263,6 +266,9 @@ pub fn execute_hybrid(
                     ));
                 }
             }
+
+            // Consuming a measurement result clears the collapsed signal.
+            ctx.psw.clear_collapsed();
 
             // Update PSW flags from the reduction result
             match *func {

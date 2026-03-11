@@ -252,7 +252,7 @@ fn test_hfork_merge_flow_simulation() {
         }
     }
 
-    assert!(ctx.psw.forked);
+    assert!(!ctx.psw.forked);  // HMERGE clears forked
     assert!(ctx.psw.merged);
     assert_eq!(ctx.iregs.get(0).unwrap(), 5);
 }
@@ -325,7 +325,7 @@ fn test_hfork_spawns_real_thread() {
     let mut fm = ForkManager::new();
     cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
 
-    assert!(ctx.psw.forked);
+    assert!(!ctx.psw.forked);  // HMERGE clears forked
     assert!(ctx.psw.merged);
     assert_eq!(ctx.iregs.get(0).unwrap(), 42);
     // The fork should have completed and been collected
@@ -1011,14 +1011,15 @@ fn test_hfork_sets_flags_on_fork_context() {
     let mut fm = ForkManager::new();
     cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
 
-    // Main flags
+    // Main flags: after HMERGE, forked is cleared, merged is set
     assert!(ctx.psw.hf);
-    assert!(ctx.psw.forked);
+    assert!(!ctx.psw.forked);  // HMERGE clears forked
 
-    // Fork context flags (set in hybrid.rs before spawn_fork)
+    // Fork context flags: the fork also executes HMERGE, which clears forked
     assert_eq!(fm.completed_forks.len(), 1);
     assert!(fm.completed_forks[0].psw.hf);
-    assert!(fm.completed_forks[0].psw.forked);
+    assert!(!fm.completed_forks[0].psw.forked);  // HMERGE clears forked
+    assert!(fm.completed_forks[0].psw.merged);
 }
 
 /// Verify that take_completed drains all forks and a second call returns empty.

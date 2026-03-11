@@ -518,6 +518,14 @@ pub mod flag_id {
     pub const EF: u8 = 6;
     /// Hybrid mode flag.
     pub const HF: u8 = 7;
+    /// Decoherence flag (sticky).
+    pub const DF: u8 = 8;
+    /// Collapsed flag (transient).
+    pub const CF: u8 = 9;
+    /// Forked flag.
+    pub const FK: u8 = 10;
+    /// Merged flag.
+    pub const MG: u8 = 11;
 }
 
 /// Observation mode IDs for QObserve/QSample.
@@ -621,6 +629,10 @@ pub fn flag_name(id: u8) -> &'static str {
         flag_id::SF => "SF",
         flag_id::EF => "EF",
         flag_id::HF => "HF",
+        flag_id::DF => "DF",
+        flag_id::CF => "CF",
+        flag_id::FK => "FK",
+        flag_id::MG => "MG",
         _ => "unknown",
     }
 }

@@ -400,9 +400,9 @@ HALT
     assert!((f0 - 1.5).abs() < 1e-10,
         "Mean of Bell distribution should be 1.5, got F0={}", f0);
 
-    // Measurement flags should be set
-    assert!(ctx.psw.df, "Decoherence flag should be set after QObserve");
-    assert!(ctx.psw.cf, "Collapse flag should be set after QObserve");
+    // Measurement flags: DF is sticky, CF is transient (cleared by HREDUCE)
+    assert!(ctx.psw.df, "Decoherence flag should be set after QObserve (sticky)");
+    assert!(!ctx.psw.cf, "Collapse flag should be cleared after HREDUCE (transient)");
 }
 
 // =============================================================================

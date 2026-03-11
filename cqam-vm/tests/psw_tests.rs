@@ -86,6 +86,10 @@ fn test_get_flag_by_id() {
     psw.zf = true;
     psw.qf = true;
     psw.hf = true;
+    psw.df = true;
+    psw.cf = true;
+    psw.forked = true;
+    psw.merged = true;
 
     assert!(psw.get_flag(0));   // ZF
     assert!(!psw.get_flag(1));  // NF (not set)
@@ -95,15 +99,74 @@ fn test_get_flag_by_id() {
     assert!(!psw.get_flag(5));  // SF (not set)
     assert!(!psw.get_flag(6));  // EF (not set)
     assert!(psw.get_flag(7));   // HF
+    assert!(psw.get_flag(8));   // DF
+    assert!(psw.get_flag(9));   // CF
+    assert!(psw.get_flag(10));  // FK (forked)
+    assert!(psw.get_flag(11));  // MG (merged)
     assert!(!psw.get_flag(255)); // out of range -> false
 }
 
 #[test]
-fn test_mark_measured() {
+fn test_mark_decohered_and_collapsed() {
     let mut psw = ProgramStateWord::new();
-    psw.mark_measured();
+    psw.mark_decohered();
+    assert!(psw.df);
+    assert!(!psw.cf);
+
+    psw.mark_collapsed();
     assert!(psw.df);
     assert!(psw.cf);
+}
+
+#[test]
+fn test_clear_collapsed() {
+    let mut psw = ProgramStateWord::new();
+    psw.mark_collapsed();
+    assert!(psw.cf);
+    psw.clear_collapsed();
+    assert!(!psw.cf);
+}
+
+#[test]
+fn test_clear_decoherence() {
+    let mut psw = ProgramStateWord::new();
+    psw.mark_decohered();
+    assert!(psw.df);
+    psw.clear_decoherence();
+    assert!(!psw.df);
+}
+
+#[test]
+fn test_df_sticky_in_update_from_qmeta() {
+    let mut psw = ProgramStateWord::new();
+    // Set DF via mark_decohered
+    psw.mark_decohered();
+    assert!(psw.df);
+
+    // update_from_qmeta with pure state should NOT clear DF (sticky)
+    psw.update_from_qmeta(1.0, 0.0, false);
+    assert!(psw.df, "DF must be sticky: update_from_qmeta with purity=1.0 must not clear it");
+}
+
+#[test]
+fn test_df_set_by_low_purity() {
+    let mut psw = ProgramStateWord::new();
+    assert!(!psw.df);
+
+    // update_from_qmeta with low purity should set DF
+    psw.update_from_qmeta(0.5, 0.0, false);
+    assert!(psw.df, "DF should be set when purity < 1.0");
+}
+
+#[test]
+fn test_cf_transient_in_update_from_qmeta() {
+    let mut psw = ProgramStateWord::new();
+    psw.mark_collapsed();
+    assert!(psw.cf);
+
+    // update_from_qmeta should clear CF (transient)
+    psw.update_from_qmeta(1.0, 0.0, false);
+    assert!(!psw.cf, "CF must be transient: update_from_qmeta must clear it");
 }
 
 #[test]
@@ -112,12 +175,20 @@ fn test_clear() {
     psw.zf = true;
     psw.nf = true;
     psw.qf = true;
+    psw.df = true;
+    psw.cf = true;
+    psw.forked = true;
+    psw.merged = true;
     psw.trap_halt = true;
     psw.clear();
 
     assert!(!psw.zf);
     assert!(!psw.nf);
     assert!(!psw.qf);
+    assert!(!psw.df);
+    assert!(!psw.cf);
+    assert!(!psw.forked);
+    assert!(!psw.merged);
     assert!(!psw.trap_halt);
 }
 
