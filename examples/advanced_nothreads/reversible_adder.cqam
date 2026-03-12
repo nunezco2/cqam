@@ -1,0 +1,98 @@
+# reversible_adder.cqam — Quantum addition via PERM kernel
+#
+# |a>|b> → |a>|(a+b) mod 4> on 4 qubits (2 bits per register).
+# Permutation tables in .data section (no runtime ISTR needed).
+# Tests: basis-state addition, modular wrap, add+sub identity.
+#
+#! qubits 4
+
+.data
+    .org 200
+adder:
+    .i64 0, 1, 2, 3, 5, 6, 7, 4, 10, 11, 8, 9, 15, 12, 13, 14
+    .org 300
+subtractor:
+    .i64 0, 1, 2, 3, 7, 4, 5, 6, 10, 11, 8, 9, 13, 14, 15, 12
+
+    .org 1000
+banner:
+    .ascii "=== Reversible Adder ===\n"
+t1_fmt:
+    .ascii "Test1 |2>|1>+add: got=%d expect=11\n"
+t2_fmt:
+    .ascii "Test2 |3>|3>+add: got=%d expect=14\n"
+t3_fmt:
+    .ascii "Test3 add+sub=id: got=%d expect=9\n"
+res_fmt:
+    .ascii "Passed=%d of 3\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R10, @adder
+    ILDI R11, @adder.len
+    ILDI R12, @subtractor
+    ILDI R13, 0              # pass counter
+
+# --- Test 1: |a=2,b=1> = state 9 → state 11 (2+1=3) ---
+    QPREP Q0, 1
+    ILDI R3, 9
+    QFLIP Q0, Q0, R3
+    QKERNEL PERM, Q0, Q0, R10, R11
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R2
+    ILDI R0, @t1_fmt
+    ILDI R1, @t1_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+    ILDI R3, 11
+    IEQ R3, R2, R3
+    IADD R13, R13, R3
+
+# --- Test 2: |a=3,b=3> = state 15 → state 14 (3+3 mod 4=2) ---
+    QPREP Q1, 1
+    ILDI R3, 15
+    QFLIP Q1, Q1, R3
+    QKERNEL PERM, Q1, Q1, R10, R11
+    QOBSERVE H1, Q1
+    HREDUCE MODEV, H1, R2
+    ILDI R0, @t2_fmt
+    ILDI R1, @t2_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+    ILDI R3, 14
+    IEQ R3, R2, R3
+    IADD R13, R13, R3
+
+# --- Test 3: add then subtract = identity (state 9→11→9) ---
+    QPREP Q2, 1
+    ILDI R3, 9
+    QFLIP Q2, Q2, R3
+    QKERNEL PERM, Q2, Q2, R10, R11           # add
+    ILDI R4, @subtractor.len
+    QKERNEL PERM, Q2, Q2, R12, R4            # subtract
+    QOBSERVE H2, Q2
+    HREDUCE MODEV, H2, R2
+    ILDI R0, @t3_fmt
+    ILDI R1, @t3_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+    ILDI R3, 9
+    IEQ R3, R2, R3
+    IADD R13, R13, R3
+
+# --- Result ---
+    IADD R2, R13, R15
+    ISUB R2, R2, R15
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

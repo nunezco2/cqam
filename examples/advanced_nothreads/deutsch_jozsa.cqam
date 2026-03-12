@@ -1,0 +1,56 @@
+# deutsch_jozsa.cqam — Constant vs. balanced function discriminator
+#
+# Single-query decision: is f:{0,1}^n→{0,1} constant or balanced?
+#   Constant: QFT of uniform → peak at |0> (mode = 0)
+#   Balanced: QPHASE on qubit 0 → QFT spreads away from |0>
+#
+# Uses CALL/RET to factor the common query-decode-measure pipeline.
+#
+#! qubits 8
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Deutsch-Jozsa ===\n"
+const_fmt:
+    .ascii "Constant: mode=%d (expect 0)\n"
+bal_fmt:
+    .ascii "Balanced: mode=%d (expect nonzero)\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0                   # zero ctx
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Test 1: constant f(x) = 0 (no oracle)
+# ============================================
+    QPREP Q0, 0                  # uniform superposition
+    NOP                          # oracle: identity
+    QKERNEL QFFT, Q0, Q0, R14, R14
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R2        # mode = 0 → constant
+    ILDI R0, @const_fmt
+    ILDI R1, @const_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Test 2: balanced f(x) = x_0 (parity of LSB)
+# ============================================
+    QPREP Q1, 0
+    ILDI R3, 1
+    QPHASE Q1, Q1, R3            # Z on qubit 0 → balanced oracle
+    QKERNEL QFFT, Q1, Q1, R14, R14
+    QOBSERVE H1, Q1
+    HREDUCE MODEV, H1, R2        # mode ≠ 0 → balanced
+    ILDI R0, @bal_fmt
+    ILDI R1, @bal_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

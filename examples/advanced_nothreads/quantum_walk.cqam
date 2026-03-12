@@ -1,0 +1,56 @@
+# quantum_walk.cqam — Discrete quantum walk on cycle graph
+#
+# Coin-shift model: QHADM on coin qubit (LSB) acts as coin flip,
+# DIFF kernel acts as conditional shift. Exhibits ballistic
+# spreading (variance ~ t^2) vs classical random walk (~ t).
+#
+#! qubits 16
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum Walk ===\n"
+param_fmt:
+    .ascii "Qubits=%d steps=20\n"
+res_fmt:
+    .ascii "Mode=%d mean=%f variance=%f\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    IQCFG R2
+    ILDI R0, @param_fmt
+    ILDI R1, @param_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Walk ---
+    QPREP Q0, 1              # |0...0> (walker at origin)
+    ILDI R4, 1               # coin mask (qubit 0 = LSB)
+    QHADM Q0, Q0, R4         # initial coin flip
+    ILDI R3, 20              # walk steps
+
+LABEL: walk_loop
+    QHADM Q0, Q0, R4                # coin operation
+    QKERNEL DIFF, Q0, Q0, R14, R14  # shift operation
+    ISUB R3, R3, R15
+    JIF R3, walk_loop
+
+# --- Measure ---
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R2
+    HREDUCE MEANT, H0, F1
+    HREDUCE VARNC, H0, F2
+
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

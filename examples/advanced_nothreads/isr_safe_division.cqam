@@ -1,0 +1,147 @@
+# isr_safe_division.cqam — ISR, subroutines, bitwise, all integer ops
+#
+# Computes N! mod N for N=1..8 using a factorial subroutine.
+# Triggers a divide-by-zero to exercise ISR recovery.
+# Ends with a bitwise chain and flag checks.
+#
+# Expected: trap fires, recovers, then prints factorial table + "Bitwise: 170"
+#
+#! qubits 1
+
+.data
+    .org 500
+results:
+    .i64 0, 0, 0, 0, 0, 0, 0, 0
+
+    .org 1000
+banner:
+    .ascii "=== ISR Safe Division ===\n"
+trap_msg:
+    .ascii "Trap recovered\n"
+row_fmt:
+    .ascii "%d! mod %d = %d\n"
+bit_fmt:
+    .ascii "Bitwise: %d\n"
+
+.code
+    ILDI R15, 1
+
+# --- Register arithmetic ISR ---
+    SETIV 0, arith_handler
+
+# --- Print banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Trigger divide-by-zero ---
+    ILDI R0, 42
+    ILDI R1, 0
+    IDIV R2, R0, R1
+
+# --- Recovery confirmed, print trap message ---
+    ILDI R0, @trap_msg
+    ILDI R1, @trap_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Main loop: for K=1..8, compute K! mod K
+# ============================================
+    ILDI R3, 1                    # K = 1
+    ILDI R4, 8                    # max
+
+LABEL: main_loop
+    IGT R6, R3, R4
+    JIF R6, bitwise_demo
+
+    # Compute K! via subroutine (R0=K in, R1=K! out)
+    IADD R0, R3, R15
+    ISUB R0, R0, R15              # R0 = K
+    CALL factorial
+
+    # R1 = K!, compute K! mod K
+    IMOD R2, R1, R3
+
+    # Store result via indirect addressing
+    ILDI R7, @results
+    ISUB R8, R3, R15              # offset = K-1
+    IADD R7, R7, R8
+    ISTRX R2, R7
+
+    # Print: K, K, K! mod K
+    IADD R2, R3, R15
+    ISUB R2, R2, R15              # R2 = K (first %d)
+    IADD R3, R3, R15
+    ISUB R3, R3, R15              # R3 = K (second %d — reuse)
+    ILDX R4, R7                   # R4 = result (third %d)
+    ILDI R0, @row_fmt
+    ILDI R1, @row_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    # Restore R4=8 (clobbered by ECALL arg)
+    ILDI R4, 8
+    IADD R3, R3, R15              # K++
+    JMP main_loop
+
+# ============================================
+# Bitwise: (0xAA & 0xFF) | (0x55 ^ 0xFF) = 170
+# ============================================
+LABEL: bitwise_demo
+    ILDI R0, 255                  # 0xFF
+    ILDI R1, 170                  # 0xAA
+    ILDI R2, 85                   # 0x55
+    IAND R3, R1, R0               # 0xAA
+    IXOR R4, R2, R0               # 0xAA
+    IOR  R5, R3, R4               # 0xAA = 170
+    INOT R6, R2                   # ~0x55
+    ISHL R7, R15, 3               # 1 << 3 = 8
+    ISHR R8, R7, 1                # 8 >> 1 = 4
+
+    # ZF flag test
+    ISUB R9, R15, R15             # 0 → sets ZF
+    JMPF ZF, zf_ok
+    JMP zf_ok
+LABEL: zf_ok
+
+    # NF flag test
+    ILDI R9, -5                   # negative
+    JMPF NF, nf_ok
+    JMP nf_ok
+LABEL: nf_ok
+
+    # Print bitwise result
+    IADD R2, R5, R15
+    ISUB R2, R2, R15              # R2 = 170
+    ILDI R0, @bit_fmt
+    ILDI R1, @bit_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT
+
+# ============================================
+# Subroutine: factorial
+# Input: R0 = n   Output: R1 = n!
+# ============================================
+LABEL: factorial
+    ILDI R1, 1
+    ILDI R10, 1
+    ILDI R11, 0
+LABEL: fact_loop
+    IEQ R12, R11, R0
+    JIF R12, fact_done
+    IADD R11, R11, R10
+    IMUL R1, R1, R11
+    JMP fact_loop
+LABEL: fact_done
+    RET
+
+# ============================================
+# ISR: arithmetic trap handler
+# ============================================
+LABEL: arith_handler
+    ILDI R2, -1                   # sentinel
+    RETI

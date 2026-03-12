@@ -1,0 +1,144 @@
+# grover_with_verification.cqam — Iterative Grover search with classically
+#                                  computed iteration count, subroutines,
+#                                  convergence tracking, GHZ flag verification
+#
+# Computes floor(pi/4 * sqrt(2^N)) iterations, applies Grover in a loop
+# via CALL/RET, and tracks convergence. Also verifies EF/IF flags on GHZ.
+#
+#! qubits 4
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Grover with Verification ===\n"
+param_fmt:
+    .ascii "Target=%d Qubits=%d Iterations=%d\n"
+iter_fmt:
+    .ascii "Iter %d done\n"
+res_fmt:
+    .ascii "Argmax=%d Mode=%d\n"
+stat_fmt:
+    .ascii "Mean=%f Variance=%f\n"
+ghz_fmt:
+    .ascii "GHZ: EF=%d\n"
+
+.code
+    ILDI R15, 1
+
+# --- Banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Compute optimal iterations: floor(pi/4 * sqrt(2^N))
+# ============================================
+    IQCFG R10                    # R10 = N = 4
+
+    # Compute 2^N via loop
+    ILDI R11, 1
+    ILDI R12, 0
+LABEL: pow2_loop
+    IEQ R13, R12, R10
+    JIF R13, pow2_done
+    IADD R11, R11, R11
+    IADD R12, R12, R15
+    JMP pow2_loop
+LABEL: pow2_done
+    # R11 = 16
+
+    CVTIF F0, R11                # F0 = 16.0
+    FSQRT F1, F0                 # F1 = 4.0
+    FLDI F2, 1
+    FATAN2 F3, F2, F2            # F3 = pi/4 ≈ 0.7854
+    FMUL F4, F3, F1              # F4 = pi/4 * 4 ≈ 3.14
+    CVTFI R4, F4                 # R4 = 3 (iterations)
+
+    # Target state
+    ILDI R5, 5
+
+    # Print parameters
+    IADD R2, R5, R15
+    ISUB R2, R2, R15             # R2 = target = 5
+    IADD R3, R10, R15
+    ISUB R3, R3, R15             # R3 = N = 4
+    IADD R4, R4, R15
+    ISUB R4, R4, R15             # R4 = iterations = 3
+    ILDI R0, @param_fmt
+    ILDI R1, @param_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Iterative Grover amplification
+# ============================================
+    QPREP Q0, 0                  # uniform superposition
+    ILDI R6, 0                   # iteration counter
+    ILDI R14, 0                  # zero ctx
+
+LABEL: grover_loop
+    IEQ R7, R6, R4
+    JIF R7, grover_done
+
+    CALL grover_step
+
+    IADD R6, R6, R15             # counter++
+    IADD R2, R6, R15
+    ISUB R2, R2, R15             # R2 = iteration number
+    ILDI R0, @iter_fmt
+    ILDI R1, @iter_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    JMP grover_loop
+
+LABEL: grover_done
+
+# ============================================
+# Final measurement and statistics
+# ============================================
+    QOBSERVE H0, Q0
+    HREDUCE ARGMX, H0, R2
+    HREDUCE MODEV, H0, R3
+    HREDUCE MEANT, H0, F5
+    HREDUCE VARNC, H0, F6
+
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    FADD F1, F5, F5
+    FSUB F1, F1, F5              # F1 = mean
+    FADD F2, F6, F6
+    FSUB F2, F2, F6              # F2 = variance
+    ILDI R0, @stat_fmt
+    ILDI R1, @stat_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# GHZ entanglement flag verification
+# ============================================
+    QPREP Q1, 3                  # GHZ → sets EF
+    JMPF EF, ef_set
+    ILDI R2, 0
+    JMP ef_print
+LABEL: ef_set
+    ILDI R2, 1
+LABEL: ef_print
+    QOBSERVE H1, Q1             # cleanup
+    ILDI R0, @ghz_fmt
+    ILDI R1, @ghz_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT
+
+# ============================================
+# Subroutine: one Grover iteration
+# ============================================
+LABEL: grover_step
+    QKERNEL GROV, Q0, Q0, R5, R14
+    RET

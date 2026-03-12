@@ -1,0 +1,153 @@
+# simon.cqam — Find hidden period s where f(x) = f(x XOR s)
+#
+# Parametric N qubits, 4 query rounds collecting y s.t. y·s = 0.
+# Uses subroutines for pow2 and popcount, phase-shift oracle,
+# partial Hadamard (QHADM on lower n qubits only).
+#
+#! qubits 16
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Simon's Algorithm ===\n"
+param_fmt:
+    .ascii "Secret=%d qubits=%d\n"
+round_fmt:
+    .ascii "Round %d: y=%d dot_check=%d\n"
+res_fmt:
+    .ascii "Recovered=%d secret=%d match=%d\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Setup ---
+    ILDI R10, 13                 # secret period s = 13 (1101₂)
+    IQCFG R11                    # N_total qubits
+    ISHR R11, R11, 1             # n = N_total / 2
+    ISTR R11, 99                 # save n
+
+    # Compute mask = 2^n - 1 via pow2 subroutine
+    IADD R0, R11, R15
+    ISUB R0, R0, R15             # R0 = n (arg for pow2)
+    CALL pow2                    # R1 = 2^n
+    ISUB R9, R1, R15             # R9 = mask (lower n bits)
+
+    # Print params
+    IADD R2, R10, R15
+    ISUB R2, R2, R15
+    IQCFG R3
+    ILDI R0, @param_fmt
+    ILDI R1, @param_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Query rounds ---
+    ILDI R4, 4                   # rounds remaining
+    ILDI R5, 0                   # round counter
+    ILDI R6, 100                 # CMEM pointer for y values
+
+LABEL: query_loop
+    # Prepare |0>, Hadamard lower n qubits
+    QPREP Q0, 1
+    QHADM Q0, Q0, R9
+
+    # Oracle: phase-shift encodes period
+    CVTIF F0, R10
+    CVTFZ Z0, F0
+    ZLDI Z1, 0, 0
+    QKERNELZ PHSH, Q0, Q0, Z0, Z1
+
+    # Second Hadamard on lower n qubits
+    QHADM Q0, Q0, R9
+
+    # Projective measurement → y
+    QOBSERVE H0, Q0, SAMPLE
+    HREDUCE ROUND, H0, R7        # R7 = y
+
+    # Store y
+    ISTRX R7, R6
+    IADD R6, R6, R15
+
+    # Verify y·s = 0 mod 2 via popcount subroutine
+    IAND R0, R7, R10             # R0 = y AND s (arg for popcount)
+    CALL popcount                # R1 = popcount
+    ILDI R8, 2
+    IMOD R8, R1, R8              # R8 = popcount mod 2 (should be 0)
+
+    # Print round
+    IADD R5, R5, R15
+    IADD R2, R5, R15
+    ISUB R2, R2, R15             # R2 = round number
+    IADD R3, R7, R15
+    ISUB R3, R3, R15             # R3 = y
+    IADD R4, R8, R15
+    ISUB R4, R4, R15             # R4 = dot check
+    ILDI R0, @round_fmt
+    ILDI R1, @round_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R4, 4
+    ISUB R4, R4, R5              # rounds remaining
+    JIF R4, query_loop
+
+# --- Classical recovery: XOR heuristic ---
+    ILDI R6, 100
+    ILDX R7, R6                  # y_0
+    IADD R6, R6, R15
+    ILDX R8, R6                  # y_1
+    IXOR R12, R7, R8             # candidate = y_0 XOR y_1
+
+    IEQ R13, R12, R10            # match?
+
+    IADD R2, R12, R15
+    ISUB R2, R2, R15
+    IADD R3, R10, R15
+    ISUB R3, R3, R15
+    IADD R4, R13, R15
+    ISUB R4, R4, R15
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT
+
+# ============================================
+# Subroutine: pow2 — R0=exponent, R1=2^R0
+# ============================================
+LABEL: pow2
+    ILDI R1, 1
+    IADD R2, R0, R15
+    ISUB R2, R2, R15             # R2 = counter
+LABEL: pow2_loop
+    IEQ R3, R2, R14
+    JIF R3, pow2_done
+    IADD R1, R1, R1
+    ISUB R2, R2, R15
+    JMP pow2_loop
+LABEL: pow2_done
+    RET
+
+# ============================================
+# Subroutine: popcount — R0=value, R1=popcount
+# ============================================
+LABEL: popcount
+    ILDI R1, 0
+    ILDM R2, 99                  # R2 = n (bit width)
+LABEL: pop_loop
+    IEQ R3, R2, R14
+    JIF R3, pop_done
+    IAND R3, R0, R15             # LSB
+    IADD R1, R1, R3
+    ISHR R0, R0, 1
+    ISUB R2, R2, R15
+    JMP pop_loop
+LABEL: pop_done
+    RET

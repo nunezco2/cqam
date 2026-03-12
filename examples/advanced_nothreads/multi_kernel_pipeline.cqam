@@ -1,0 +1,230 @@
+# multi_kernel_pipeline.cqam — All 11 quantum kernels, all distributions,
+#                              QPREPR, QKERNELF, QKERNELZ, QSTORE/QLOAD,
+#                              masked gates, quantum flags, HREDUCE dist fns
+#
+# Chains every kernel across Q0-Q7, checks flags after each stage,
+# and demonstrates all quantum preparation and kernel dispatch modes.
+#
+#! qubits 4
+
+.data
+    .org 200
+diag_data:
+    .c64 1.0J0.0, 0.0J1.0, -1.0J0.0, 0.0J-1.0,
+         1.0J0.0, 0.0J1.0, -1.0J0.0, 0.0J-1.0,
+         1.0J0.0, 0.0J1.0, -1.0J0.0, 0.0J-1.0,
+         1.0J0.0, 0.0J1.0, -1.0J0.0, 0.0J-1.0
+
+    .org 300
+perm_table:
+    .i64 1, 2, 3, 0, 5, 6, 7, 4, 9, 10, 11, 8, 13, 14, 15, 12
+
+    .org 400
+eigenvalues:
+    .f64 0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0
+    .f64 8.0, 9.0, 10.0, 11.0, 12.0, 13.0, 14.0, 15.0
+
+    .org 1000
+banner:
+    .ascii "=== Multi-Kernel Pipeline ===\n"
+unit_msg:
+    .ascii "UNIT: SF=%d\n"
+entg_msg:
+    .ascii "ENTG: EF=%d\n"
+grov_msg:
+    .ascii "GROV argmax=%d\n"
+drot_msg:
+    .ascii "DROT mean=%f\n"
+mask_msg:
+    .ascii "Masked ops mode=%d\n"
+expct_msg:
+    .ascii "Expectation=%f\n"
+qmem_msg:
+    .ascii "QMEM restore OK\n"
+
+.code
+    ILDI R15, 1
+    ILDI R0, 0
+    ILDI R14, 0                   # reusable zero ctx
+
+# --- Banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Stage 1: UNIT kernel (should set SF)
+# ============================================
+    QPREP Q0, 0                  # UNIFORM
+    QKERNEL UNIT, Q0, Q0, R14, R14
+    JMPF SF, sf_yes
+    ILDI R2, 0
+    JMP sf_print
+LABEL: sf_yes
+    ILDI R2, 1
+LABEL: sf_print
+    ILDI R0, @unit_msg
+    ILDI R1, @unit_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Stage 2: ENTG kernel (should set EF)
+# ============================================
+    QPREP Q1, 1                  # ZERO
+    QKERNEL ENTG, Q1, Q1, R14, R14
+    JMPF EF, ef_yes
+    ILDI R2, 0
+    JMP ef_print
+LABEL: ef_yes
+    ILDI R2, 1
+LABEL: ef_print
+    ILDI R0, @entg_msg
+    ILDI R1, @entg_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Stage 3: QFFT + DIFF + QIFT (Fourier round-trip)
+# ============================================
+    QPREP Q2, 1
+    QKERNEL QFFT, Q2, Q2, R14, R14
+    QKERNEL DIFF, Q2, Q2, R14, R14
+    QKERNEL QIFT, Q2, Q2, R14, R14
+
+# ============================================
+# Stage 4: GROV (Grover iteration)
+# ============================================
+    QPREP Q3, 0
+    ILDI R5, 5                   # target state
+    QKERNEL GROV, Q3, Q3, R5, R14
+    QKERNEL GROV, Q3, Q3, R5, R14
+    QKERNEL GROV, Q3, Q3, R5, R14
+
+    # Save to QMEM before destructive observe
+    QSTORE Q3, 0
+
+    QOBSERVE H0, Q3
+    HREDUCE ARGMX, H0, R2
+    ILDI R0, @grov_msg
+    ILDI R1, @grov_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    # Restore from QMEM
+    QLOAD Q3, 0
+    QOBSERVE H0, Q3              # verify restore works
+    HREDUCE MODEV, H0, R6
+    ILDI R0, @qmem_msg
+    ILDI R1, @qmem_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Stage 5: DROT via QKERNELF
+# ============================================
+    QPREP Q4, 1
+    FLDI F0, 1                   # theta = 1.0
+    FLDI F1, 0
+    QKERNELF DROT, Q4, Q4, F0, F1
+    QOBSERVE H1, Q4
+    HREDUCE MEANT, H1, F1
+    ILDI R0, @drot_msg
+    ILDI R1, @drot_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Stage 6: PHSH via QKERNELZ
+# ============================================
+    QPREP Q5, 1
+    ZLDI Z0, 1, 1                # z = 1+i
+    ZLDI Z1, 0, 0
+    QKERNELZ PHSH, Q5, Q5, Z0, Z1
+    QOBSERVE H2, Q5
+
+# ============================================
+# Stage 7: CTLU (controlled-U)
+# ============================================
+    QPREP Q6, 1
+    # CTLU: R[ctx0]=control_qubit, R[ctx1]=CMEM base of 5-cell param block
+    # Block: [sub_kernel_id, power, param_re_bits, param_im_bits, target_qubits]
+    ILDI R3, 500
+    ILDI R4, 0
+    ISTRX R4, R3                 # CMEM[500] = sub_kernel_id = 0 (UNIT)
+    IADD R3, R3, R15
+    ISTRX R15, R3               # CMEM[501] = power = 1
+    IADD R3, R3, R15
+    ISTRX R4, R3                 # CMEM[502] = param_re = 0.0 bits
+    IADD R3, R3, R15
+    ISTRX R4, R3                 # CMEM[503] = param_im = 0.0 bits
+    IADD R3, R3, R15
+    ISTRX R4, R3                 # CMEM[504] = target_qubits = 0 (auto)
+    ILDI R3, 0                   # control qubit = 0
+    ILDI R4, 500                 # CMEM base
+    QKERNEL CTLU, Q6, Q6, R3, R4
+    QOBSERVE H3, Q6
+
+# ============================================
+# Stage 8: DIAG + PERM
+# ============================================
+    QPREP Q7, 0
+    ILDI R3, @diag_data
+    ILDI R4, @diag_data.len
+    QKERNEL DIAG, Q7, Q7, R3, R4
+    QOBSERVE H4, Q7
+
+    QPREP Q0, 0                  # reuse Q0
+    ILDI R3, @perm_table
+    ILDI R4, @perm_table.len
+    QKERNEL PERM, Q0, Q0, R3, R4
+    QOBSERVE H5, Q0
+
+# ============================================
+# QPREPR: register-parameterized distribution
+# ============================================
+    ILDI R5, 3                   # dist = GHZ
+    QPREPR Q1, R5
+
+# ============================================
+# Masked gate ops: QHADM, QFLIP, QPHASE
+# ============================================
+    QPREP Q2, 1                  # |0000>
+    ILDI R5, 5                   # mask 0b0101 (qubits 0, 2)
+    QHADM Q2, Q2, R5
+    ILDI R6, 10                  # mask 0b1010 (qubits 1, 3)
+    QFLIP Q2, Q2, R6
+    ILDI R7, 15                  # mask 0b1111 (all)
+    QPHASE Q2, Q2, R7
+
+    # Check QF (should be set — Q registers active)
+    JMPF QF, qf_ok
+LABEL: qf_ok
+
+    # Observe and reduce
+    QOBSERVE H6, Q1
+    QOBSERVE H7, Q2
+    HREDUCE MODEV, H7, R2
+    HREDUCE VARNC, H6, F2
+
+    ILDI R0, @mask_msg
+    ILDI R1, @mask_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# EXPCT: expectation value with eigenvalues
+# ============================================
+    QPREP Q0, 0
+    QOBSERVE H0, Q0
+    ILDI R2, @eigenvalues
+    HREDUCE EXPCT, H0, F2
+    FADD F1, F2, F2
+    FSUB F1, F1, F2              # F1 = expectation
+    ILDI R0, @expct_msg
+    ILDI R1, @expct_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

@@ -1,0 +1,117 @@
+# teleportation.cqam — Quantum teleportation with flag-verified protocol
+#
+# Teleports |1> from qubit 0 to qubit 2 via Bell pair on qubits 1,2.
+# Flag verification at each protocol step:
+#   SF after QHADM  — superposition intent for Bell pair
+#   EF after QCNOT  — entanglement intent established
+#   CF after QMEAS  — collapse confirmed before classical corrections
+#
+#! qubits 3
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum Teleportation ===\n"
+bell_fmt:
+    .ascii "Bell pair created: SF=%d EF=%d\n"
+meas_fmt:
+    .ascii "Bell measurement: m0=%d m1=%d CF=%d\n"
+res_fmt:
+    .ascii "Teleported: state=%d success=%d\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0
+    ILDI R8, 2               # qubit index 2 / mask q1 (0b010)
+    ILDI R9, 4               # mask q2 (0b100)
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Prepare message |1> on qubit 0 ---
+    QPREP Q0, 1              # |000>
+    QFLIP Q0, Q0, R15        # X on q0 (mask=0b001): |100>
+
+# --- Create Bell pair on qubits 1,2 ---
+    QHADM Q0, Q0, R8         # H on qubit 1 → SF=1 (superposition intent)
+    # Snapshot SF before QCNOT overwrites it
+    JMPF SF, sf_bell
+    ILDI R4, 0
+    JMP sf_bell_done
+LABEL: sf_bell
+    ILDI R4, 1
+LABEL: sf_bell_done
+
+    QCNOT Q0, Q0, R15, R8    # CNOT(ctrl=q1, tgt=q2) → EF=1 (entanglement intent)
+    JMPF EF, ef_bell
+    ILDI R5, 0
+    JMP ef_bell_done
+LABEL: ef_bell
+    ILDI R5, 1
+LABEL: ef_bell_done
+
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @bell_fmt
+    ILDI R1, @bell_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Bell measurement on qubits 0,1 ---
+    QCNOT Q0, Q0, R14, R15   # CNOT(ctrl=q0, tgt=q1)
+    QHADM Q0, Q0, R15        # H on qubit 0 (mask=0b001)
+    QMEAS R6, Q0, R14        # measure qubit 0 → R6
+    QMEAS R7, Q0, R15        # measure qubit 1 → R7
+
+    # Verify collapse flag
+    JMPF CF, cf_meas
+    ILDI R10, 0
+    JMP cf_meas_done
+LABEL: cf_meas
+    ILDI R10, 1
+LABEL: cf_meas_done
+
+    IADD R2, R6, R15
+    ISUB R2, R2, R15
+    IADD R3, R7, R15
+    ISUB R3, R3, R15
+    IADD R4, R10, R15
+    ISUB R4, R4, R15
+    ILDI R0, @meas_fmt
+    ILDI R1, @meas_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Conditional corrections on qubit 2 ---
+    # X correction if m1=1
+    JIF R7, do_x
+    JMP check_z
+LABEL: do_x
+    QFLIP Q0, Q0, R9         # X on qubit 2 (mask=4)
+LABEL: check_z
+    # Z correction if m0=1
+    JIF R6, do_z
+    JMP teleport_verify
+LABEL: do_z
+    QPHASE Q0, Q0, R9        # Z on qubit 2 (mask=4)
+
+# --- Verify teleportation ---
+LABEL: teleport_verify
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R11
+    IAND R12, R11, R15       # success = (mode & 1) — q2 should be |1>
+
+    IADD R2, R11, R15
+    ISUB R2, R2, R15
+    IADD R3, R12, R15
+    ISUB R3, R3, R15
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

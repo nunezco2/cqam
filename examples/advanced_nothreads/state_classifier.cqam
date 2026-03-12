@@ -1,0 +1,251 @@
+# state_classifier.cqam — Classify quantum states via flag signatures
+#
+# Prepares 6 quantum states via different operations, reads the
+# (SF, EF) flag pattern after each to classify the operation type.
+# Demonstrates that flags are intent-based: they reflect what the
+# last quantum operation intends, not a measured state property.
+#
+# Expected flag signatures:
+#   QPREP ZERO:    SF=0 EF=0 — basis state preparation
+#   QPREP UNIFORM: SF=1 EF=0 — superposition intent
+#   QPREP BELL:    SF=1 EF=1 — superposition + entanglement
+#   QPREP GHZ:     SF=1 EF=1 — superposition + entanglement
+#   QHADM:         SF=1 EF=0 — superposition gate
+#   QCNOT:         SF=0 EF=1 — entangling gate
+# After QOBSERVE:  CF=1       — collapse confirmed
+# After HREDUCE:   CF=0       — collapse consumed
+#
+#! qubits 4
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum State Classifier ===\n"
+hdr_fmt:
+    .ascii "--- Preparation flags ---\n"
+zero_fmt:
+    .ascii "ZERO:    SF=%d EF=%d (expect 0,0)\n"
+unif_fmt:
+    .ascii "UNIFORM: SF=%d EF=%d (expect 1,0)\n"
+bell_fmt:
+    .ascii "BELL:    SF=%d EF=%d (expect 1,1)\n"
+ghz_fmt:
+    .ascii "GHZ:     SF=%d EF=%d (expect 1,1)\n"
+gate_hdr:
+    .ascii "--- Gate-level flags ---\n"
+hadm_fmt:
+    .ascii "QHADM:   SF=%d EF=%d (expect 1,0)\n"
+cnot_fmt:
+    .ascii "QCNOT:   SF=%d EF=%d (expect 0,1)\n"
+obs_hdr:
+    .ascii "--- Observation flags ---\n"
+obs_fmt:
+    .ascii "OBSERVE: CF=%d (expect 1)\n"
+red_fmt:
+    .ascii "HREDUCE: CF=%d (expect 0)\n"
+pass_fmt:
+    .ascii "All %d checks passed=%d\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0
+    ILDI R13, 0              # pass counter
+    ILDI R12, 12             # total checks (6 states × 2 flags)
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @hdr_fmt
+    ILDI R1, @hdr_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Test 1: QPREP ZERO — expect SF=0, EF=0
+# ============================================
+    QPREP Q0, 1
+    CALL read_flags           # R4=SF, R5=EF
+    IEQ R6, R4, R14          # SF==0?
+    IADD R13, R13, R6
+    IEQ R6, R5, R14          # EF==0?
+    IADD R13, R13, R6
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @zero_fmt
+    ILDI R1, @zero_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Test 2: QPREP UNIFORM — expect SF=1, EF=0
+# ============================================
+    QPREP Q1, 0
+    CALL read_flags
+    IEQ R6, R4, R15          # SF==1?
+    IADD R13, R13, R6
+    IEQ R6, R5, R14          # EF==0?
+    IADD R13, R13, R6
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @unif_fmt
+    ILDI R1, @unif_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Test 3: QPREP BELL — expect SF=1, EF=1
+# ============================================
+    QPREP Q2, 2
+    CALL read_flags
+    IEQ R6, R4, R15          # SF==1?
+    IADD R13, R13, R6
+    IEQ R6, R5, R15          # EF==1?
+    IADD R13, R13, R6
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @bell_fmt
+    ILDI R1, @bell_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Test 4: QPREP GHZ — expect SF=1, EF=1
+# ============================================
+    QPREP Q3, 3
+    CALL read_flags
+    IEQ R6, R4, R15          # SF==1?
+    IADD R13, R13, R6
+    IEQ R6, R5, R15          # EF==1?
+    IADD R13, R13, R6
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @ghz_fmt
+    ILDI R1, @ghz_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Gate-level flag signatures
+# ============================================
+    ILDI R0, @gate_hdr
+    ILDI R1, @gate_hdr.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# Test 5: QHADM — expect SF=1, EF=0
+    QPREP Q4, 1
+    ILDI R7, 15              # mask all qubits
+    QHADM Q4, Q4, R7         # H on all qubits → SF=1
+    CALL read_flags
+    IEQ R6, R4, R15          # SF==1?
+    IADD R13, R13, R6
+    IEQ R6, R5, R14          # EF==0?
+    IADD R13, R13, R6
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @hadm_fmt
+    ILDI R1, @hadm_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# Test 6: QCNOT — expect SF=0, EF=1
+    QPREP Q5, 1
+    QFLIP Q5, Q5, R15        # put q0 in |1> for meaningful CNOT
+    QCNOT Q5, Q5, R14, R15   # CNOT(q0, q1) → EF=1
+    CALL read_flags
+    IEQ R6, R4, R14          # SF==0?
+    IADD R13, R13, R6
+    IEQ R6, R5, R15          # EF==1?
+    IADD R13, R13, R6
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    IADD R3, R5, R15
+    ISUB R3, R3, R15
+    ILDI R0, @cnot_fmt
+    ILDI R1, @cnot_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Observation flag lifecycle: CF set then cleared
+# ============================================
+    ILDI R0, @obs_hdr
+    ILDI R1, @obs_hdr.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    QOBSERVE H0, Q0
+    JMPF CF, cf_obs_set
+    ILDI R4, 0
+    JMP cf_obs_done
+LABEL: cf_obs_set
+    ILDI R4, 1
+LABEL: cf_obs_done
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    ILDI R0, @obs_fmt
+    ILDI R1, @obs_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HREDUCE MODEV, H0, R11   # CF cleared by HREDUCE
+    JMPF CF, cf_red_set
+    ILDI R4, 0
+    JMP cf_red_done
+LABEL: cf_red_set
+    ILDI R4, 1
+LABEL: cf_red_done
+    IADD R2, R4, R15
+    ISUB R2, R2, R15
+    ILDI R0, @red_fmt
+    ILDI R1, @red_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Consume remaining registers ---
+    QOBSERVE H1, Q1
+    QOBSERVE H2, Q2
+    QOBSERVE H3, Q3
+    QOBSERVE H4, Q4
+    QOBSERVE H5, Q5
+
+# --- Summary ---
+    IADD R2, R12, R15
+    ISUB R2, R2, R15         # R2 = total checks
+    IEQ R3, R13, R12         # R3 = all passed?
+    ILDI R0, @pass_fmt
+    ILDI R1, @pass_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT
+
+# ============================================
+# Subroutine: read_flags → R4=SF, R5=EF
+# ============================================
+LABEL: read_flags
+    JMPF SF, rf_sf_set
+    ILDI R4, 0
+    JMP rf_sf_done
+LABEL: rf_sf_set
+    ILDI R4, 1
+LABEL: rf_sf_done
+    JMPF EF, rf_ef_set
+    ILDI R5, 0
+    JMP rf_ef_done
+LABEL: rf_ef_set
+    ILDI R5, 1
+LABEL: rf_ef_done
+    RET

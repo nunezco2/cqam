@@ -1,0 +1,78 @@
+# bitflip_repetition.cqam — 3-qubit bit-flip repetition code
+#
+# Encodes |0_L> = |000> via QCNOT, injects X error on qubit 1,
+# extracts syndrome via QMEAS, corrects via QFLIP lookup,
+# verifies recovery via QOBSERVE.
+#
+#! qubits 3
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Bit-Flip Repetition Code ===\n"
+res_fmt:
+    .ascii "Syndrome s1=%d s2=%d corrected=%d\n"
+
+.code
+    ILDI R15, 1
+    ILDI R14, 0
+
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Encode |0_L> = |000>, inject X error on q1 ---
+    ILDI R8, 2               # qubit index 2 / flip mask for q1
+    QPREP Q0, 1              # |000>
+    QCNOT Q0, Q0, R14, R15   # CNOT(q0, q1)
+    QCNOT Q0, Q0, R14, R8    # CNOT(q0, q2)
+    QFLIP Q0, Q0, R8         # X on q1 (mask=0b010): |000>→|010>
+
+# --- Syndrome extraction via QMEAS ---
+    QMEAS R5, Q0, R14        # q0 → R5
+    QMEAS R6, Q0, R15        # q1 → R6
+    QMEAS R7, Q0, R8         # q2 → R7
+    IXOR R9, R5, R6          # s1 = q0 XOR q1
+    IXOR R10, R6, R7         # s2 = q1 XOR q2
+
+# --- Re-prepare with same error for correction ---
+    QPREP Q1, 1
+    QCNOT Q1, Q1, R14, R15
+    QCNOT Q1, Q1, R14, R8
+    QFLIP Q1, Q1, R8         # re-inject error
+
+# --- Syndrome decode + correct ---
+    JIF R9, s1_set
+    JIF R10, fix_q2          # s1=0,s2=1 → q2
+    JMP verify                # s1=0,s2=0 → no error
+LABEL: s1_set
+    JIF R10, fix_q1          # s1=1,s2=1 → q1
+    QFLIP Q1, Q1, R15        # s1=1,s2=0 → q0 (mask=0b001)
+    JMP verify
+LABEL: fix_q1
+    QFLIP Q1, Q1, R8         # mask=0b010 → q1
+    JMP verify
+LABEL: fix_q2
+    ILDI R3, 4
+    QFLIP Q1, Q1, R3         # mask=0b100 → q2
+
+LABEL: verify
+    QOBSERVE H0, Q1
+    HREDUCE MODEV, H0, R11    # should be 0 (|000>)
+    IEQ R11, R11, R14        # corrected = (argmax == 0)
+
+    IADD R2, R9, R15
+    ISUB R2, R2, R15         # R2 = s1
+    IADD R3, R10, R15
+    ISUB R3, R3, R15         # R3 = s2
+    IADD R4, R11, R15
+    ISUB R4, R4, R15         # R4 = corrected
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    QOBSERVE H1, Q0          # consume collapsed Q0
+
+    HALT

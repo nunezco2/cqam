@@ -1,0 +1,157 @@
+# quantum_state_engineering.cqam — Gate-level quantum ops, QTENSOR,
+#                                  QPTRACE, QENCODE F_FILE, QPREPN,
+#                                  QMEAS, QRESET, all HREDUCE float-to-int
+#
+# Builds quantum states through multiple methods, manipulates them
+# with gate-level operations, and characterizes results.
+#
+#! qubits 2
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Quantum State Engineering ===\n"
+cfg_fmt:
+    .ascii "Qubit config: %d\n"
+bell_fmt:
+    .ascii "Bell mode: %d\n"
+gate_fmt:
+    .ascii "CNOT+SWAP+CZ+QROT applied\n"
+meas_fmt:
+    .ascii "QMEAS qubit 0: %d\n"
+reset_msg:
+    .ascii "QRESET done\n"
+tensor_msg:
+    .ascii "Tensor product observed\n"
+ptrace_msg:
+    .ascii "Partial trace done\n"
+reduce_fmt:
+    .ascii "ROUND=%d FLOOR=%d CEILI=%d TRUNC=%d ABSOL=%d NEGAT=%d\n"
+
+.code
+    ILDI R15, 1
+
+# --- Banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- IQCFG: query configured qubit count ---
+    IQCFG R2
+    ILDI R0, @cfg_fmt
+    ILDI R1, @cfg_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# QPREPN: runtime qubit count
+# ============================================
+    ILDI R3, 2
+    QPREPN Q0, 1, R3             # Q0 = |00> with 2 qubits
+
+# ============================================
+# Bell state: prepare and verify
+# ============================================
+    QPREP Q1, 2                  # Q1 = Bell |Phi+>
+    QOBSERVE H0, Q1
+    HREDUCE MODEV, H0, R2        # mode: 0 or 3
+    ILDI R0, @bell_fmt
+    ILDI R1, @bell_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# Gate-level operations on Q0
+# ============================================
+    ILDI R4, 0                   # qubit 0
+    ILDI R5, 1                   # qubit 1
+
+    QCNOT Q0, Q0, R4, R5        # CNOT(ctrl=0, tgt=1)
+    QSWAP Q0, Q0, R4, R5        # SWAP qubits 0,1
+    QCZ Q0, Q0, R4, R5          # CZ
+
+    FLDI F0, 1                  # angle = 1.0 rad
+    QROT Q0, Q0, R4, X, F0      # Rx on qubit 0
+    QROT Q0, Q0, R5, Y, F0      # Ry on qubit 1
+    QROT Q0, Q0, R5, Z, F0      # Rz on qubit 1
+
+    ILDI R0, @gate_fmt
+    ILDI R1, @gate_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# QMEAS: non-destructive single-qubit measurement
+# ============================================
+    QMEAS R6, Q0, R4             # measure qubit 0
+    IADD R2, R6, R15
+    ISUB R2, R2, R15             # R2 = outcome
+    ILDI R0, @meas_fmt
+    ILDI R1, @meas_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# QRESET: reset qubit 0 to |0>
+# ============================================
+    QRESET Q0, Q0, R4
+    ILDI R0, @reset_msg
+    ILDI R1, @reset_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# QENCODE from F-file
+# ============================================
+    FLDI F3, 1                   # amplitude for |0>
+    FLDI F4, 1                   # amplitude for |1>
+    QENCODE Q2, F3, 2, 1        # Q2 = [1,1]/sqrt(2) = |+>
+
+# ============================================
+# QTENSOR: compose subsystems
+# ============================================
+    QTENSOR Q3, Q0, Q2           # Q3 = Q0 ⊗ Q2 (both consumed)
+    QOBSERVE H1, Q3
+    HREDUCE MEANT, H1, F5
+    ILDI R0, @tensor_msg
+    ILDI R1, @tensor_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# QPTRACE: partial trace of a product state
+# (Product state avoids fidelity trap — Bell
+#  partial trace is in quantum_error_recovery)
+# ============================================
+    QPREP Q4, 1                  # |00> (pure, separable)
+    QPTRACE Q5, Q4, R15          # trace out qubit 1
+    QOBSERVE H2, Q4              # clean up source
+    QOBSERVE H3, Q5              # observe traced result
+    ILDI R0, @ptrace_msg
+    ILDI R1, @ptrace_msg.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ============================================
+# HREDUCE float-to-int suite
+# ============================================
+    # Get a Float-valued hybrid: observe a state
+    QPREP Q6, 0                  # uniform
+    QOBSERVE H4, Q6
+    HREDUCE MEANT, H4, F6        # mean of distribution
+
+    # Apply all 6 float-to-int reductions on H4
+    HREDUCE ROUND, H4, R2
+    HREDUCE FLOOR, H4, R3
+    HREDUCE CEILI, H4, R4
+    HREDUCE TRUNC, H4, R5
+    HREDUCE ABSOL, H4, R6
+    HREDUCE NEGAT, H4, R7
+
+    ILDI R0, @reduce_fmt
+    ILDI R1, @reduce_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT
