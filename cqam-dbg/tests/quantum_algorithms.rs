@@ -68,7 +68,7 @@ fn run_to_completion(engine: &mut DebuggerEngine) {
 // Expected: P(|0...0>) = 0.5, P(|1...1>) = 0.5, entanglement verified
 #[test]
 fn ghz_verify() {
-    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
     run_to_completion(&mut engine);
 
     // CMEM layout from the program:
@@ -112,7 +112,7 @@ fn ghz_verify() {
 // ===================================================================
 #[test]
 fn bernstein_vazirani() {
-    let (mut engine, _) = load_and_build(&example_path("examples/bernstein_vazirani.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/bernstein_vazirani.cqam"));
     run_to_completion(&mut engine);
 
     // CMEM layout:
@@ -135,7 +135,7 @@ fn bernstein_vazirani() {
 // ===================================================================
 #[test]
 fn superdense_coding() {
-    let (mut engine, _) = load_and_build(&example_path("examples/superdense_coding.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/superdense_coding.cqam"));
     run_to_completion(&mut engine);
 
     // CMEM layout:
@@ -174,7 +174,7 @@ fn superdense_coding() {
 // ===================================================================
 #[test]
 fn deutsch_jozsa() {
-    let (mut engine, _) = load_and_build(&example_path("examples/deutsch_jozsa.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/deutsch_jozsa.cqam"));
     run_to_completion(&mut engine);
 
     // CMEM layout:
@@ -213,7 +213,7 @@ fn deutsch_jozsa() {
 // ===================================================================
 #[test]
 fn quantum_teleportation() {
-    let (mut engine, _) = load_and_build(&example_path("examples/quantum_teleport.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/quantum_teleport.cqam"));
     run_to_completion(&mut engine);
 
     // The teleportation protocol involves randomness (Alice's measurement),
@@ -240,7 +240,7 @@ fn quantum_teleportation() {
 // ===================================================================
 #[test]
 fn test_ef_flag_ghz() {
-    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
     run_to_completion(&mut engine);
 
     // With intent-based flag semantics, SF/EF/IF reflect the *last* quantum
@@ -275,7 +275,7 @@ fn test_ef_flag_ghz() {
 // This test uses breakpoints to stop at key points and inspect the quantum state.
 #[test]
 fn ghz_stepping_with_breakpoints() {
-    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
 
     // Find the QPREP Q0, 3 instruction (GHZ preparation).
     let qprep_pc = engine
@@ -361,7 +361,7 @@ fn ghz_stepping_with_breakpoints() {
 fn bv_with_watchpoint() {
     use cqam_dbg::engine::watchpoint::Watchpoint;
 
-    let (mut engine, _) = load_and_build(&example_path("examples/bernstein_vazirani.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/bernstein_vazirani.cqam"));
 
     // Watch R6 (where the recovered secret will be stored).
     engine
@@ -405,7 +405,7 @@ fn bv_with_watchpoint() {
 /// HREDUCE clears it after consuming the measurement result.
 #[test]
 fn test_df_cf_after_observe() {
-    let (mut engine, _) = load_and_build(&example_path("examples/bernstein_vazirani.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/bernstein_vazirani.cqam"));
     run_to_completion(&mut engine);
 
     // QOBSERVE sets DF (sticky). DF is only cleared by QPREP or PSW::clear(),
@@ -428,7 +428,7 @@ fn test_df_cf_after_observe() {
 /// run to completion where QOBSERVE sets DF=true.
 #[test]
 fn test_df_sticky_across_kernels() {
-    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
 
     // Find the first QPREP Q0, 3 (GHZ preparation) instruction.
     let qprep_pc = engine
@@ -493,7 +493,7 @@ fn test_df_sticky_across_kernels() {
 /// So at HALT: FK=false, MG=true (no subsequent HFORK after HMERGE).
 #[test]
 fn test_fk_mg_with_hfork_hmerge() {
-    let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
+    let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
     run_to_completion(&mut engine);
 
     // The GHZ program executes HFORK then HMERGE. After HMERGE:

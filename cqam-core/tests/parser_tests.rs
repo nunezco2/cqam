@@ -1290,25 +1290,30 @@ fn test_parse_all_example_files() {
         .join("examples");
 
     let mut count = 0;
-    for entry in std::fs::read_dir(&examples_dir).unwrap() {
-        let entry = entry.unwrap();
-        let path = entry.path();
-        if path.extension().map_or(false, |e| e == "cqam") {
-            let source = std::fs::read_to_string(&path).unwrap();
-            let result = parse_program(&source);
-            assert!(
-                result.is_ok(),
-                "Failed to parse {}: {:?}",
-                path.display(),
-                result.unwrap_err()
-            );
-            let instrs = result.unwrap().instructions;
-            assert!(
-                !instrs.is_empty(),
-                "{} parsed to zero instructions",
-                path.display()
-            );
-            count += 1;
+    let mut dirs = vec![examples_dir.clone()];
+    while let Some(dir) = dirs.pop() {
+        for entry in std::fs::read_dir(&dir).unwrap() {
+            let entry = entry.unwrap();
+            let path = entry.path();
+            if path.is_dir() {
+                dirs.push(path);
+            } else if path.extension().map_or(false, |e| e == "cqam") {
+                let source = std::fs::read_to_string(&path).unwrap();
+                let result = parse_program(&source);
+                assert!(
+                    result.is_ok(),
+                    "Failed to parse {}: {:?}",
+                    path.display(),
+                    result.unwrap_err()
+                );
+                let instrs = result.unwrap().instructions;
+                assert!(
+                    !instrs.is_empty(),
+                    "{} parsed to zero instructions",
+                    path.display()
+                );
+                count += 1;
+            }
         }
     }
     // Ensure we found and parsed a reasonable number of examples

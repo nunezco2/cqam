@@ -31,7 +31,7 @@ fn test_config() -> SimConfig {
 
 #[test]
 fn test_e2e_qrng() {
-    let parsed = load_program(&example_path("qrng.cqam")).unwrap();
+    let parsed = load_program(&example_path("basic/qrng.cqam")).unwrap();
     let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
@@ -44,7 +44,7 @@ fn test_e2e_qrng() {
 
 #[test]
 fn test_e2e_qaoa() {
-    let parsed = load_program(&example_path("qaoa.cqam")).unwrap();
+    let parsed = load_program(&example_path("intermediate/qaoa.cqam")).unwrap();
     let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
@@ -58,7 +58,7 @@ fn test_e2e_qaoa() {
 
 #[test]
 fn test_e2e_phase_estimation() {
-    let parsed = load_program(&example_path("phase_estimation.cqam")).unwrap();
+    let parsed = load_program(&example_path("intermediate/phase_estimation.cqam")).unwrap();
     let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
@@ -69,7 +69,7 @@ fn test_e2e_phase_estimation() {
 
 #[test]
 fn test_e2e_vqe_loop() {
-    let parsed = load_program(&example_path("vqe_loop.cqam")).unwrap();
+    let parsed = load_program(&example_path("intermediate/vqe_loop.cqam")).unwrap();
     let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");

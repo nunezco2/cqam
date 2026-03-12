@@ -246,8 +246,8 @@ config file (but not the `--qubits` CLI flag).
 Example:
 
 ```bash
-cargo run --bin cqam-run -- examples/qrng.cqam --print-final-state --resources
-cargo run --bin cqam-run -- examples/vqe_loop.cqam --density-matrix --verbose
+cargo run --bin cqam-run -- examples/basic/qrng.cqam --print-final-state --resources
+cargo run --bin cqam-run -- examples/intermediate/vqe_loop.cqam --density-matrix --verbose
 ```
 
 ### cqam-as: Assemble or disassemble
@@ -272,7 +272,7 @@ symbol section for label restoration during disassembly.
 Example:
 
 ```bash
-cargo run --bin cqam-as -- --assemble examples/qrng.cqam -o out.cqb --debug
+cargo run --bin cqam-as -- --assemble examples/basic/qrng.cqam -o out.cqb --debug
 cargo run --bin cqam-as -- --disassemble out.cqb
 ```
 
@@ -293,8 +293,8 @@ cargo run --bin cqam2qasm -- <file.cqam> [OPTIONS]
 Example:
 
 ```bash
-cargo run --bin cqam2qasm -- examples/qrng.cqam -o qrng.qasm --expand
-cargo run --bin cqam2qasm -- examples/swap_test.cqam --fragment
+cargo run --bin cqam2qasm -- examples/basic/qrng.cqam -o qrng.qasm --expand
+cargo run --bin cqam2qasm -- examples/basic/swap_test.cqam --fragment
 ```
 
 ## Assembly Language
@@ -377,8 +377,8 @@ superdense coding, Hamiltonian simulation, and kernel integration tests.
 Run any example:
 
 ```bash
-cargo run --bin cqam-run -- examples/qrng.cqam --print-final-state
-cargo run --bin cqam-run -- examples/vqe_loop.cqam --resources --verbose
+cargo run --bin cqam-run -- examples/basic/qrng.cqam --print-final-state
+cargo run --bin cqam-run -- examples/intermediate/vqe_loop.cqam --resources --verbose
 ```
 
 ## Reference Documentation
