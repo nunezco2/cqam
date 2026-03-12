@@ -1,13 +1,15 @@
-//! Hybrid operation handlers (HFORK, HMERGE, JMPF, HREDUCE).
+//! Hybrid operation handlers (HFORK, HMERGE, JMPF, HREDUCE, HATMS, HATME).
 //!
 //! Provides fork/merge parallelism and reduction operations that bridge
 //! quantum measurement results into classical register values.
 
+use std::sync::Arc;
 use cqam_core::error::CqamError;
 use cqam_core::instruction::{Instruction, reduce_fn};
 use cqam_core::register::HybridValue;
 use crate::context::ExecutionContext;
 use crate::fork::ForkManager;
+use crate::thread_pool::{SharedQuantumFile, SharedMemory, SharedRegionConfig, ThreadBarrier};
 use rayon::prelude::*;
 
 /// Minimum distribution size to use parallel iteration.
@@ -25,28 +27,155 @@ pub fn execute_hybrid(
 ) -> Result<bool, CqamError> {
     match instr {
         Instruction::HFork => {
-            // Clone context for the fork thread
-            let mut fork_ctx = ctx.clone();
-            fork_ctx.pc = ctx.pc + 1; // Fork starts at next instruction
-            fork_ctx.psw.hf = true;
-            fork_ctx.psw.forked = true;
-            fork_ctx.psw.merged = false;
+            // Validate: not already forked
+            if ctx.psw.forked {
+                return Err(CqamError::ForkError(
+                    "nested HFORK is not allowed".to_string(),
+                ));
+            }
 
-            fork_mgr.spawn_fork(fork_ctx)?;
+            let n = ctx.thread_count;
 
+            if n <= 1 {
+                // Single-threaded: just set flags, no actual threading
+                ctx.psw.hf = true;
+                ctx.psw.forked = true;
+                ctx.psw.merged = false;
+                return Ok(false);
+            }
+
+            // Multi-threaded: QF must be down (all quantum registers observed)
+            // because quantum registers will be moved to SharedQuantumFile.
+            if ctx.psw.qf {
+                return Err(CqamError::ForkError(
+                    "HFORK requires QF=0: all quantum registers must be observed before forking".to_string(),
+                ));
+            }
+
+            // 1. Create SharedQuantumFile from current Q registers
+            let shared_qfile = Arc::new(SharedQuantumFile::from_qregs(
+                std::mem::take(&mut ctx.qregs),
+            ));
+
+            // 2. Create SharedMemory from .shared CMEM region
+            let shared_mem = if let Some((base, size)) = ctx.shared_region {
+                let initial: Vec<i64> = (0..size)
+                    .map(|i| ctx.cmem.load(base + i))
+                    .collect();
+                Arc::new(SharedMemory::new(
+                    SharedRegionConfig { base, size },
+                    &initial,
+                ))
+            } else {
+                Arc::new(SharedMemory::new(
+                    SharedRegionConfig { base: 0, size: 0 },
+                    &[],
+                ))
+            };
+
+            // 3. Create barrier
+            let barrier = Arc::new(ThreadBarrier::new(n));
+
+            // 4. Spawn N-1 worker threads
+            let fork_pc = ctx.pc + 1;
+
+            for tid in 1..n {
+                let mut worker_ctx = ctx.clone();
+                worker_ctx.pc = fork_pc;
+                worker_ctx.thread_id = tid;
+                worker_ctx.psw.hf = true;
+                worker_ctx.psw.forked = true;
+                worker_ctx.psw.merged = false;
+                worker_ctx.skip_to_hatme = false;
+                // Workers get empty Q registers (they access via shared_qfile)
+                worker_ctx.qregs = Default::default();
+                // Workers get a reference to shared memory for load/store interception
+                worker_ctx.shared_memory = Some(Arc::clone(&shared_mem));
+
+                let sqf = Arc::clone(&shared_qfile);
+                let sm = Arc::clone(&shared_mem);
+                let b = Arc::clone(&barrier);
+                let depth = fork_mgr.depth();
+                let max_depth = fork_mgr.max_depth();
+
+                let handle = std::thread::Builder::new()
+                    .name(format!("cqam-spmd-t{}", tid))
+                    .spawn(move || {
+                        let mut fm = ForkManager::nested(depth, max_depth);
+                        fm.set_shared_resources(sqf, sm, b);
+                        run_spmd_thread(&mut worker_ctx, &mut fm)?;
+                        Ok(worker_ctx)
+                    })
+                    .map_err(CqamError::IoError)?;
+
+                fork_mgr.active_forks.push(handle);
+            }
+
+            // 5. Configure thread 0
+            ctx.thread_id = 0;
             ctx.psw.hf = true;
             ctx.psw.forked = true;
             ctx.psw.merged = false;
+            ctx.skip_to_hatme = false;
+            ctx.qregs = Default::default(); // Q regs moved to shared file
+            ctx.shared_memory = Some(Arc::clone(&shared_mem));
+
+            fork_mgr.set_shared_resources(
+                Arc::clone(&shared_qfile),
+                Arc::clone(&shared_mem),
+                Arc::clone(&barrier),
+            );
+
             Ok(false)
         }
 
         Instruction::HMerge => {
-            if fork_mgr.active_count() > 0 {
-                fork_mgr.join_all()?;
+            if !ctx.psw.forked {
+                return Err(CqamError::ForkError(
+                    "HMERGE without prior HFORK".into(),
+                ));
             }
+
+            // Set merge flags (both leader and workers)
             ctx.psw.hf = true;
             ctx.psw.merged = true;
             ctx.psw.forked = false;
+            ctx.in_atomic_section = false;
+            ctx.psw.af = false;
+            ctx.skip_to_hatme = false;
+
+            if ctx.thread_count <= 1 {
+                return Ok(false);
+            }
+
+            // Multi-threaded: QF must be down before merging
+            if ctx.psw.qf {
+                return Err(CqamError::ForkError(
+                    "HMERGE requires QF=0".into(),
+                ));
+            }
+
+            if ctx.thread_id == 0 {
+                // Thread 0: join all workers
+                fork_mgr.join_all()?;
+
+                // Restore quantum registers from shared file
+                if let Some(sqf) = fork_mgr.take_shared_qfile() {
+                    if let Ok(sqf) = Arc::try_unwrap(sqf) {
+                        ctx.qregs = sqf.into_qregs();
+                    }
+                }
+
+                // Write back shared memory to thread 0's CMEM
+                if let Some(sm) = fork_mgr.take_shared_mem() {
+                    sm.write_back(&mut ctx.cmem);
+                }
+
+                // Clear shared memory reference from context
+                ctx.shared_memory = None;
+            }
+            // Workers (thread_id > 0): merged=true causes run_spmd_thread to exit
+
             Ok(false)
         }
 
@@ -300,14 +429,56 @@ pub fn execute_hybrid(
         }
 
         Instruction::HAtmS => {
-            ctx.in_atomic_section = true;
-            ctx.psw.af = true;
+            if !ctx.psw.forked {
+                return Err(CqamError::ForkError("HATMS outside parallel region".into()));
+            }
+            if ctx.thread_count <= 1 {
+                // Single-threaded: trivially enter atomic section
+                ctx.in_atomic_section = true;
+                ctx.psw.af = true;
+                return Ok(false);
+            }
+
+            // Full barrier: wait for all threads
+            let barrier = fork_mgr.get_barrier()
+                .expect("barrier must exist in forked region");
+            let result = barrier.wait(ctx.thread_id);
+
+            if result.is_leader {
+                ctx.in_atomic_section = true;
+                ctx.psw.af = true;
+                // Leader proceeds to execute the atomic section
+            } else {
+                ctx.in_atomic_section = false;
+                ctx.psw.af = false;
+                ctx.skip_to_hatme = true;
+                // Non-leaders will skip instructions until HATME
+            }
             Ok(false)
         }
 
         Instruction::HAtmE => {
-            ctx.in_atomic_section = false;
-            ctx.psw.af = false;
+            if ctx.thread_count <= 1 {
+                ctx.in_atomic_section = false;
+                ctx.psw.af = false;
+                return Ok(false);
+            }
+
+            // Leader: commit shared memory snapshot
+            if ctx.in_atomic_section {
+                if let Some(sm) = fork_mgr.get_shared_mem() {
+                    sm.commit_snapshot();
+                }
+                ctx.in_atomic_section = false;
+                ctx.psw.af = false;
+            }
+
+            // Full barrier: all threads synchronize here
+            let barrier = fork_mgr.get_barrier()
+                .expect("barrier must exist in forked region");
+            barrier.wait(ctx.thread_id);
+
+            // All threads resume normal execution
             Ok(false)
         }
 
@@ -318,4 +489,26 @@ pub fn execute_hybrid(
             })
         }
     }
+}
+
+/// Run an SPMD worker thread until it reaches HMERGE.
+///
+/// Similar to `run_program` but stops when `merged` is set (at HMERGE)
+/// rather than only on HALT. Worker threads exit their loop when HMERGE
+/// sets `psw.merged = true`.
+pub fn run_spmd_thread(
+    ctx: &mut ExecutionContext,
+    fork_mgr: &mut ForkManager,
+) -> Result<(), CqamError> {
+    use crate::executor::execute_instruction;
+
+    while ctx.current_line().is_some() {
+        let instr = ctx.program[ctx.pc].clone();
+        execute_instruction(ctx, &instr, fork_mgr)?;
+
+        if ctx.psw.trap_halt || ctx.psw.merged {
+            break;
+        }
+    }
+    Ok(())
 }

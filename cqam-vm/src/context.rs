@@ -7,6 +7,7 @@
 //! a `HashMap` for O(1) lookups during execution.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
@@ -19,6 +20,7 @@ use crate::isr::IsrTable;
 use crate::resource::ResourceTracker;
 use crate::psw::ProgramStateWord;
 use crate::simconfig::QuantumFidelityThreshold;
+use crate::thread_pool::SharedMemory;
 
 /// The complete execution state of the CQAM virtual machine.
 ///
@@ -90,6 +92,13 @@ pub struct ExecutionContext {
 
     /// Shared memory region bounds (base, size). None if no .shared section.
     pub shared_region: Option<(u16, u16)>,
+
+    /// Whether this thread should skip instructions until HATME (non-leader in SPMD).
+    pub skip_to_hatme: bool,
+
+    /// Reference to shared memory (set during HFORK, None otherwise).
+    /// All threads in a parallel region share the same SharedMemory instance.
+    pub shared_memory: Option<Arc<SharedMemory>>,
 }
 
 impl ExecutionContext {
@@ -118,6 +127,8 @@ impl ExecutionContext {
             thread_count: 1,
             in_atomic_section: false,
             shared_region: None,
+            skip_to_hatme: false,
+            shared_memory: None,
             program,
         };
         ctx.resolve_labels();

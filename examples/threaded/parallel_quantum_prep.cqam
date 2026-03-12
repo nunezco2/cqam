@@ -1,0 +1,150 @@
+# examples/parallel_quantum_prep.cqam
+# Parallel Classical Post-Processing of Quantum Measurements
+#
+# Demonstrates hybrid quantum-classical parallelism. Quantum
+# registers are prepared and measured sequentially (QF must be 0
+# at HFORK). Then two threads fork, each reads the measurement
+# results from shared memory, and a single atomic section
+# computes derived values from both measurements.
+#
+# Algorithm:
+#   1. Prepare Q0 in Hadamard superposition (2 qubits, H on qubit 0)
+#   2. Prepare Q1 as Bell state (2 qubits, entangled pair)
+#   3. Observe both registers, store results in shared memory
+#   4. HFORK spawns 2 threads
+#   5. Each thread uses ITID to identify itself
+#   6. One atomic section lets the leader compute derived values:
+#        result_0 = Q0_meas * 100 + 1
+#        result_1 = Q1_meas * 100 + 2
+#   7. After HMERGE, thread 0 prints all results
+#
+# Quantum results are nondeterministic:
+#   Q0 (H on qubit 0): collapses to 0 or 2 (qubit 0 = MSB)
+#   Q1 (Bell state):   collapses to 0 or 3
+#
+#! qubits 2
+#! threads 2
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Parallel Quantum Prep ===\n"
+q0_msg:
+    .ascii "Q0 (superposition) measured = %d\n"
+q1_msg:
+    .ascii "Q1 (Bell state) measured = %d\n"
+r0_msg:
+    .ascii "Derived from Q0: %d\n"
+r1_msg:
+    .ascii "Derived from Q1: %d\n"
+done_msg:
+    .ascii "=== Done ===\n"
+
+.shared
+    # CMEM[0] = Q0 measurement result
+    # CMEM[1] = Q1 measurement result
+    # CMEM[2] = derived value from Q0
+    # CMEM[3] = derived value from Q1
+    .i64 0, 0, 0, 0
+
+.code
+
+# --- Print banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ===================================================================
+# Step 1: Prepare and measure quantum registers (single-threaded)
+# ===================================================================
+
+# Q0: Hadamard superposition on qubit 0
+    QPREP Q0, 1               # Q0 = |00>
+    ILDI R6, 1
+    QHADM Q0, Q0, R6          # Apply H to qubit 0 -> (|00> + |10>) / sqrt(2)
+
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R3      # R3 = Q0 measurement (0 or 2)
+    ISTR R3, 0                 # shared CMEM[0] = Q0 result
+
+    ILDI R14, 0
+    IADD R2, R3, R14           # R2 = R3 (for %d)
+    ILDI R0, @q0_msg
+    ILDI R1, @q0_msg.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# Q1: Bell state (entangled 2-qubit pair)
+    QPREP Q1, 2               # Q1 = (|00> + |11>) / sqrt(2)
+
+    QOBSERVE H1, Q1
+    HREDUCE MODEV, H1, R3      # R3 = Q1 measurement (0 or 3)
+    ISTR R3, 1                 # shared CMEM[1] = Q1 result
+
+    IADD R2, R3, R14           # R2 = R3 (for %d)
+    ILDI R0, @q1_msg
+    ILDI R1, @q1_msg.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ===================================================================
+# Step 2: Fork for parallel post-processing
+# ===================================================================
+    HFORK
+
+    ITID R7                    # R7 = thread_id (0 or 1)
+    ICCFG R8                   # R8 = thread_count (2)
+
+# ===================================================================
+# Atomic section: leader computes derived values from measurements
+# ===================================================================
+    HATMS
+
+    # Read Q0 measurement and compute derived value
+    ILDM R9, 0                 # R9 = Q0 measurement
+    ILDI R10, 100
+    IMUL R9, R9, R10           # R9 = Q0_meas * 100
+    ILDI R10, 1
+    IADD R9, R9, R10           # R9 = Q0_meas * 100 + 1
+    ISTR R9, 2                 # shared[2] = derived from Q0
+
+    # Read Q1 measurement and compute derived value
+    ILDM R9, 1                 # R9 = Q1 measurement
+    ILDI R10, 100
+    IMUL R9, R9, R10           # R9 = Q1_meas * 100
+    ILDI R10, 2
+    IADD R9, R9, R10           # R9 = Q1_meas * 100 + 2
+    ISTR R9, 3                 # shared[3] = derived from Q1
+
+    HATME
+
+# ===================================================================
+# Step 3: Merge and report
+# ===================================================================
+    HMERGE
+
+    ILDM R2, 2
+    ILDI R0, @r0_msg
+    ILDI R1, @r0_msg.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDM R2, 3
+    ILDI R0, @r1_msg
+    ILDI R1, @r1_msg.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    ILDI R0, @done_msg
+    ILDI R1, @done_msg.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

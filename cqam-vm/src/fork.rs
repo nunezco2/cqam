@@ -5,9 +5,11 @@
 //! thread growth. It is intentionally not `Clone` because it owns
 //! `JoinHandle` values.
 
+use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use crate::context::ExecutionContext;
 use crate::executor::run_program;
+use crate::thread_pool::{SharedQuantumFile, SharedMemory, ThreadBarrier};
 use cqam_core::error::CqamError;
 
 /// Maximum fork nesting depth. Prevents exponential thread spawning.
@@ -21,7 +23,7 @@ pub const DEFAULT_MAX_FORK_DEPTH: u8 = 4;
 /// Each fork thread creates its own ForkManager with incremented depth.
 pub struct ForkManager {
     /// Currently active fork threads awaiting HMERGE.
-    active_forks: Vec<JoinHandle<Result<ExecutionContext, CqamError>>>,
+    pub(crate) active_forks: Vec<JoinHandle<Result<ExecutionContext, CqamError>>>,
 
     /// Completed fork contexts collected after HMERGE join.
     pub completed_forks: Vec<ExecutionContext>,
@@ -31,6 +33,15 @@ pub struct ForkManager {
 
     /// Maximum allowed fork nesting depth.
     max_depth: u8,
+
+    /// Shared quantum file for the current HFORK/HMERGE block.
+    shared_qfile: Option<Arc<SharedQuantumFile>>,
+
+    /// Shared memory for the current HFORK/HMERGE block.
+    shared_mem: Option<Arc<SharedMemory>>,
+
+    /// Thread barrier for HATMS/HATME synchronization.
+    barrier: Option<Arc<ThreadBarrier>>,
 }
 
 impl ForkManager {
@@ -41,6 +52,9 @@ impl ForkManager {
             completed_forks: Vec::new(),
             depth: 0,
             max_depth: DEFAULT_MAX_FORK_DEPTH,
+            shared_qfile: None,
+            shared_mem: None,
+            barrier: None,
         }
     }
 
@@ -53,6 +67,9 @@ impl ForkManager {
             completed_forks: Vec::new(),
             depth: parent_depth.saturating_add(1),
             max_depth,
+            shared_qfile: None,
+            shared_mem: None,
+            barrier: None,
         }
     }
 
@@ -147,6 +164,38 @@ impl ForkManager {
     /// Drain and return all completed fork contexts.
     pub fn take_completed(&mut self) -> Vec<ExecutionContext> {
         std::mem::take(&mut self.completed_forks)
+    }
+
+    /// Store shared resources for thread 0 during an HFORK/HMERGE block.
+    pub fn set_shared_resources(
+        &mut self,
+        qfile: Arc<SharedQuantumFile>,
+        mem: Arc<SharedMemory>,
+        barrier: Arc<ThreadBarrier>,
+    ) {
+        self.shared_qfile = Some(qfile);
+        self.shared_mem = Some(mem);
+        self.barrier = Some(barrier);
+    }
+
+    /// Take the shared quantum file (consumes the stored reference).
+    pub fn take_shared_qfile(&mut self) -> Option<Arc<SharedQuantumFile>> {
+        self.shared_qfile.take()
+    }
+
+    /// Take the shared memory (consumes the stored reference).
+    pub fn take_shared_mem(&mut self) -> Option<Arc<SharedMemory>> {
+        self.shared_mem.take()
+    }
+
+    /// Get a reference to the shared memory (non-consuming).
+    pub fn get_shared_mem(&self) -> Option<&Arc<SharedMemory>> {
+        self.shared_mem.as_ref()
+    }
+
+    /// Get a reference to the barrier.
+    pub fn get_barrier(&self) -> Option<&Arc<ThreadBarrier>> {
+        self.barrier.as_ref()
     }
 }
 

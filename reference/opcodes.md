@@ -9,7 +9,7 @@ bits [31:24] contain the 8-bit opcode.
 
 | Format | Layout | Used By |
 |--------|--------|---------|
-| N | `[opcode:8][_:24]` | NOP, RET, HALT, HFORK, HMERGE, RETI |
+| N | `[opcode:8][_:24]` | NOP, RET, HALT, HFORK, HMERGE, HATMS, HATME, RETI |
 | RRR | `[opcode:8][dst:4][lhs:4][rhs:4][_:12]` | Arithmetic, comparison, FATAN2 |
 | RR | `[opcode:8][dst:4][src:4][_:16]` | INOT, CVTxx, FSIN, FCOS, FSQRT |
 | RRS | `[opcode:8][dst:4][src:4][amt:6][_:10]` | ISHL, ISHR |
@@ -96,8 +96,8 @@ bits [31:24] contain the 8-bit opcode.
 | 0x35 | ILDX     | RR     | R[dst] = CMEM[R[addr_reg]] |
 | 0x36 | ISTRX    | RR     | CMEM[R[addr_reg]] = R[src] |
 | 0x37 | FLDX     | RR     | F[dst] = f64::from_bits(CMEM[R[addr_reg]]) |
-| 0x38 | HFORK    | N      | Set hybrid fork flags |
-| 0x39 | HMERGE   | N      | Set hybrid merge flags |
+| 0x38 | HFORK    | N      | Spawn N-1 worker threads (SPMD); requires QF=0; creates SharedQuantumFile, SharedMemory, ThreadBarrier |
+| 0x39 | HMERGE   | N      | Join all worker threads; restore Q registers; write back shared memory; requires QF=0 |
 | 0x3A | JMPF   | JR     | if PSW.flag: PC = addr16 |
 | 0x3B | HREDUCE  | HR     | dst = reduce(H[src], func) |
 | 0x3C | FSTRX    | RR     | CMEM[R[addr_reg]] = F[src].to_bits() |
@@ -126,8 +126,13 @@ bits [31:24] contain the 8-bit opcode.
 | 0x55 | FSQRT    | RR     | F[dst] = sqrt(F[src]); traps if F[src] < 0 |
 | 0x56 | QPTRACE  | QPT    | Q[dst] = Tr_B(Q[src]); num_qubits_a=R[reg]; non-destructive |
 | 0x57 | QRESET   | QRS    | Q[dst] = reset_qubit(Q[src], qubit=R[qubit_reg]); result guaranteed |0> |
+| 0x58 | IQCFG    | RR     | R[dst] = configured qubit count |
+| 0x59 | ICCFG    | RR     | R[dst] = configured thread count |
+| 0x5A | ITID     | RR     | R[dst] = current thread index (0-based) |
+| 0x5B | HATMS    | N      | Atomic section start: full barrier + leader election |
+| 0x5C | HATME    | N      | Atomic section end: snapshot commit + barrier resume |
 
-Reserved: 0x2F (interrupt), 0x50 (reserved), 0x58-0xFF (future).
+Reserved: 0x2F (interrupt), 0x50 (reserved), 0x5D-0xFF (future).
 
 ## 4. Distribution IDs (QPREP / QPREPR / QPREPN dist field)
 
@@ -175,6 +180,7 @@ are intent-based flags set by kernel identity, not dynamic state inspection.
 | 6  | EF   | Entanglement created by last kernel |
 | 7  | HF   | Hybrid mode active |
 | 12 | IF   | Interference exploited by last kernel |
+| 13 | AF   | Atomic section active (set on elected leader between HATMS and HATME) |
 
 ## 7. Reduction Function IDs (HREDUCE func field)
 

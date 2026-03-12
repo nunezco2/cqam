@@ -17,7 +17,8 @@ Design philosophy:
 - The machine supports five register files, two memory banks, a hardware call
   stack, and a two-level interrupt model.
 - Programs may use `#! qubits N` pragma directives to specify the default qubit
-  count for that program.
+  count for that program, and `#! threads N` to declare the default thread count
+  for HFORK parallel regions.
 
 ## 2. Machine State
 
@@ -92,6 +93,7 @@ GROV).
 | HF | Hybrid mode active |
 | forked | HFORK has been executed |
 | merged | HMERGE has been executed |
+| AF (ID 13) | Atomic section active: set on the elected leader thread between HATMS and HATME; cleared at HATME and HMERGE |
 
 ### 3.4 Trap/Interrupt Flags
 
@@ -153,9 +155,16 @@ Labels are resolved once during `ExecutionContext` construction into a
 
 ### 5.3 Pragma Directives
 
-The parser recognizes `#! qubits N` pragma lines. The parsed qubit count is
-stored in `ProgramMetadata` and applied by the runner as the default qubit
-count for `QPREP` and related instructions, subject to CLI override.
+The parser recognizes two `#!` pragma forms. Parsed values are stored in
+`ProgramMetadata` and applied by the runner before execution, subject to CLI
+override.
+
+| Pragma | Syntax | Effect |
+|--------|--------|--------|
+| `qubits` | `#! qubits N` | Default qubit count for `QPREP` and related instructions. Overridden by `--qubits`. |
+| `threads` | `#! threads N` | Default thread count for `HFORK` (1-256). Overridden by `--threads`. |
+
+Thread count precedence: CLI `--threads` > `#! threads N` pragma > default (1).
 
 ## 6. Quantum Model
 
@@ -296,20 +305,105 @@ and classical preprocessing of quantum parameters:
 
 ## 8. Hybrid Execution Model
 
-### 8.1 HFORK / HMERGE
+### 8.1 SPMD Execution Model
 
-HFORK marks the beginning of a parallel execution region by setting the hybrid
-mode and fork flags in the PSW. HMERGE ends the region by setting the merge
-flag. Current implementation is flag-based (not thread-based).
+CQAM parallel execution uses the Single Program Multiple Data (SPMD) model:
+all threads execute the same instruction stream simultaneously, differentiated
+only by their thread identity. The thread count N is determined by pragma or
+CLI (see section 5.3). Thread IDs are 0-based; thread 0 is the primary thread.
 
-### 8.2 JMPF
+Programs query the execution context with two instructions:
+- `ICCFG R_dst` — loads the configured thread count into R[dst].
+- `ITID R_dst` — loads the current thread's ID (0-based) into R[dst]; returns
+  0 outside an HFORK/HMERGE block.
+
+Both instructions encode in the RR format with the source field set to 0.
+
+### 8.2 HFORK / HMERGE
+
+`HFORK` begins a parallel execution region:
+1. Requires QF=0. If any quantum register is occupied, HFORK raises
+   `ForkError` because live quantum state must be transferred to the
+   `SharedQuantumFile` before threading begins.
+2. The existing Q registers are moved into a `SharedQuantumFile`: an array
+   of 8 per-register mutexes (`Arc<Mutex<Option<QuantumRegister>>>`). Threads
+   block on contention for the same register slot but can access different
+   slots concurrently.
+3. If a `.shared` section is declared, the relevant CMEM cells are copied into
+   a `SharedMemory` object with snapshot-commit consistency (see section 8.4).
+4. A `ThreadBarrier` is constructed for N threads to support HATMS/HATME.
+5. N-1 worker threads are spawned via `std::thread::Builder`. Each worker
+   receives a cloned `ExecutionContext` with PC set to HFORK+1, its thread ID
+   set, and references to the shared resources.
+6. All N threads (including thread 0) proceed at HFORK+1.
+
+When N=1, HFORK is a no-op aside from setting the hybrid PSW flags, allowing
+single-threaded programs to execute SPMD code without modification.
+
+`HMERGE` ends the parallel region:
+1. Requires QF=0 (all quantum work must be completed and observed).
+2. Worker threads detect HMERGE by observing `psw.merged = true` at the top
+   of their execution loop and exit.
+3. Thread 0 calls `join_all()`, collecting results from all worker handles.
+4. Quantum registers are restored from the `SharedQuantumFile`.
+5. The final committed shared memory state is written back into thread 0's CMEM.
+
+### 8.3 HATMS / HATME — Atomic Sections
+
+Atomic sections provide a safe, serialized region for shared-memory updates
+inside an HFORK/HMERGE block.
+
+`HATMS` (Hybrid Atomic Section Start):
+1. Raises `ForkError` if called outside a forked region.
+2. All N threads arrive at a full `ThreadBarrier`. The first thread to arrive
+   is elected leader. All threads block until the last one arrives.
+3. The elected leader proceeds with `psw.af = true` and `in_atomic_section = true`.
+4. Non-leaders set `skip_to_hatme = true` and skip all instructions until
+   reaching HATME, where they resume normal execution.
+
+`HATME` (Hybrid Atomic Section End):
+1. The leader commits the current `SharedMemory` live data as the new snapshot
+   (visible to all threads on their next snapshot read).
+2. The leader clears `in_atomic_section` and `psw.af`.
+3. A second full barrier synchronizes all threads: non-leaders that were
+   skipping resume here, and all threads proceed past HATME together.
+
+The PSW flag `AF` (ID 13) is set only on the elected leader for the duration
+of the atomic section. It can be tested with `JMPF AF, label`.
+
+Constraints enforced at runtime:
+- Writes to `.shared` CMEM cells outside an atomic section raise
+  `SharedMemoryViolation`.
+- Quantum instructions (QPREP, QKERNEL, etc.) inside an atomic section raise
+  `QuantumInAtomicSection`.
+
+### 8.4 Shared Memory Consistency
+
+`SharedMemory` implements a snapshot-commit model over a declared CMEM region.
+Two independent copies are maintained internally:
+- **live data** (`RwLock<Vec<i64>>`): written exclusively by the leader inside
+  an atomic section.
+- **snapshot** (`RwLock<Vec<i64>>`): a frozen copy promoted from live data at
+  each `HATME`.
+
+Read semantics:
+- Outside atomic section: returns the snapshot value (last committed state).
+- Inside atomic section (leader only): returns the live value.
+
+This ensures non-leader threads see a consistent view of shared data between
+atomic sections and do not observe partial writes from a concurrent leader.
+
+At `HMERGE`, the final live data is written back to thread 0's CMEM via
+`write_back()`.
+
+### 8.5 JMPF
 
 Conditional execution based on PSW flags. Uses flag name syntax:
 `JMPF FLAG_NAME, target` (e.g., `JMPF EF, entangled_path`). The flag name
 is assembled to the corresponding flag ID in the binary encoding. Jumps to
 the target label if the named flag is set.
 
-### 8.3 HREDUCE
+### 8.6 HREDUCE
 
 Syntax: `HREDUCE MNEM, H_src, R/F/Z_dst` (e.g., `HREDUCE ARGMX, H0, R2`).
 
@@ -348,7 +442,7 @@ The `ResourceTracker` accumulates deltas across execution for reporting.
 The machine state is a tuple:
 
 ```
-Sigma = (PC, R, F, Z, Q, H, CMEM, QMEM, PSW, CS)
+Sigma = (PC, R, F, Z, Q, H, CMEM, QMEM, PSW, CS, TID, N_threads)
 ```
 
 where:
@@ -362,6 +456,8 @@ where:
 - `QMEM : [0..255] -> QuantumRegister | NULL` -- quantum memory
 - `PSW : PSW_State` -- program status word (all flags)
 - `CS : List<N>` -- call stack (return addresses)
+- `TID : N` -- thread identity (0-based index; 0 in single-threaded context)
+- `N_threads : N` -- configured thread count (from pragma or CLI)
 
 ### 10.2 State Transition Function
 
@@ -428,6 +524,53 @@ Notation: `sigma' = sigma[field := value]` denotes a state identical to
                          CS := CS',
                          PSW := clear_maskable_traps(PSW)]
 ```
+
+**Thread Count Query (ICCFG):**
+```
+  -------------------------------------------------------
+  sigma --ICCFG(dst)--> sigma[R[dst] := sigma.N_threads,
+                               PSW.ZF := (N_threads == 0),
+                               PC := PC + 1]
+```
+
+**Thread Identity Query (ITID):**
+```
+  -------------------------------------------------------
+  sigma --ITID(dst)--> sigma[R[dst] := sigma.TID,
+                              PSW.ZF := (TID == 0),
+                              PC := PC + 1]
+```
+
+**Atomic Section Start (HATMS):**
+```
+    PSW.forked = true
+    barrier.wait(TID) => BarrierWaitResult { is_leader }
+  -------------------------------------------------------
+  sigma --HATMS-->
+    sigma[PSW.af := is_leader,
+          in_atomic_section := is_leader,
+          skip_to_hatme := !is_leader,
+          PC := PC + 1]
+```
+
+Non-leader threads set `skip_to_hatme` and skip forward to HATME. The full
+barrier ensures all N threads have arrived before any proceeds.
+
+**Atomic Section End (HATME):**
+```
+    in_atomic_section = true (leader)
+    SharedMemory.commit_snapshot()
+    barrier.wait(TID)   // second full barrier
+  -------------------------------------------------------
+  sigma --HATME-->
+    sigma[PSW.af := false,
+          in_atomic_section := false,
+          skip_to_hatme := false,
+          PC := PC + 1]
+```
+
+All threads (leader and non-leaders) synchronize at the second barrier inside
+HATME before any proceeds past it.
 
 **Quantum Preparation (QPREP):**
 ```
@@ -648,3 +791,129 @@ msg:
     ILDI R1, @diag.len     # R1 = 4  (complex entry count)
     QKERNEL DIAG, Q1, Q0, R0, R1
 ```
+
+## 12. Shared and Private Memory Sections
+
+### 12.1 `.shared` Section
+
+The `.shared` section declares a CMEM region shared across all threads in an
+HFORK/HMERGE block. It is declared at the top level alongside `.data` and
+`.code`. At most one `.shared` section may appear per program.
+
+Syntax:
+
+```
+.shared
+base 0x8000
+size 16
+shared_counter:
+    .i64 0
+```
+
+- `base` sets the CMEM address of the shared region (must be a u16 value).
+- `size` sets the region length in cells.
+- Labels declared inside the section follow the same `@label` / `@label.len`
+  reference syntax as `.data` labels.
+
+Consistency: snapshot-commit (see section 8.4). The initial cell values are
+copied from the program's CMEM at HFORK time. After HMERGE, the final
+committed state is written back to thread 0's CMEM.
+
+### 12.2 `.private` Section
+
+The `.private` section declares per-thread scratch space that is independent
+across all threads. At most one `.private` section may appear per program.
+
+Syntax:
+
+```
+.private
+size 64
+```
+
+`size` specifies the number of cells. Each thread receives an isolated copy;
+writes by one thread are never visible to another. Private memory is not
+involved in snapshot-commit consistency and is not written back at HMERGE.
+
+### 12.3 Section Interaction Rules
+
+| Section | Visible to all threads | Needs atomic section for writes | Written back at HMERGE |
+|---------|----------------------|--------------------------------|------------------------|
+| `.data` / general CMEM | Thread-local copy | N/A (no sharing) | No (each thread independent) |
+| `.shared` | Yes (snapshot outside atomic, live inside) | Yes | Yes (from thread 0) |
+| `.private` | No (per-thread copy) | N/A | No |
+
+## 13. Parallel Execution Programming Guide
+
+### 13.1 SPMD Pattern
+
+All threads execute the same instruction stream. The canonical idiom for
+data-parallel work:
+
+```
+#! threads 4
+
+.shared
+base 0x8000
+size 4
+
+.code
+    HFORK
+    ITID  R0              # R0 = this thread's ID (0-3)
+    ICCFG R1              # R1 = total threads (4)
+
+    # ... per-thread work using R0 as lane index ...
+
+    HMERGE
+    HALT
+```
+
+### 13.2 Atomic Section Pattern
+
+Use HATMS/HATME to perform serialized reductions into shared memory:
+
+```
+    HFORK
+    ITID  R0
+    # ... compute per-thread result in R2 ...
+
+    HATMS                 # all threads rendezvous; leader elected
+    JMPF AF, do_update    # only leader takes this branch
+    JMP after_update
+
+LABEL: do_update
+    ILDM R3, @shared_counter    # R3 = current shared value (live data)
+    IADD R3, R3, R2             # accumulate
+    ISTR R3, @shared_counter
+LABEL: after_update
+
+    HATME                 # leader commits; all threads resume
+
+    HMERGE
+    HALT
+```
+
+After HMERGE, `@shared_counter` in thread 0's CMEM holds the accumulated
+result from the leader's last committed atomic section.
+
+### 13.3 Quantum State in Parallel Regions
+
+Quantum registers are moved to a `SharedQuantumFile` at HFORK and restored at
+HMERGE. Within the parallel region:
+- Access to Q[k] acquires the per-register mutex; concurrent access to
+  different register indices is allowed.
+- Quantum operations (QKERNEL, QOBSERVE, etc.) are permitted in the parallel
+  region but NOT inside HATMS/HATME atomic sections.
+- All Q registers must be consumed (QF=0) before HFORK and before HMERGE.
+
+### 13.4 CLI Thread Override
+
+The `--threads <n>` flag on `cqam-run` overrides the pragma value:
+
+```
+cqam-run myprogram.cqam --threads 8
+```
+
+Valid range: 1-256. Specifying `--threads 1` reverts to single-threaded
+execution (HFORK/HMERGE become flag-only no-ops, HATMS/HATME become trivial
+single-thread atomic sections).

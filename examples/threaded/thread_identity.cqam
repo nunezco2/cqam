@@ -1,0 +1,103 @@
+# examples/thread_identity.cqam
+# Thread Identity with ICCFG and ITID
+#
+# Demonstrates the basic SPMD programming model by having each
+# thread identify itself. All threads load their ID (ITID) and
+# the total thread count (ICCFG). A single atomic section lets
+# the elected leader compute identity tags for all threads and
+# store them in shared memory.
+#
+# Algorithm:
+#   1. HFORK spawns 2 threads
+#   2. Each thread loads its ID via ITID and the thread count
+#      via ICCFG
+#   3. One HATMS/HATME section lets the leader compute tags for
+#      all threads: tag[k] = k * 1000 + thread_count
+#   4. After HMERGE, thread 0 prints the stored tags
+#
+# Expected tags:
+#   Tag[0] = 0 * 1000 + 2 = 2
+#   Tag[1] = 1 * 1000 + 2 = 1002
+#
+#! qubits 1
+#! threads 2
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Thread Identity ===\n"
+id_fmt:
+    .ascii "Thread %d of %d (tag = %d)\n"
+done_msg:
+    .ascii "=== All threads reported ===\n"
+
+.shared
+    # CMEM[0] = Thread 0 tag
+    # CMEM[1] = Thread 1 tag
+    .i64 0, 0
+
+.code
+
+# --- Print banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Fork into 2 threads ---
+    HFORK
+
+# --- Each thread loads its identity ---
+    ITID R2                    # R2 = thread_id (0 or 1)
+    ICCFG R3                   # R3 = thread_count (2)
+
+# --- Atomic section: leader computes tags for all threads ---
+    HATMS
+
+    # Compute tag[0] = 0 * 1000 + thread_count
+    ILDI R4, 1000
+    ILDI R5, 0                 # thread 0
+    IMUL R6, R5, R4            # R6 = 0 * 1000 = 0
+    IADD R6, R6, R3            # R6 = 0 + thread_count = 2
+    ISTR R6, 0                 # shared[0] = tag[0]
+
+    # Compute tag[1] = 1 * 1000 + thread_count
+    ILDI R5, 1                 # thread 1
+    IMUL R6, R5, R4            # R6 = 1 * 1000 = 1000
+    IADD R6, R6, R3            # R6 = 1000 + thread_count = 1002
+    ISTR R6, 1                 # shared[1] = tag[1]
+
+    HATME
+
+# --- Merge ---
+    HMERGE
+
+# --- Print identity for thread 0 ---
+    ILDI R2, 0                 # R2 = thread index 0
+    ILDI R3, 2                 # R3 = thread_count
+    ILDM R4, 0                 # R4 = tag[0]
+    ILDI R0, @id_fmt
+    ILDI R1, @id_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Print identity for thread 1 ---
+    ILDI R2, 1                 # R2 = thread index 1
+    ILDI R3, 2                 # R3 = thread_count
+    ILDM R4, 1                 # R4 = tag[1]
+    ILDI R0, @id_fmt
+    ILDI R1, @id_fmt.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# --- Done ---
+    ILDI R0, @done_msg
+    ILDI R1, @done_msg.len
+    ILDI R15, 1
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

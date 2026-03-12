@@ -63,3 +63,4 @@ pub mod psw;
 pub mod simconfig;
 pub mod isr;
 pub mod hybrid;
+pub mod thread_pool;

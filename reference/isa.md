@@ -137,11 +137,20 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 
 | Mnemonic | Operands | Operation | Encoding |
 |----------|----------|-----------|----------|
-| `HFORK` | — | Spawn parallel execution threads; set PSW.forked | N |
-| `HMERGE` | — | Join all forked threads; set PSW.merged | N |
+| `HFORK` | — | Spawn N-1 worker threads (SPMD model); requires QF=0; creates SharedQuantumFile, SharedMemory, ThreadBarrier; sets PSW.forked | N |
+| `HMERGE` | — | Join all worker threads; restore quantum registers; write back shared memory; requires QF=0; sets PSW.merged | N |
+| `HATMS` | — | Hybrid Atomic Section Start: full barrier across all threads; elect one leader; set PSW.AF on leader | N |
+| `HATME` | — | Hybrid Atomic Section End: leader commits shared memory snapshot; full barrier resumes all threads; clear PSW.AF | N |
 | `HREDUCE` | func_mnem, src, dst | Reduce H[src] to classical value; write to R, F, or Z register | HR |
 
-### 1.11 Interrupt handling
+### 1.11 Thread-identity queries (R-file)
+
+| Mnemonic | Operands | Operation | Encoding |
+|----------|----------|-----------|----------|
+| `ICCFG` | dst | R[dst] = configured thread count (from pragma or CLI) | RR |
+| `ITID` | dst | R[dst] = current thread index (0-based); 0 when not inside HFORK/HMERGE | RR |
+
+### 1.12 Interrupt handling
 
 | Mnemonic | Operands | Operation | Encoding |
 |----------|----------|-----------|----------|
@@ -175,7 +184,7 @@ following formats.
 
 | Format | Bits 31..24 | Bits 23..0 | Used by |
 |--------|-------------|------------|---------|
-| **N** | opcode[8] | — (zero) | NOP, RET, HALT, HFORK, HMERGE, RETI |
+| **N** | opcode[8] | — (zero) | NOP, RET, HALT, HFORK, HMERGE, HATMS, HATME, RETI |
 | **RRR** | opcode[8] | dst[4] lhs[4] rhs[4] _[12] | Integer/float/complex 3-reg ops |
 | **RR** | opcode[8] | dst[4] src[4] _[16] | INOT, CVT*, indirect mem |
 | **RRS** | opcode[8] | dst[4] src[4] amt[6] _[10] | ISHL, ISHR |
@@ -209,6 +218,8 @@ following formats.
 | 0x35-0x3E | Register-indirect memory + hybrid operations |
 | 0x40-0x4E | Extended quantum operations (QSAMPLE..QSWAP) |
 | 0x4F-0x57 | Mixed-state, partial-trace, reset, and float math |
+| 0x58 | Qubit-count query (IQCFG) |
+| 0x59-0x5C | Thread-identity and atomic section instructions (ICCFG, ITID, HATMS, HATME) |
 
 ---
 
@@ -258,6 +269,7 @@ operation applied, not by dynamic state inspection.
 | `EF` | 6 | `psw.ef` | QKERNEL intent | Entanglement created: set by kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP BELL/GHZ |
 | `HF` | 7 | `psw.hf` | HFORK/HMERGE | Hybrid mode: inside an HFORK/HMERGE block |
 | `IF` | 12 | `psw.if_flag` | QKERNEL intent | Interference: set by kernels that exploit interference (QFFT, QIFT, DIFF, GROV) |
+| `AF` | 13 | `psw.af` | HATMS/HATME | Atomic section: set on the elected leader thread between HATMS and HATME |
 
 ### 4.4 Trap IDs (`trap_id` module, used by `SETIV`)
 
@@ -269,6 +281,15 @@ operation applied, not by dynamic state inspection.
 
 Note: `HALT` and `IllegalPC` are non-maskable (NMI) traps and cannot be
 overridden with `SETIV`.
+
+Runtime errors produced by the parallel execution model are reported as
+`CqamError` variants rather than ISA traps:
+
+| Error | Trigger |
+|-------|---------|
+| `SharedMemoryViolation` | Write to `.shared` memory region outside an HATMS/HATME atomic section |
+| `QuantumInAtomicSection` | Quantum instruction issued between HATMS and HATME |
+| `ThreadSyncError` | Thread synchronization failure (e.g., barrier mismatch) |
 
 ### 4.5 Reduction Function IDs (`reduce_fn` module, used by `HREDUCE`)
 
@@ -346,6 +367,43 @@ cells (real part at addr, imaginary part at addr+1).
 
 QMEM is separate from the quantum register file (Q0-Q7). `QSTORE` clones a
 live Q register into a QMEM slot; `QLOAD` clones a QMEM slot into a Q register.
+
+### 5.3 Shared Memory (`.shared` section)
+
+The `.shared` section declares a named CMEM region shared by all threads in
+an HFORK/HMERGE block. It is declared in the program source alongside `.data`:
+
+```
+.shared
+base 0x8000
+size 16
+```
+
+The `base` directive sets the CMEM starting address; `size` is the region
+length in cells. Labels may be defined inside `.shared` and referenced in
+`.code` with `@label` syntax (resolves to CMEM address) exactly as in `.data`.
+
+Access rules enforced at runtime:
+- Reads outside HATMS/HATME: return the last-committed snapshot value.
+- Reads inside HATMS/HATME (leader only): return live data.
+- Writes outside HATMS/HATME: raise `SharedMemoryViolation`.
+- Writes inside HATMS/HATME (leader only): update live data; committed to
+  snapshot when HATME executes.
+
+At HMERGE, the final committed state is written back into thread 0's CMEM.
+
+### 5.4 Private Memory (`.private` section)
+
+The `.private` section declares per-thread scratch space in CMEM:
+
+```
+.private
+size 64
+```
+
+Each thread receives an independent copy of this region. The `size` field
+specifies the number of cells. Private memory is not shared across threads and
+does not participate in snapshot-commit consistency.
 
 ---
 

@@ -22,6 +22,8 @@ fn test_hfork_sets_flags() {
 fn test_hmerge_sets_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    // Must HFORK first before HMERGE
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
     let jumped = execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm).unwrap();
     assert!(!jumped);
     assert!(ctx.psw.merged);
@@ -309,15 +311,15 @@ fn test_hreduce_mode_with_nan_does_not_panic() {
     // Should not panic; result is one of the non-NaN entries
 }
 
-// --- Fork/merge parallelism --------------------------------------------------
+// --- Fork/merge parallelism (single-threaded, thread_count=1) ----------------
 
 #[test]
-fn test_hfork_spawns_real_thread() {
-    // HFORK followed by different operations, then HMERGE
+fn test_hfork_single_threaded_flag_management() {
+    // With thread_count=1 (default), HFORK just sets flags, no thread spawning
     let program = vec![
-        Instruction::HFork,           // 0: fork
-        Instruction::ILdi { dst: 0, imm: 42 }, // 1: both paths execute this
-        Instruction::HMerge,          // 2: join
+        Instruction::HFork,           // 0: fork (single-threaded => just flags)
+        Instruction::ILdi { dst: 0, imm: 42 }, // 1: execute normally
+        Instruction::HMerge,          // 2: join (no-op for single-threaded)
         Instruction::Halt,            // 3: done
     ];
 
@@ -328,21 +330,19 @@ fn test_hfork_spawns_real_thread() {
     assert!(!ctx.psw.forked);  // HMERGE clears forked
     assert!(ctx.psw.merged);
     assert_eq!(ctx.iregs.get(0).unwrap(), 42);
-    // The fork should have completed and been collected
-    assert_eq!(fm.completed_forks.len(), 1);
-    // Fork context should also have R0 = 42
-    assert_eq!(fm.completed_forks[0].iregs.get(0).unwrap(), 42);
+    // No fork threads spawned in single-threaded mode
+    assert_eq!(fm.completed_forks.len(), 0);
 }
 
 #[test]
-fn test_hfork_independence() {
-    // Fork and main diverge: fork runs the same code but main modifies R1 after merge
+fn test_hfork_single_threaded_independence() {
+    // Single-threaded: all instructions run in main, no fork thread
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 10 },  // 0: set R0=10
-        Instruction::HFork,                       // 1: fork
-        Instruction::ILdi { dst: 1, imm: 20 },   // 2: both set R1=20
-        Instruction::HMerge,                      // 3: join
-        Instruction::ILdi { dst: 2, imm: 99 },   // 4: only main sets R2=99
+        Instruction::HFork,                       // 1: fork (flags only)
+        Instruction::ILdi { dst: 1, imm: 20 },   // 2: R1=20
+        Instruction::HMerge,                      // 3: join (flags only)
+        Instruction::ILdi { dst: 2, imm: 99 },   // 4: R2=99
         Instruction::Halt,                        // 5: done
     ];
 
@@ -353,18 +353,11 @@ fn test_hfork_independence() {
     assert_eq!(ctx.iregs.get(0).unwrap(), 10);
     assert_eq!(ctx.iregs.get(1).unwrap(), 20);
     assert_eq!(ctx.iregs.get(2).unwrap(), 99);
-
-    // Fork context: R0=10, R1=20, but R2 should be 99 too since fork
-    // continues past HMERGE (it just runs to HALT)
-    assert_eq!(fm.completed_forks.len(), 1);
-    let fork_ctx = &fm.completed_forks[0];
-    assert_eq!(fork_ctx.iregs.get(0).unwrap(), 10);
-    assert_eq!(fork_ctx.iregs.get(1).unwrap(), 20);
 }
 
 #[test]
-fn test_hmerge_without_fork_no_error() {
-    // HMERGE with no active forks should just set flags, no error
+fn test_hmerge_without_fork_returns_error() {
+    // HMERGE without prior HFORK should return an error
     let program = vec![
         Instruction::HMerge,
         Instruction::Halt,
@@ -372,10 +365,8 @@ fn test_hmerge_without_fork_no_error() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
-    assert!(ctx.psw.merged);
-    assert_eq!(fm.completed_forks.len(), 0);
+    let result = cqam_vm::executor::run_program(&mut ctx, &mut fm);
+    assert!(result.is_err());
 }
 
 #[test]
@@ -394,20 +385,10 @@ fn test_fork_manager_take_completed() {
     let mut fm = ForkManager::new();
     assert_eq!(fm.take_completed().len(), 0);
 
-    // Run a program with fork to populate completed_forks
-    let program = vec![
-        Instruction::HFork,
-        Instruction::ILdi { dst: 0, imm: 1 },
-        Instruction::HMerge,
-        Instruction::Halt,
-    ];
-    let mut ctx = ExecutionContext::new(program);
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
+    // In single-threaded mode, HFORK doesn't spawn threads
+    // so completed_forks stays empty. Just verify take_completed works.
     let completed = fm.take_completed();
-    assert_eq!(completed.len(), 1);
-    // After take, completed_forks should be empty
-    assert_eq!(fm.take_completed().len(), 0);
+    assert_eq!(completed.len(), 0);
 }
 
 #[test]
@@ -427,80 +408,99 @@ fn test_context_clone_preserves_state() {
     assert_eq!(cloned.pc, 0);
 }
 
-// --- Fork/merge stress tests -------------------------------------------------
+// --- Multi-threaded SPMD fork/merge tests ------------------------------------
 
-/// Verify that the fork context's PC is exactly ctx.pc + 1 (the instruction
-/// after HFORK). This is fundamental to the fork contract: the fork must
-/// NOT re-execute the HFORK itself (infinite recursion) and must start
-/// at the very next instruction.
 #[test]
-fn test_hfork_context_pc_is_next_instruction() {
-    // Program: NOP at 0, HFORK at 1, ILdi at 2, HMERGE at 3, HALT at 4
+fn test_hfork_spmd_two_threads() {
+    // With thread_count=2, HFORK spawns one worker thread
+    // Both threads run the same code, then HMERGE joins them
     let program = vec![
-        Instruction::Nop,                          // 0
-        Instruction::HFork,                        // 1
-        Instruction::ILdi { dst: 0, imm: 77 },    // 2
-        Instruction::HMerge,                       // 3
-        Instruction::Halt,                         // 4
+        Instruction::ILdi { dst: 0, imm: 42 }, // 0: set R0=42
+        Instruction::HFork,                     // 1: fork (spawns 1 worker)
+        Instruction::ILdi { dst: 1, imm: 99 }, // 2: both threads set R1=99
+        Instruction::HMerge,                    // 3: join
+        Instruction::Halt,                      // 4
     ];
 
     let mut ctx = ExecutionContext::new(program);
+    ctx.thread_count = 2;
     let mut fm = ForkManager::new();
     cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
 
-    // Fork ran from PC=2 onward and completed
-    assert_eq!(fm.completed_forks.len(), 1);
-    let fork_ctx = &fm.completed_forks[0];
-    // Fork should have executed ILdi at PC=2, so R0 = 77
-    assert_eq!(fork_ctx.iregs.get(0).unwrap(), 77);
-    // Fork should have reached HALT, so trap_halt is set
-    assert!(fork_ctx.psw.trap_halt);
+    assert!(!ctx.psw.forked);
+    assert!(ctx.psw.merged);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 42);
+    assert_eq!(ctx.iregs.get(1).unwrap(), 99);
 }
 
-/// Verify that a fork's register mutations do NOT bleed into the main
-/// context. The fork modifies R0 to a different value than main does.
 #[test]
-fn test_fork_register_isolation() {
-    // Main sets R0=100 before fork. Fork inherits R0=100 and overwrites
-    // with R0=200. After merge, main sets R0=300. The fork's R0=200
-    // must not interfere with main's R0=300.
+fn test_hfork_spmd_tid_divergence() {
+    // Test that threads can identify themselves via ITid and diverge
     let program = vec![
-        Instruction::ILdi { dst: 0, imm: 100 },   // 0: main sets R0=100
-        Instruction::HFork,                        // 1: fork clones ctx (R0=100)
-        // Fork: continues from PC=2, sets R0=200, then R1=1, then HALT
-        // Main: continues from PC=2 (same instructions)
-        Instruction::ILdi { dst: 0, imm: 200 },   // 2: both set R0=200
-        Instruction::ILdi { dst: 1, imm: 1 },     // 3: both set R1=1
-        Instruction::HMerge,                       // 4: join
-        Instruction::ILdi { dst: 0, imm: 300 },   // 5: only main sets R0=300
-        Instruction::Halt,                         // 6
+        Instruction::HFork,                                          // 0
+        Instruction::ITid { dst: 0 },                                // 1: R0 = thread_id
+        Instruction::ILdi { dst: 1, imm: 0 },                       // 2: R1 = 0
+        Instruction::IEq { dst: 2, lhs: 0, rhs: 1 },                // 3: R2 = (tid == 0)
+        Instruction::Jif { pred: 2, target: "IS_LEADER".into() },   // 4
+        // Worker: R3 = 200
+        Instruction::ILdi { dst: 3, imm: 200 },                     // 5
+        Instruction::Jmp { target: "DONE".into() },                  // 6
+        Instruction::Label("IS_LEADER".into()),                      // 7
+        // Leader: R3 = 100
+        Instruction::ILdi { dst: 3, imm: 100 },                     // 8
+        Instruction::Label("DONE".into()),                           // 9
+        Instruction::HMerge,                                         // 10
+        Instruction::Halt,                                           // 11
     ];
 
     let mut ctx = ExecutionContext::new(program);
+    ctx.thread_count = 2;
     let mut fm = ForkManager::new();
     cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
 
-    // Main: R0 should be 300 (set after merge)
-    assert_eq!(ctx.iregs.get(0).unwrap(), 300);
-    // Fork: R0 should be 200 or 300 depending on whether fork runs past HMERGE
-    // (fork runs full program, so it also executes ILdi R0=300 at index 5)
-    // The key point is that the fork's execution did NOT affect main's registers.
-    assert_eq!(fm.completed_forks.len(), 1);
+    // Thread 0 (leader): R3 = 100
+    assert_eq!(ctx.iregs.get(3).unwrap(), 100);
+    assert_eq!(ctx.thread_id, 0);
 }
 
-/// Multiple sequential HFORK/HMERGE pairs: fork, merge, fork again, merge again.
-/// Each fork should produce an independent completed context.
 #[test]
-fn test_multiple_sequential_fork_merge_pairs() {
+fn test_hfork_spmd_loop() {
+    // Both threads run the same loop: R0 += 1 until R0 == 5
+    let program = vec![
+        Instruction::ILdi { dst: 0, imm: 0 },     // 0: R0 = 0
+        Instruction::ILdi { dst: 1, imm: 5 },     // 1: R1 = 5
+        Instruction::ILdi { dst: 2, imm: 1 },     // 2: R2 = 1
+        Instruction::HFork,                        // 3
+        Instruction::Label("LOOP".into()),         // 4
+        Instruction::IEq { dst: 3, lhs: 0, rhs: 1 }, // 5
+        Instruction::Jif { pred: 3, target: "DONE".into() }, // 6
+        Instruction::IAdd { dst: 0, lhs: 0, rhs: 2 }, // 7
+        Instruction::Jmp { target: "LOOP".into() }, // 8
+        Instruction::Label("DONE".into()),         // 9
+        Instruction::HMerge,                       // 10
+        Instruction::Halt,                         // 11
+    ];
+
+    let mut ctx = ExecutionContext::new(program);
+    ctx.thread_count = 2;
+    let mut fm = ForkManager::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+
+    assert_eq!(ctx.iregs.get(0).unwrap(), 5);
+}
+
+#[test]
+fn test_hfork_sequential_pairs() {
+    // Two sequential HFORK/HMERGE pairs in single-threaded mode
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 10 },    // 0
-        Instruction::HFork,                        // 1: first fork
+        Instruction::HFork,                        // 1
         Instruction::ILdi { dst: 1, imm: 20 },    // 2
-        Instruction::HMerge,                       // 3: first merge
+        Instruction::HMerge,                       // 3
         Instruction::ILdi { dst: 2, imm: 30 },    // 4
-        Instruction::HFork,                        // 5: second fork
+        Instruction::HFork,                        // 5
         Instruction::ILdi { dst: 3, imm: 40 },    // 6
-        Instruction::HMerge,                       // 7: second merge
+        Instruction::HMerge,                       // 7
         Instruction::Halt,                         // 8
     ];
 
@@ -508,20 +508,11 @@ fn test_multiple_sequential_fork_merge_pairs() {
     let mut fm = ForkManager::new();
     cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
 
-    // Main completed normally
     assert_eq!(ctx.iregs.get(0).unwrap(), 10);
     assert_eq!(ctx.iregs.get(1).unwrap(), 20);
     assert_eq!(ctx.iregs.get(2).unwrap(), 30);
     assert_eq!(ctx.iregs.get(3).unwrap(), 40);
     assert!(ctx.psw.trap_halt);
-
-    // Two fork/merge cycles should have produced 2 completed forks
-    // (first merge collects 1 fork, second merge collects 1 fork,
-    //  but the second fork itself may also spawn a nested fork when
-    //  it runs through the second HFORK in the remaining program)
-    // At minimum, the first merge should have collected 1 fork.
-    assert!(fm.completed_forks.len() >= 2,
-        "Expected at least 2 completed forks, got {}", fm.completed_forks.len());
 }
 
 /// Fork that encounters a division-by-zero trap. The trap sets trap_arith
@@ -532,7 +523,6 @@ fn test_fork_div_by_zero_sets_trap_flag() {
         Instruction::ILdi { dst: 0, imm: 42 },    // 0
         Instruction::ILdi { dst: 1, imm: 0 },     // 1: divisor = 0
         Instruction::HFork,                        // 2: fork
-        // Both main and fork execute this div-by-zero:
         Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // 3: trap_arith
         Instruction::HMerge,                       // 4
         Instruction::Halt,                         // 5
@@ -541,15 +531,12 @@ fn test_fork_div_by_zero_sets_trap_flag() {
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
 
-    // Division by zero now sets trap_arith flag instead of returning Err
     let result = cqam_vm::executor::run_program(&mut ctx, &mut fm);
     assert!(result.is_ok());
     assert!(ctx.psw.trap_arith);
 }
 
-/// Fork where only the fork encounters an error (main skips the error path).
-/// Fork thread with div-by-zero now sets trap_arith (not hard error).
-/// The fork thread completes with the trap flag set.
+/// Fork thread with div-by-zero completes with trap flag set.
 #[test]
 fn test_fork_thread_div_by_zero_completes_with_trap() {
     let error_program = vec![
@@ -569,88 +556,150 @@ fn test_fork_thread_div_by_zero_completes_with_trap() {
     assert!(fm.completed_forks[0].psw.trap_arith);
 }
 
-/// Fork depth limit: attempting to fork beyond max_depth returns ForkError.
+/// Fork depth limit: attempting to fork (multi-threaded) beyond max_depth returns ForkError.
 #[test]
 fn test_fork_depth_limit_error_through_hybrid() {
-    let program = vec![
-        Instruction::HFork,
-        Instruction::Halt,
-    ];
+    // With thread_count > 1, fork depth is checked via can_fork()
+    // But in the SPMD model, nested HFORK is rejected by the "nested HFORK" check,
+    // not the depth limit (since HFORK inside a forked region is not allowed).
+    // Test the nested HFORK error instead:
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
 
-    let mut ctx = ExecutionContext::new(program);
-    // Create a ForkManager that is already at max depth
-    let mut fm = ForkManager::nested(3, 4); // depth=4, max=4 -> can_fork() is false
+    // First HFORK succeeds
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
+    assert!(ctx.psw.forked);
 
+    // Second HFORK while already forked should fail
     let result = execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm);
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
-    assert!(msg.contains("Fork depth limit"), "Expected depth limit error, got: {}", msg);
+    assert!(msg.contains("nested HFORK"), "Expected nested HFORK error, got: {}", msg);
 }
 
-/// Fork with an empty remaining program (HFORK is last instruction).
-/// The fork starts at PC past end-of-program and should complete immediately.
+/// SPMD: all threads see the same flag state after HFORK/HMERGE
 #[test]
-fn test_fork_with_empty_remaining_program() {
+fn test_hfork_sets_flags_on_all_threads() {
     let program = vec![
-        Instruction::HFork,  // 0: fork starts at PC=1, which is past end
-        // no more instructions
-    ];
-
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-
-    // Execute HFORK manually
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
-    assert_eq!(fm.active_count(), 1);
-
-    // Join: fork should have completed immediately (empty program from PC=1)
-    fm.join_all().unwrap();
-    assert_eq!(fm.completed_forks.len(), 1);
-    // Fork context should have no halt trap since it just fell off the end
-    assert!(!fm.completed_forks[0].psw.trap_halt);
-}
-
-/// Stress: three sequential fork/merge pairs. Since fork threads run
-/// the full remaining program, each fork will encounter subsequent HFORKs,
-/// creating nested forks. With 3 pairs the maximum nesting depth is 3,
-/// which is within the default limit of 4. This tests that the thread
-/// lifecycle handles nested fork trees without leaks or deadlocks.
-#[test]
-fn test_sequential_fork_merge_pairs_with_nesting() {
-    let program = vec![
-        Instruction::ILdi { dst: 0, imm: 1 },     // 0
-        Instruction::HFork,                        // 1: fork A (runs 2..end)
-        Instruction::ILdi { dst: 1, imm: 2 },     // 2
-        Instruction::HMerge,                       // 3: join A
-        Instruction::ILdi { dst: 2, imm: 3 },     // 4
-        Instruction::HFork,                        // 5: fork B (runs 6..end)
-        Instruction::ILdi { dst: 3, imm: 4 },     // 6
-        Instruction::HMerge,                       // 7: join B
-        Instruction::ILdi { dst: 4, imm: 5 },     // 8
-        Instruction::HFork,                        // 9: fork C (runs 10..end)
-        Instruction::ILdi { dst: 5, imm: 6 },     // 10
-        Instruction::HMerge,                       // 11: join C
-        Instruction::Halt,                         // 12
+        Instruction::HFork,        // 0
+        Instruction::HMerge,       // 1
+        Instruction::Halt,         // 2
     ];
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
     cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
 
-    // Main should have all registers set
-    assert_eq!(ctx.iregs.get(0).unwrap(), 1);
-    assert_eq!(ctx.iregs.get(1).unwrap(), 2);
-    assert_eq!(ctx.iregs.get(2).unwrap(), 3);
-    assert_eq!(ctx.iregs.get(3).unwrap(), 4);
-    assert_eq!(ctx.iregs.get(4).unwrap(), 5);
-    assert_eq!(ctx.iregs.get(5).unwrap(), 6);
-    assert!(ctx.psw.trap_halt);
+    // Main flags: after HMERGE, forked is cleared, merged is set
+    assert!(ctx.psw.hf);
+    assert!(!ctx.psw.forked);
+    assert!(ctx.psw.merged);
+}
 
-    // At the top level, we should have at least 3 completed forks
-    // (one per HMERGE at the top level). Fork A itself may have
-    // spawned sub-forks that it collected in its own ForkManager.
-    assert!(fm.completed_forks.len() >= 3,
-        "Expected >= 3 completed forks, got {}", fm.completed_forks.len());
+/// Take completed is idempotent drain (no forks in single-threaded mode).
+#[test]
+fn test_take_completed_is_idempotent_drain() {
+    let program = vec![
+        Instruction::HFork,
+        Instruction::Nop,
+        Instruction::HMerge,
+        Instruction::HFork,
+        Instruction::Nop,
+        Instruction::HMerge,
+        Instruction::Halt,
+    ];
+
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+
+    // In single-threaded mode, no fork threads are spawned
+    let first = fm.take_completed();
+    assert_eq!(first.len(), 0);
+    let second = fm.take_completed();
+    assert_eq!(second.len(), 0);
+}
+
+// --- ForkManager unit tests --------------------------------------------------
+
+/// Verify ForkManager::nested creates correct depth.
+#[test]
+fn test_fork_manager_nested_depth() {
+    let fm0 = ForkManager::new();
+    assert_eq!(fm0.depth(), 0);
+    assert!(fm0.can_fork());
+
+    let fm1 = ForkManager::nested(0, 4);
+    assert_eq!(fm1.depth(), 1);
+    assert!(fm1.can_fork());
+
+    let fm3 = ForkManager::nested(2, 4);
+    assert_eq!(fm3.depth(), 3);
+    assert!(fm3.can_fork());
+
+    let fm4 = ForkManager::nested(3, 4);
+    assert_eq!(fm4.depth(), 4);
+    assert!(!fm4.can_fork());
+
+    // Saturating add: nested(255, 255) should not overflow
+    let fm_sat = ForkManager::nested(255, 255);
+    assert_eq!(fm_sat.depth(), 255);
+    assert!(!fm_sat.can_fork());
+}
+
+/// ForkManager::default() should behave identically to ForkManager::new().
+#[test]
+fn test_fork_manager_default_equals_new() {
+    let fm_new = ForkManager::new();
+    let fm_def = ForkManager::default();
+    assert_eq!(fm_new.depth(), fm_def.depth());
+    assert_eq!(fm_new.max_depth(), fm_def.max_depth());
+    assert_eq!(fm_new.active_count(), fm_def.active_count());
+    assert_eq!(fm_new.can_fork(), fm_def.can_fork());
+}
+
+// --- SPMD multi-threaded divergent path tests --------------------------------
+
+#[test]
+fn test_hfork_spmd_divergent_paths() {
+    // Two threads diverge based on thread_id
+    let program = vec![
+        Instruction::ILdi { dst: 5, imm: 50 },    // 0: R5=50
+        Instruction::HFork,                        // 1: fork
+        Instruction::ILdi { dst: 5, imm: 100 },   // 2: both set R5=100
+        Instruction::ILdi { dst: 6, imm: 200 },   // 3: both set R6=200
+        Instruction::HMerge,                       // 4: join
+        Instruction::ILdi { dst: 5, imm: 999 },   // 5: only main's post-merge
+        Instruction::Halt,                         // 6
+    ];
+
+    let mut ctx = ExecutionContext::new(program);
+    ctx.thread_count = 2;
+    let mut fm = ForkManager::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+
+    // Main: R5 should be 999 (set after merge)
+    assert_eq!(ctx.iregs.get(5).unwrap(), 999);
+    assert_eq!(ctx.iregs.get(6).unwrap(), 200);
+}
+
+#[test]
+fn test_hfork_one_branch_halts_early() {
+    // Manually spawn a fork with a short program containing HALT
+    let short_program = vec![
+        Instruction::ILdi { dst: 0, imm: 42 },
+        Instruction::Halt,
+    ];
+
+    let fork_ctx = ExecutionContext::new(short_program);
+    let mut fm = ForkManager::new();
+    fm.spawn_fork(fork_ctx).unwrap();
+    assert_eq!(fm.active_count(), 1);
+
+    fm.join_all().unwrap();
+    assert_eq!(fm.completed_forks.len(), 1);
+    assert!(fm.completed_forks[0].psw.trap_halt, "Fork should have halted");
+    assert_eq!(fm.completed_forks[0].iregs.get(0).unwrap(), 42);
 }
 
 // =============================================================================
@@ -728,8 +777,6 @@ fn test_hreduce_negate_z_type_mismatch() {
 #[test]
 fn test_hreduce_round_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // Dist with mean = 0*0.25 + 1*0.25 + 2*0.25 + 3*0.25 = 1.5
-    // round(1.5) = 2
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
@@ -746,8 +793,6 @@ fn test_hreduce_round_dist_fallback() {
 #[test]
 fn test_hreduce_floor_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // Dist with mean = 0*0.25 + 1*0.25 + 2*0.25 + 3*0.25 = 1.5
-    // floor(1.5) = 1
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
@@ -764,7 +809,6 @@ fn test_hreduce_floor_dist_fallback() {
 #[test]
 fn test_hreduce_ceil_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // Mean = 1.5, ceil(1.5) = 2
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
@@ -781,7 +825,6 @@ fn test_hreduce_ceil_dist_fallback() {
 #[test]
 fn test_hreduce_negate_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // Mean = 1.5, negate(1.5) = -1 (as i64)
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
@@ -798,7 +841,6 @@ fn test_hreduce_negate_dist_fallback() {
 #[test]
 fn test_hreduce_trunc_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // Mean = 1.5, trunc(1.5) = 1
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
@@ -815,7 +857,6 @@ fn test_hreduce_trunc_dist_fallback() {
 #[test]
 fn test_hreduce_abs_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    // Dist with mean = 1.5, abs(1.5) = 1 (as i64)
     let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
@@ -963,193 +1004,6 @@ HALT
     let (re, im) = ctx.zregs.get(2).unwrap();
     assert!((re - 0.5).abs() < 1e-10, "Z[2].re should be 0.5, got {}", re);
     assert!(im.abs() < 1e-10, "Z[2].im should be ~0.0, got {}", im);
-}
-
-/// Verify that fork and main both compute their respective results correctly
-/// when running a small loop. Both run the same loop, so results should match.
-#[test]
-fn test_fork_and_main_compute_same_loop_result() {
-    // Program: set R0=0, R1=5, R2=1, then fork, loop R0 += R2 while R0 < R1
-    let program = vec![
-        Instruction::ILdi { dst: 0, imm: 0 },     // 0: R0 = 0 (accumulator)
-        Instruction::ILdi { dst: 1, imm: 5 },     // 1: R1 = 5 (limit)
-        Instruction::ILdi { dst: 2, imm: 1 },     // 2: R2 = 1 (increment)
-        Instruction::HFork,                        // 3: fork
-        Instruction::Label("LOOP".into()),         // 4
-        Instruction::IEq { dst: 3, lhs: 0, rhs: 1 }, // 5: R3 = (R0 == R1)
-        Instruction::Jif { pred: 3, target: "DONE".into() }, // 6
-        Instruction::IAdd { dst: 0, lhs: 0, rhs: 2 }, // 7: R0 += 1
-        Instruction::Jmp { target: "LOOP".into() }, // 8
-        Instruction::Label("DONE".into()),         // 9
-        Instruction::HMerge,                       // 10
-        Instruction::Halt,                         // 11
-    ];
-
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
-    // Main should have R0 = 5 (looped 5 times)
-    assert_eq!(ctx.iregs.get(0).unwrap(), 5);
-
-    // Fork should also have R0 = 5 (same loop)
-    assert_eq!(fm.completed_forks.len(), 1);
-    assert_eq!(fm.completed_forks[0].iregs.get(0).unwrap(), 5);
-}
-
-/// Verify that HFORK sets psw.forked on the fork context as well as main.
-/// An HMERGE is required to join the fork thread and collect its context.
-#[test]
-fn test_hfork_sets_flags_on_fork_context() {
-    let program = vec![
-        Instruction::HFork,        // 0
-        Instruction::HMerge,       // 1
-        Instruction::Halt,         // 2
-    ];
-
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
-    // Main flags: after HMERGE, forked is cleared, merged is set
-    assert!(ctx.psw.hf);
-    assert!(!ctx.psw.forked);  // HMERGE clears forked
-
-    // Fork context flags: the fork also executes HMERGE, which clears forked
-    assert_eq!(fm.completed_forks.len(), 1);
-    assert!(fm.completed_forks[0].psw.hf);
-    assert!(!fm.completed_forks[0].psw.forked);  // HMERGE clears forked
-    assert!(fm.completed_forks[0].psw.merged);
-}
-
-/// Verify that take_completed drains all forks and a second call returns empty.
-#[test]
-fn test_take_completed_is_idempotent_drain() {
-    let program = vec![
-        Instruction::HFork,
-        Instruction::Nop,
-        Instruction::HMerge,
-        Instruction::HFork,
-        Instruction::Nop,
-        Instruction::HMerge,
-        Instruction::Halt,
-    ];
-
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
-    let first = fm.take_completed();
-    assert!(!first.is_empty());
-    let second = fm.take_completed();
-    assert!(second.is_empty(), "Second take_completed should return empty vec");
-}
-
-/// Verify ForkManager::nested creates correct depth.
-#[test]
-fn test_fork_manager_nested_depth() {
-    let fm0 = ForkManager::new();
-    assert_eq!(fm0.depth(), 0);
-    assert!(fm0.can_fork());
-
-    let fm1 = ForkManager::nested(0, 4);
-    assert_eq!(fm1.depth(), 1);
-    assert!(fm1.can_fork());
-
-    let fm3 = ForkManager::nested(2, 4);
-    assert_eq!(fm3.depth(), 3);
-    assert!(fm3.can_fork());
-
-    let fm4 = ForkManager::nested(3, 4);
-    assert_eq!(fm4.depth(), 4);
-    assert!(!fm4.can_fork());
-
-    // Saturating add: nested(255, 255) should not overflow
-    let fm_sat = ForkManager::nested(255, 255);
-    assert_eq!(fm_sat.depth(), 255);
-    assert!(!fm_sat.can_fork());
-}
-
-/// ForkManager::default() should behave identically to ForkManager::new().
-#[test]
-fn test_fork_manager_default_equals_new() {
-    let fm_new = ForkManager::new();
-    let fm_def = ForkManager::default();
-    assert_eq!(fm_new.depth(), fm_def.depth());
-    assert_eq!(fm_new.max_depth(), fm_def.max_depth());
-    assert_eq!(fm_new.active_count(), fm_def.active_count());
-    assert_eq!(fm_new.can_fork(), fm_def.can_fork());
-}
-
-// --- HFORK/HMERGE parallel execution -----------------------------------------
-
-#[test]
-fn test_hfork_divergent_paths() {
-    let program = vec![
-        Instruction::ILdi { dst: 5, imm: 50 },    // 0: R5=50
-        Instruction::HFork,                        // 1: fork
-        Instruction::ILdi { dst: 5, imm: 100 },   // 2: both set R5=100
-        Instruction::ILdi { dst: 6, imm: 200 },   // 3: both set R6=200
-        Instruction::HMerge,                       // 4: join
-        Instruction::ILdi { dst: 5, imm: 999 },   // 5: only main's post-merge
-        Instruction::Halt,                         // 6
-    ];
-
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
-    // Main: R5 should be 999 (set after merge)
-    assert_eq!(ctx.iregs.get(5).unwrap(), 999);
-    assert_eq!(ctx.iregs.get(6).unwrap(), 200);
-
-    // Fork completed independently
-    assert_eq!(fm.completed_forks.len(), 1);
-    let fork_ctx = &fm.completed_forks[0];
-    assert_eq!(fork_ctx.iregs.get(6).unwrap(), 200);
-}
-
-#[test]
-fn test_hfork_one_branch_halts_early() {
-    // Manually spawn a fork with a short program containing HALT
-    let short_program = vec![
-        Instruction::ILdi { dst: 0, imm: 42 },
-        Instruction::Halt,
-    ];
-
-    let fork_ctx = ExecutionContext::new(short_program);
-    let mut fm = ForkManager::new();
-    fm.spawn_fork(fork_ctx).unwrap();
-    assert_eq!(fm.active_count(), 1);
-
-    fm.join_all().unwrap();
-    assert_eq!(fm.completed_forks.len(), 1);
-    assert!(fm.completed_forks[0].psw.trap_halt, "Fork should have halted");
-    assert_eq!(fm.completed_forks[0].iregs.get(0).unwrap(), 42);
-}
-
-#[test]
-fn test_hfork_verify_fork_state_independence() {
-    let program = vec![
-        Instruction::ILdi { dst: 0, imm: 0 },     // 0
-        Instruction::HFork,                        // 1
-        Instruction::ILdi { dst: 0, imm: 1 },     // 2: both set R0=1
-        Instruction::HMerge,                       // 3
-        Instruction::ILdi { dst: 0, imm: 2 },     // 4: main sets R0=2
-        Instruction::Halt,                         // 5
-    ];
-
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
-
-    // Main: R0 = 2 (set after merge)
-    assert_eq!(ctx.iregs.get(0).unwrap(), 2);
-
-    // Fork completed independently
-    assert_eq!(fm.completed_forks.len(), 1);
-    // Fork ran the same code past merge to HALT, so its R0 is set by its own execution
-    // The key: fork's execution is independent of main
 }
 
 // =============================================================================

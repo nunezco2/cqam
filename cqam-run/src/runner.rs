@@ -15,7 +15,7 @@
 
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
-use cqam_core::parser::{DataSection, ProgramMetadata};
+use cqam_core::parser::{DataSection, ProgramMetadata, SharedSection, PrivateSection};
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
@@ -42,6 +42,7 @@ pub fn run_program_with_config(
     run_program_with_config_and_metadata(program, config, &ProgramMetadata::default())
 }
 
+
 /// Run a complete CQAM program with configuration, metadata, and data section.
 ///
 /// Pre-loads the `.data` section into CMEM before execution begins.
@@ -50,8 +51,10 @@ pub fn run_program_with_data(
     config: &SimConfig,
     metadata: &ProgramMetadata,
     data: &DataSection,
+    shared: &SharedSection,
+    private: &PrivateSection,
 ) -> Result<ExecutionContext, CqamError> {
-    run_program_with_config_metadata_and_data(program, config, metadata, Some(data))
+    run_program_with_config_metadata_and_data(program, config, metadata, Some(data), shared, private)
 }
 
 /// Run a complete CQAM program with configuration and program metadata.
@@ -65,7 +68,7 @@ pub fn run_program_with_config_and_metadata(
     config: &SimConfig,
     metadata: &ProgramMetadata,
 ) -> Result<ExecutionContext, CqamError> {
-    run_program_with_config_metadata_and_data(program, config, metadata, None)
+    run_program_with_config_metadata_and_data(program, config, metadata, None, &SharedSection::default(), &PrivateSection::default())
 }
 
 fn run_program_with_config_metadata_and_data(
@@ -73,6 +76,8 @@ fn run_program_with_config_metadata_and_data(
     config: &SimConfig,
     metadata: &ProgramMetadata,
     data: Option<&DataSection>,
+    shared: &SharedSection,
+    private: &PrivateSection,
 ) -> Result<ExecutionContext, CqamError> {
     let mut ctx = ExecutionContext::new(program);
 
@@ -82,6 +87,20 @@ fn run_program_with_config_metadata_and_data(
             ctx.cmem.load_data(&ds.cells);
         }
     }
+
+    // Pre-load .shared section into CMEM at shared.base
+    if !shared.cells.is_empty() {
+        let base = shared.base as usize;
+        for (i, &val) in shared.cells.iter().enumerate() {
+            ctx.cmem.store(
+                (base + i) as u16,
+                val,
+            );
+        }
+        let end = shared.base + shared.cells.len() as u16;
+        ctx.shared_region = Some((shared.base, end));
+    }
+
     let mut fork_mgr = ForkManager::new();
     let max_cycles = config.max_cycles.unwrap_or(1000);
     let enable_interrupts = config.enable_interrupts.unwrap_or(true);
@@ -99,8 +118,18 @@ fn run_program_with_config_metadata_and_data(
         ctx.config.default_qubits = pragma_qubits;
     }
 
+    // Apply thread count with precedence: CLI > pragma > default(1)
+    if let Some(threads) = config.default_threads {
+        ctx.thread_count = threads;
+    } else if let Some(pragma_threads) = metadata.threads {
+        ctx.thread_count = pragma_threads;
+    }
+
     // Wire density-matrix backend flag
     ctx.config.force_density_matrix = config.force_density_matrix;
+
+    // Store private section size
+    let _ = private;
 
     while ctx.pc < ctx.program.len() {
         // Enforce max_cycles loop guard

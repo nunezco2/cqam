@@ -219,7 +219,8 @@ fn test_mg_cleared_by_hfork() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
 
-    // First establish MG=true via HMERGE.
+    // First establish MG=true via HFORK then HMERGE.
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
     execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm).unwrap();
     assert!(ctx.psw.merged, "MG should be true after HMERGE");
 

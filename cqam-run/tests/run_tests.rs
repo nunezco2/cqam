@@ -136,6 +136,7 @@ fn test_max_cycles_enforcement() {
         enable_interrupts: Some(false),
         default_qubits: None,
         force_density_matrix: false,
+        default_threads: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -162,6 +163,7 @@ fn test_max_cycles_allows_short_programs() {
         enable_interrupts: Some(false),
         default_qubits: None,
         force_density_matrix: false,
+        default_threads: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -243,6 +245,7 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         enable_interrupts: Some(false),
         default_qubits: None,
         force_density_matrix: false,
+        default_threads: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -292,6 +295,7 @@ fn test_fidelity_threshold_wiring() {
         enable_interrupts: Some(true),
         default_qubits: None,
         force_density_matrix: false,
+        default_threads: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -385,6 +389,7 @@ fn test_pragma_qubits_applied() {
         enable_interrupts: Some(true),
         default_qubits: None, // no CLI override
         force_density_matrix: false,
+        default_threads: None,
     };
 
     let ctx = run_program_with_config_and_metadata(
@@ -411,6 +416,7 @@ fn test_cli_overrides_pragma() {
         enable_interrupts: Some(true),
         default_qubits: Some(3), // CLI override: 3 qubits
         force_density_matrix: false,
+        default_threads: None,
     };
 
     let ctx = run_program_with_config_and_metadata(

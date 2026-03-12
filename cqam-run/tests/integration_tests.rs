@@ -26,6 +26,7 @@ fn test_config() -> SimConfig {
         enable_interrupts: Some(true),
         default_qubits: Some(2),
         force_density_matrix: false,
+        default_threads: None,
     }
 }
 

@@ -42,6 +42,7 @@ fn print_help() {
     eprintln!("  --psw                 Print the Program State Word");
     eprintln!("  --resources           Print cumulative resource usage counters");
     eprintln!("  --density-matrix      Force density-matrix backend (no statevector)");
+    eprintln!("  --threads <n>         Default thread count for HFORK (1-256)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -52,6 +53,7 @@ struct CliArgs {
     config_path: Option<String>,
     qubits: Option<u8>,
     max_cycles: Option<usize>,
+    threads: Option<u16>,
     density_matrix: bool,
     print_state: bool,
     print_psw: bool,
@@ -76,6 +78,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut config_path: Option<String> = None;
     let mut qubits: Option<u8> = None;
     let mut max_cycles: Option<usize> = None;
+    let mut threads: Option<u16> = None;
     let mut density_matrix = false;
     let mut print_state = false;
     let mut print_psw = false;
@@ -108,6 +111,17 @@ fn parse_args() -> Result<CliArgs, String> {
                     .map_err(|_| "--max-cycles must be a positive integer")?;
                 max_cycles = Some(n);
             }
+            "--threads" => {
+                i += 1;
+                let n: u16 = args.get(i)
+                    .ok_or("--threads requires a number")?
+                    .parse()
+                    .map_err(|_| "--threads must be a number 1-256")?;
+                if n == 0 || n > 256 {
+                    return Err("--threads must be 1-256".to_string());
+                }
+                threads = Some(n);
+            }
             "--density-matrix" => density_matrix = true,
             "--print-final-state" => print_state = true,
             "--psw" => print_psw = true,
@@ -136,6 +150,7 @@ fn parse_args() -> Result<CliArgs, String> {
         config_path,
         qubits,
         max_cycles,
+        threads,
         density_matrix,
         print_state,
         print_psw,
@@ -178,6 +193,9 @@ fn main() {
     if cli.density_matrix {
         config.force_density_matrix = true;
     }
+    if let Some(n) = cli.threads {
+        config.default_threads = Some(n);
+    }
 
     if cli.verbose {
         eprintln!("Config: {:?}", config);
@@ -195,7 +213,10 @@ fn main() {
         eprintln!("Loaded {} instructions from {}", parsed.instructions.len(), cli.input);
     }
 
-    let ctx = match run_program_with_data(parsed.instructions, &config, &parsed.metadata, &parsed.data_section) {
+    let ctx = match run_program_with_data(
+        parsed.instructions, &config, &parsed.metadata, &parsed.data_section,
+        &parsed.shared_section, &parsed.private_section,
+    ) {
         Ok(c) => c,
         Err(e) => {
             eprintln!("Runtime error: {}", e);

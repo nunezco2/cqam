@@ -61,6 +61,11 @@ pub struct SimConfig {
     /// Default: `false`.
     #[serde(default)]
     pub force_density_matrix: bool,
+
+    /// Default thread count for HFORK parallelism (1-256).
+    /// Overrides the `#! threads N` pragma when set.
+    /// Default: None (use pragma or 1).
+    pub default_threads: Option<u16>,
 }
 
 impl Default for SimConfig {
@@ -71,6 +76,7 @@ impl Default for SimConfig {
             enable_interrupts: Some(true),
             default_qubits: None, // use VM default (2 qubits)
             force_density_matrix: false,
+            default_threads: None,
         }
     }
 }
