@@ -526,6 +526,8 @@ pub mod flag_id {
     pub const FK: u8 = 10;
     /// Merged flag.
     pub const MG: u8 = 11;
+    /// Interference flag.
+    pub const IF: u8 = 12;
 }
 
 /// Observation mode IDs for QObserve/QSample.
@@ -633,6 +635,7 @@ pub fn flag_name(id: u8) -> &'static str {
         flag_id::CF => "CF",
         flag_id::FK => "FK",
         flag_id::MG => "MG",
+        flag_id::IF => "IF",
         _ => "unknown",
     }
 }

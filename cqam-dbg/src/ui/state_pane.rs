@@ -187,18 +187,18 @@ fn build_psw_lines(app: &AppState, lines: &mut Vec<ListItem<'static>>) {
     let snap = &app.engine.prev_snapshot;
     let ctx = &app.engine.ctx;
 
-    // Group definitions: (label, background, flag_names, flag_values, starting flag_id)
-    let groups: &[(&str, ratatui::style::Color, &[&str], &[bool], usize)] = &[
-        ("Classical", theme::BG_FLAG_CLASSICAL, &["ZF", "NF", "OF", "PF"], &[psw.zf, psw.nf, psw.of, psw.pf], 0),
-        ("Quantum", theme::BG_FLAG_QUANTUM, &["QF", "SF", "EF"], &[psw.qf, psw.sf, psw.ef], 4),
-        ("Hybrid", theme::BG_FLAG_HYBRID, &["HF", "DF", "CF", "FK", "MG"], &[psw.hf, psw.df, psw.cf, psw.forked, psw.merged], 7),
+    // Group definitions: (label, background, flag_names, flag_values, flag_ids)
+    let groups: &[(&str, ratatui::style::Color, &[&str], &[bool], &[usize])] = &[
+        ("Classical", theme::BG_FLAG_CLASSICAL, &["ZF", "NF", "OF", "PF"], &[psw.zf, psw.nf, psw.of, psw.pf], &[0, 1, 2, 3]),
+        ("Quantum", theme::BG_FLAG_QUANTUM, &["QF", "SF", "EF", "IF"], &[psw.qf, psw.sf, psw.ef, psw.inf], &[4, 5, 6, 12]),
+        ("Hybrid", theme::BG_FLAG_HYBRID, &["HF", "DF", "CF", "FK", "MG"], &[psw.hf, psw.df, psw.cf, psw.forked, psw.merged], &[7, 8, 9, 10, 11]),
     ];
 
     let mut spans = vec![Span::styled("PSW  ", theme::style_dimmed())];
-    for &(label, bg, names, values, id_offset) in groups {
+    for &(label, bg, names, values, flag_ids) in groups {
         spans.push(Span::styled(format!(" {} ", label), theme::style_sep_bg(bg)));
         for (j, (&name, &value)) in names.iter().zip(values.iter()).enumerate() {
-            let flag_id = id_offset + j;
+            let flag_id = flag_ids[j];
             let changed = snap.psw_flag_changed(ctx, flag_id);
             let flag_str = if value { "1" } else { "0" };
             let style = if changed {

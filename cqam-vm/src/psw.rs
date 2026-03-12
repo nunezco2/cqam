@@ -27,11 +27,15 @@ pub struct ProgramStateWord {
 
     /// Quantum active: at least one Q register is currently occupied.
     pub qf: bool,
-    /// Superposition present: the register is in a computational-basis superposition
-    /// (more than one basis state has nonzero probability).
+    /// Superposition intent: the last quantum operation intends to
+    /// create or maintain superposition.
     pub sf: bool,
-    /// Entanglement present: the last QKERNEL produced measurable entanglement.
+    /// Entanglement intent: the last quantum operation intends to
+    /// create or maintain entanglement.
     pub ef: bool,
+    /// Interference intent: the last quantum operation intends to
+    /// use interference to prune computational paths.
+    pub inf: bool,
     /// Decohered: the last QOBSERVE collapsed a quantum register.
     pub df: bool,
     /// Collapsed: a measurement outcome has been stored in an H register.
@@ -104,16 +108,15 @@ impl ProgramStateWord {
         self.pf = result;
     }
 
-    /// Update quantum state flags from purity metric, superposition, and entanglement.
+    /// Update quantum state flags from purity metric.
     ///
-    /// Sets qf=true (callers always have a live register), sf from
-    /// computational-basis superposition detection, ef from entanglement scan.
+    /// Sets qf=true (callers always have a live register).
+    /// SF, EF, and IF are NOT set here -- they are intent-based flags set
+    /// directly by each quantum operation handler.
     /// QOBSERVE manages qf separately via register occupancy scan.
     /// Raises int_quantum_err when purity drops below the threshold.
-    pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64, entangled: bool, in_superposition: bool) {
+    pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64) {
         self.qf = true;
-        self.sf = in_superposition;
-        self.ef = entangled;
 
         // DF is sticky: only set (pure->mixed transition), never cleared here.
         if purity < 1.0 - 1e-10 {
@@ -190,6 +193,7 @@ impl ProgramStateWord {
             9 => self.cf,
             10 => self.forked,
             11 => self.merged,
+            12 => self.inf,
             _ => false,
         }
     }

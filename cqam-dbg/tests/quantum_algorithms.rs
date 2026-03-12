@@ -236,19 +236,36 @@ fn quantum_teleportation() {
 }
 
 // ===================================================================
-// EF flag: GHZ state sets entanglement flag
+// EF flag: intent-based semantics
 // ===================================================================
 #[test]
 fn test_ef_flag_ghz() {
     let (mut engine, _) = load_and_build(&example_path("examples/ghz_verify.cqam"));
     run_to_completion(&mut engine);
 
-    // After GHZ preparation and execution, the EF flag in the PSW should
-    // reflect that entanglement was detected. The GHZ program applies
-    // quantum operations that produce an entangled state, so ef should be true.
+    // With intent-based flag semantics, SF/EF/IF reflect the *last* quantum
+    // operation's intent, not the dynamic state.  The GHZ-verify program ends
+    // with QOBSERVE (measurement), which clears SF, EF, and IF because
+    // observation is not a superposition/entanglement/interference operation.
     assert!(
-        engine.ctx.psw.ef,
-        "EF flag should be true after GHZ preparation (entangled state)"
+        !engine.ctx.psw.ef,
+        "EF should be false after QOBSERVE (observation clears intent flags)"
+    );
+    assert!(
+        !engine.ctx.psw.sf,
+        "SF should be false after QOBSERVE"
+    );
+    assert!(
+        !engine.ctx.psw.inf,
+        "IF should be false after QOBSERVE"
+    );
+
+    // The program itself verified entanglement mid-execution via HCEXEC on
+    // the EF flag and stored the result in CMEM[4].  That should be 1.
+    let entangled = engine.ctx.cmem.load(4);
+    assert_eq!(
+        entangled, 1,
+        "Program's own entanglement verification (CMEM[4]) should confirm entanglement"
     );
 }
 
