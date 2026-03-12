@@ -78,15 +78,15 @@ res_fmt:
 # ===========================================================================
     ILDI R0, 3
     QSAMPLE H0, Q0, 1, R0, R0
-    HREDUCE H0, F3, 8    # F3 = P(|3>)
+    HREDUCE REALP, H0, F3    # F3 = P(|3>)
 
     ILDI R0, 5
     QSAMPLE H1, Q0, 1, R0, R0
-    HREDUCE H1, F4, 8    # F4 = P(|5>)
+    HREDUCE REALP, H1, F4    # F4 = P(|5>)
 
     ILDI R0, 6
     QSAMPLE H2, Q0, 1, R0, R0
-    HREDUCE H2, F5, 8    # F5 = P(|6>)
+    HREDUCE REALP, H2, F5    # F5 = P(|6>)
 
     FADD F6, F3, F4
     FADD F6, F6, F5      # F6 = P(solutions) after 1 iteration
@@ -105,7 +105,7 @@ res_fmt:
 # Final: destructive measurement
 # ===========================================================================
     QOBSERVE H3, Q0
-    HREDUCE H3, R3, 12   # R3 = argmax
+    HREDUCE ARGMX, H3, R3   # R3 = argmax
 
 # Compute popcount of result (for verification)
 # popcount(R3): count bits set in R3

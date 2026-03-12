@@ -60,7 +60,7 @@ LABEL: rng_loop
     QOBSERVE H0, Q0, SAMPLE  # H0 = Int(k), a single random outcome
 
 # Step 3: Extract the random number
-    HREDUCE H0, R8, 0    # R8 = sampled random number (ROUND, identity on Int)
+    HREDUCE ROUND, H0, R8    # R8 = sampled random number (ROUND, identity on Int)
     CVTIF F2, R8          # F2 = random number as float
 
 # Step 4: Store random number to memory using indirect addressing

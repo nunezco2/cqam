@@ -51,11 +51,11 @@ res_fmt:
 
 # --- Stage 3: Non-destructive sampling of QFT output ---
     QSAMPLE H0, Q1, 0, R0, R0   # H0 = full distribution (DIST mode)
-    HREDUCE H0, F0, 10           # F0 = mean frequency
+    HREDUCE MEANT, H0, F0           # F0 = mean frequency
 
 # Single-state probability check
     QSAMPLE H1, Q1, 1, R0, R0   # H1 = P(|0>) in QFT domain (PROB mode)
-    HREDUCE H1, F1, 8            # F1 = real part (it's a Float, so real = value)
+    HREDUCE REALP, H1, F1            # F1 = real part (it's a Float, so real = value)
 
 # --- Stage 4: Apply phase shift and re-transform ---
     ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
@@ -71,12 +71,12 @@ res_fmt:
     QOBSERVE H2, Q3, 2, R3, R4  # H2 = rho[0][1] as Complex (destructive)
 
 # --- Stage 6: Complex reductions ---
-    HREDUCE H2, F2, 6    # F2 = magnitude of rho[0][1]
-    HREDUCE H2, F3, 7    # F3 = phase of rho[0][1]
-    HREDUCE H2, F4, 8    # F4 = real part
-    HREDUCE H2, F5, 9    # F5 = imaginary part
-    HREDUCE H2, Z2, 14   # Z2 = conjugate of rho[0][1]
-    HREDUCE H2, Z3, 15   # Z3 = negation of rho[0][1]
+    HREDUCE MAGNI, H2, F2    # F2 = magnitude of rho[0][1]
+    HREDUCE PHASE, H2, F3    # F3 = phase of rho[0][1]
+    HREDUCE REALP, H2, F4    # F4 = real part
+    HREDUCE IMAGP, H2, F5    # F5 = imaginary part
+    HREDUCE CONJZ, H2, Z2   # Z2 = conjugate of rho[0][1]
+    HREDUCE NEGTZ, H2, Z3   # Z3 = negation of rho[0][1]
 
 # --- Store frequency-domain metrics ---
     FSTR F0, 0            # CMEM[0] = mean frequency

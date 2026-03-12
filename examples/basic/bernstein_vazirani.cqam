@@ -78,8 +78,8 @@ LABEL: bv_pow2_done
 # Step 4: Measure to recover the secret string
 # ===============================================
     QOBSERVE H0, Q0      # Destructive measurement (deterministic → |s⟩)
-    HREDUCE H0, R6, 11   # R6 = mode (most probable state = recovered s)
-    HREDUCE H0, R7, 12   # R7 = argmax
+    HREDUCE MODEV, H0, R6   # R6 = mode (most probable state = recovered s)
+    HREDUCE ARGMX, H0, R7   # R7 = argmax
 
 # --- Verify recovery ---
     IEQ R8, R6, R1       # R8 = (recovered == secret) ? 1 : 0

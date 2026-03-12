@@ -86,8 +86,8 @@ res_fmt:
 
 # === Sample before destroying ===
     QSAMPLE H0, Q0, 0, R1, R1    # H0 = full distribution (non-destructive)
-    HREDUCE H0, F7, 10            # F7 = expected cost (mean)
-    HREDUCE H0, F8, 13            # F8 = cost variance
+    HREDUCE MEANT, H0, F7            # F7 = expected cost (mean)
+    HREDUCE VARNC, H0, F8            # F8 = cost variance
 
 # Check specific state probability
     ILDI R2, 0
@@ -95,8 +95,8 @@ res_fmt:
 
 # === Final destructive measurement ===
     QOBSERVE H2, Q0
-    HREDUCE H2, R3, 11           # R3 = optimal solution (mode)
-    HREDUCE H2, R4, 12           # R4 = argmax
+    HREDUCE MODEV, H2, R3           # R3 = optimal solution (mode)
+    HREDUCE ARGMX, H2, R4           # R4 = argmax
 
 # === Store results ===
     ISTR R3, 0           # CMEM[0] = best solution

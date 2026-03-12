@@ -73,7 +73,7 @@ res_fmt:
 
 # Verify encoding: P(|000>) should be 1.0
     QSAMPLE H0, Q0, 1, R4, R4
-    HREDUCE H0, F0, 8    # F0 = P(|000>) -- expect 1.0
+    HREDUCE REALP, H0, F0    # F0 = P(|000>) -- expect 1.0
 
 # ===============================================
 # Step 2: Introduce bit-flip error on qubit 1
@@ -83,7 +83,7 @@ res_fmt:
 
 # Verify error: state should be |010> (state 2)
     QSAMPLE H1, Q0, 1, R5, R5
-    HREDUCE H1, F1, 8    # F1 = P(|010>) -- expect 1.0
+    HREDUCE REALP, H1, F1    # F1 = P(|010>) -- expect 1.0
 
 # ===============================================
 # Step 3: Syndrome extraction via QMEAS
@@ -145,15 +145,15 @@ LABEL: verify_code
 
 # After correction, should be back to |000>
     QSAMPLE H2, Q1, 1, R4, R4
-    HREDUCE H2, F2, 8    # F2 = P(|000>) after correction -- expect 1.0
+    HREDUCE REALP, H2, F2    # F2 = P(|000>) after correction -- expect 1.0
 
 # Full distribution check
     QSAMPLE H3, Q1, 0, R4, R4
-    HREDUCE H3, R14, 11  # R14 = mode -- expect 0
+    HREDUCE MODEV, H3, R14  # R14 = mode -- expect 0
 
 # Destructive final measurement
     QOBSERVE H4, Q1
-    HREDUCE H4, R15, 11  # R15 = final state -- expect 0
+    HREDUCE MODEV, H4, R15  # R15 = final state -- expect 0
 
 # Verify success
     IEQ R14, R15, R4     # R14 = (final == |000>)

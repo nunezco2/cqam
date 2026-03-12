@@ -159,7 +159,8 @@ done_msg:
     # Sample P(1) -- expect 1.0
     ILDI R9, 1
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
 
     ILDI R0, @ta1_pre
     ILDI R1, @ta1_pre.len
@@ -200,10 +201,10 @@ LABEL: ta1_end
     # Sample P(5) and P(6)
     ILDI R9, 5
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8             # F1 = P(5) -- expect 0
+    HREDUCE REALP, H0, F1             # F1 = P(5) -- expect 0
     ILDI R9, 6
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F2, 8             # F2 = P(6) -- expect 1
+    HREDUCE REALP, H0, F2             # F2 = P(6) -- expect 1
 
     ILDI R0, @ta2_pre
     ILDI R1, @ta2_pre.len
@@ -251,7 +252,8 @@ LABEL: ta2_end
     # Sample P(1) -- expect 1.0
     ILDI R9, 1
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
 
     ILDI R0, @tb1_pre
     ILDI R1, @tb1_pre.len
@@ -291,7 +293,8 @@ LABEL: tb1_end
     # Sample P(5) -- expect 1.0 (phase flip doesn't change probability)
     ILDI R9, 5
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
 
     ILDI R0, @tb2_pre
     ILDI R1, @tb2_pre.len

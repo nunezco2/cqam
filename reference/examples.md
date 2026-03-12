@@ -170,40 +170,42 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 
 ## Quantum Kernel Operations
 
+QKERNEL uses mnemonic-first operand order: `QKERNEL MNEM, Q_dst, Q_src, R_ctx0, R_ctx1`.
+
 | Instruction | Example | Description |
 |-------------|---------|-------------|
-| QKERNEL | `QKERNEL Q1, Q0, 2, R0, R1` | Apply kernel 2 (fourier) to Q0, context from R0/R1 |
-| QKERNELF | `QKERNELF Q1, Q0, 5, F0, F1` | Apply kernel 5 (rotate) with float params F0, F1 |
-| QKERNELZ | `QKERNELZ Q1, Q0, 6, Z0, Z1` | Apply kernel 6 (phase_shift) with complex params Z0, Z1 |
+| QKERNEL | `QKERNEL QFFT, Q1, Q0, R0, R1` | Apply QFT kernel to Q0, context from R0/R1 |
+| QKERNELF | `QKERNELF DROT, Q1, Q0, F0, F1` | Apply diagonal rotation with float params F0, F1 |
+| QKERNELZ | `QKERNELZ PHSH, Q1, Q0, Z0, Z1` | Apply phase-shift with complex params Z0, Z1 |
 
-Kernel IDs: 0=init, 1=entangle, 2=fourier, 3=diffuse, 4=grover_iter,
-5=rotate, 6=phase_shift, 7=fourier_inv, 8=controlled_u, 9=diagonal_unitary,
-10=permutation.
+Four-letter kernel mnemonics: UNIT (init), ENTG (entangle), QFFT (fourier),
+DIFF (diffuse), GROV (grover_iter), DROT (rotate), PHSH (phase_shift),
+QIFT (fourier_inv), CTLU (controlled_u), DIAG (diagonal_unitary), PERM (permutation).
 
-### CONTROLLED_U example (kernel 8)
+### CTLU example (controlled_u, kernel 8)
 
-    # Controlled rotation: control qubit 0, sub-kernel=ROTATE (5)
+    # Controlled rotation: control qubit 0, sub-kernel=ROTATE (DROT)
     # Parameter block at CMEM[200..203]:
-    #   [200]=5 (sub_kernel_id), [201]=0 (power k; applies C-U^{2^k}),
-    #   [202]=theta_re bits,     [203]=theta_im bits
+    #   [200]=5 (sub_kernel_id for DROT), [201]=0 (power k; applies C-U^{2^k}),
+    #   [202]=theta_re bits,              [203]=theta_im bits
     ILDI R8, 0               # control qubit index
     ILDI R9, 200             # CMEM base of parameter block
-    QKERNEL Q1, Q0, 8, R8, R9
+    QKERNEL CTLU, Q1, Q0, R8, R9
 
-### DIAGONAL_UNITARY example (kernel 9)
+### DIAG example (diagonal_unitary, kernel 9)
 
     # Apply diagonal phases from .c64 data declared in .data section
     # diag: .c64 1.0J0.0, -1.0J0.0, 1.0J0.0, 1.0J0.0
     ILDI R0, @diag           # CMEM base of diagonal entries
     ILDI R1, @diag.len       # number of complex entries (= dimension)
-    QKERNEL Q1, Q0, 9, R0, R1
+    QKERNEL DIAG, Q1, Q0, R0, R1
 
-### PERMUTATION example (kernel 10)
+### PERM example (permutation, kernel 10)
 
     # Apply cyclic permutation sigma = [1, 2, 3, 0] from CMEM[100..103]
     ILDI R0, 100             # CMEM base of permutation table
     ILDI R1, 0               # unused (dimension inferred from register size)
-    QKERNEL Q1, Q0, 10, R0, R1
+    QKERNEL PERM, Q1, Q0, R0, R1
 
 ## Qubit-Level Gate Operations
 
@@ -369,18 +371,19 @@ This enables data-driven state preparation in loops:
 |-------------|---------|-------------|
 | HFORK | `HFORK` | Fork hybrid execution (set fork flags) |
 | HMERGE | `HMERGE` | Merge hybrid branches (set merge flags) |
-| JMPF | `JMPF 3, label` | Conditional jump if PSW flag 3 (PF) is set |
-| HREDUCE | `HREDUCE H0, R2, 11` | Reduce H0 using func 11 (mode), store in R2 |
+| JMPF | `JMPF EF, label` | Conditional jump if PSW flag EF is set |
+| HREDUCE | `HREDUCE MODEV, H0, R2` | Reduce H0 using MODEV (mode), store result in R2 |
 
-Reduction function IDs: 0=round, 1=floor, 2=ceil, 3=trunc, 4=abs, 5=negate,
-6=magnitude, 7=phase, 8=real, 9=imag, 10=mean, 11=mode, 12=argmax, 13=variance,
-14=conj_z, 15=negate_z, 16=expect.
+HREDUCE uses mnemonic-first operand order: `HREDUCE MNEM, H_src, R/F/Z_dst`.
+Five-letter reduction mnemonics: ROUND, FLOOR, CEILI, TRUNC, ABSOL, NEGAT,
+MAGNI, PHASE, REALP, IMAGP, MEANT, MODEV, ARGMX, VARNC, CONJZ, NEGTZ, EXPCT.
 
-### Expectation value example (ID 16)
+### Expectation value example (EXPCT)
 
-The `expect` function computes sum_k eigenvalue_k * p_k, reading n eigenvalues
-from CMEM starting at R[ctx]. The HREDUCE instruction passes R[ctx] as the
-context via the standard HR encoding (see reference/opcodes.md).
+The `EXPCT` function computes sum_k eigenvalue_k * p_k, reading n eigenvalues
+from CMEM starting at R[ctx]. Usage: `HREDUCE EXPCT, H_src, F_dst`. The
+instruction passes R[ctx] as context via the standard HR encoding
+(see reference/opcodes.md).
 
 ## Data Section
 
@@ -401,7 +404,7 @@ Labels in `.data` are referenced in `.code` via `@label` (base address) and
     .code
         ILDI R0, @diag         # R0 = 200 (base address)
         ILDI R1, @diag.len     # R1 = 4 (complex entry count)
-        QKERNEL Q1, Q0, 9, R0, R1
+        QKERNEL DIAG, Q1, Q0, R0, R1
 
 ### .c64 complex literal format
 

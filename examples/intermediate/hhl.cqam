@@ -111,9 +111,9 @@ LABEL: hhl_qpe_fwd
 
 # --- Measure ---
     QOBSERVE H0, Q3
-    HREDUCE H0, R7, 12           # argmax
-    HREDUCE H0, F7, 10           # mean
-    HREDUCE H0, F8, 13           # variance
+    HREDUCE ARGMX, H0, R7           # argmax
+    HREDUCE MEANT, H0, F7           # mean
+    HREDUCE VARNC, H0, F8           # variance
 
 # --- Store results ---
     ISTR R7, 0            # CMEM[0] = measurement argmax

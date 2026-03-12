@@ -77,9 +77,9 @@ LABEL: grover_inner_count
 
 # --- Measure the IQFT output ---
     QOBSERVE H0, Q1             # H0 = full distribution (destructive)
-    HREDUCE H0, R9, 12          # R9 = argmax (peak frequency bin)
-    HREDUCE H0, F0, 10          # F0 = mean frequency
-    HREDUCE H0, F1, 13          # F1 = variance
+    HREDUCE ARGMX, H0, R9          # R9 = argmax (peak frequency bin)
+    HREDUCE MEANT, H0, F0          # F0 = mean frequency
+    HREDUCE VARNC, H0, F1          # F1 = variance
 
 # --- Store phase estimate for this depth ---
     ISTRX R9, R6                # CMEM[R6] = phase index for depth 2^k

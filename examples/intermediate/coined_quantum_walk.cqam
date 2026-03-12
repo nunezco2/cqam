@@ -106,7 +106,7 @@ res_fmt:
 
 # Measure initial distribution
     QSAMPLE H0, Q0, 0, R3, R3
-    HREDUCE H0, F3, 13   # F3 = initial variance
+    HREDUCE VARNC, H0, F3   # F3 = initial variance
     FSTR F3, 200         # CMEM[200] = initial variance
 
 # === Quantum walk loop ===
@@ -120,8 +120,8 @@ LABEL: walk_step
 
 # Track distribution at each step
     QSAMPLE H1, Q0, 0, R3, R3
-    HREDUCE H1, F4, 13   # F4 = variance at current step
-    HREDUCE H1, F5, 10   # F5 = mean position at current step
+    HREDUCE VARNC, H1, F4   # F4 = variance at current step
+    HREDUCE MEANT, H1, F5   # F5 = mean position at current step
 
 # Store step statistics
     FSTR F4, 300         # Overwritten each step
@@ -134,23 +134,23 @@ LABEL: walk_step
 
 # === Final measurement ===
     QSAMPLE H2, Q0, 0, R3, R3
-    HREDUCE H2, F6, 10   # F6 = final mean
-    HREDUCE H2, F7, 13   # F7 = final variance
+    HREDUCE MEANT, H2, F6   # F6 = final mean
+    HREDUCE VARNC, H2, F7   # F7 = final variance
 
 # Check specific state probabilities
     ILDI R8, 0
     QSAMPLE H3, Q0, 1, R8, R8  # P(|000>)
-    HREDUCE H3, F8, 8           # F8 = P(origin, coin=0)
+    HREDUCE REALP, H3, F8           # F8 = P(origin, coin=0)
 
 # Destructive measurement
     QOBSERVE H4, Q0
-    HREDUCE H4, R9, 11   # R9 = mode (most probable state)
-    HREDUCE H4, R10, 12  # R10 = argmax
+    HREDUCE MODEV, H4, R9   # R9 = mode (most probable state)
+    HREDUCE ARGMX, H4, R10  # R10 = argmax
 
 # Load initial state for comparison
     QLOAD Q1, 0
     QSAMPLE H5, Q1, 0, R3, R3
-    HREDUCE H5, F9, 13   # F9 = initial variance
+    HREDUCE VARNC, H5, F9   # F9 = initial variance
     QOBSERVE H6, Q1
 
 # Compute variance ratio (ballistic signature: var ~ t^2)

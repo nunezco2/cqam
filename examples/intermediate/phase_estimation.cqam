@@ -84,9 +84,9 @@ LABEL: qpe_loop
     QOBSERVE H1, Q1              # H1 = full distribution (destructive)
 
 # --- Extract phase estimate ---
-    HREDUCE H1, F4, 10  # F4 = mean of distribution (approximate phase index)
-    HREDUCE H1, F5, 13  # F5 = variance (uncertainty in phase estimate)
-    HREDUCE H1, R5, 12  # R5 = argmax (peak frequency bin)
+    HREDUCE MEANT, H1, F4  # F4 = mean of distribution (approximate phase index)
+    HREDUCE VARNC, H1, F5  # F5 = variance (uncertainty in phase estimate)
+    HREDUCE ARGMX, H1, R5  # R5 = argmax (peak frequency bin)
 
 # --- Convert argmax to phase: phase = 2*pi * argmax / 2^N ---
     CVTIF F6, R5        # F6 = argmax as float

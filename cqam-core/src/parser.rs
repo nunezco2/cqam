@@ -760,17 +760,24 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("HREDUCE requires 3 operands, got {}", ops.len()),
                 });
             }
-            let src = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+            let func = if let Some(id) = crate::instruction::reduce_fn_name_to_id(ops[0]) {
+                id
+            } else {
+                parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+                    line: line_num,
+                    message: format!(
+                        "HREDUCE: unknown function '{}' (expected ROUND, FLOOR, CEILI, TRUNC, ABSOL, NEGAT, MAGNI, PHASE, REALP, IMAGP, MEANT, MODEV, ARGMX, VARNC, CONJZ, NEGTZ, EXPCT, or numeric ID)",
+                        ops[0]
+                    ),
+                })?
+            };
+            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("HREDUCE: invalid src register '{}'", ops[0]),
+                message: format!("HREDUCE: invalid src register '{}'", ops[1]),
             })?;
-            let dst = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+            let dst = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("HREDUCE: invalid dst register '{}'", ops[1]),
-            })?;
-            let func = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
-                line: line_num,
-                message: format!("HREDUCE: invalid function ID '{}'", ops[2]),
+                message: format!("HREDUCE: invalid dst register '{}'", ops[2]),
             })?;
             Ok(Instruction::HReduce { src, dst, func })
         }

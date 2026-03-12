@@ -231,7 +231,8 @@ res_fmt:
 
     ILDI R10, 9
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t1_pre
     ILDI R1, @t1_pre.len
     ILDI R15, 1
@@ -243,7 +244,8 @@ res_fmt:
 
     ILDI R10, 11
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t1_post
     ILDI R1, @t1_post.len
     ILDI R15, 1
@@ -285,7 +287,8 @@ LABEL: t1_end
 
     ILDI R10, 15
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t2_pre
     ILDI R1, @t2_pre.len
     ILDI R15, 1
@@ -296,7 +299,8 @@ LABEL: t1_end
 
     ILDI R10, 14
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t2_post
     ILDI R1, @t2_post.len
     ILDI R15, 1
@@ -353,16 +357,16 @@ LABEL: t2_end
 # state 10 = |a=2,b=2>, state 15 = |a=3,b=3>
     ILDI R10, 0
     QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE H0, F1, 8             # P(a=0,b=0)
+    HREDUCE REALP, H0, F1             # P(a=0,b=0)
     ILDI R10, 5
     QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE H0, F2, 8             # P(a=1,b=1)
+    HREDUCE REALP, H0, F2             # P(a=1,b=1)
     ILDI R10, 10
     QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE H0, F3, 8             # P(a=2,b=2)
+    HREDUCE REALP, H0, F3             # P(a=2,b=2)
     ILDI R10, 15
     QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE H0, F4, 8             # P(a=3,b=3)
+    HREDUCE REALP, H0, F4             # P(a=3,b=3)
 
     ILDI R0, @t3_post
     ILDI R1, @t3_post.len
@@ -413,7 +417,8 @@ LABEL: t3_end
 
     ILDI R10, 9
     QSAMPLE H0, Q3, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t4_pre
     ILDI R1, @t4_pre.len
     ILDI R15, 1
@@ -424,7 +429,8 @@ LABEL: t3_end
     QKERNEL PERM, Q3, Q3, R8, R9
     ILDI R10, 11
     QSAMPLE H0, Q3, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t4_mid
     ILDI R1, @t4_mid.len
     ILDI R15, 1
@@ -435,7 +441,8 @@ LABEL: t3_end
     QKERNEL PERM, Q3, Q3, R7, R9
     ILDI R10, 9
     QSAMPLE H0, Q3, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @t4_post
     ILDI R1, @t4_post.len
     ILDI R15, 1

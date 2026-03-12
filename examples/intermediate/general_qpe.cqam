@@ -116,8 +116,8 @@ LABEL: qpe_cu_loop
 
 # --- Measure ---
     QOBSERVE H0, Q3             # Full distribution over counting register
-    HREDUCE H0, R7, 12          # R7 = argmax (peak frequency bin)
-    HREDUCE H0, F6, 10          # F6 = mean
+    HREDUCE ARGMX, H0, R7          # R7 = argmax (peak frequency bin)
+    HREDUCE MEANT, H0, F6          # F6 = mean
 
 # --- Store results ---
     ISTR R7, 0           # CMEM[0] = phase index (argmax)

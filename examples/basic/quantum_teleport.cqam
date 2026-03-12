@@ -64,8 +64,8 @@ res_fmt:
 
 # Record |psi>'s signature for later verification
     QSAMPLE H0, Q0, 0, R0, R0   # H0 = distribution of |psi>
-    HREDUCE H0, F2, 10           # F2 = mean of |psi> (fingerprint)
-    HREDUCE H0, F3, 13           # F3 = variance of |psi>
+    HREDUCE MEANT, H0, F2           # F2 = mean of |psi> (fingerprint)
+    HREDUCE VARNC, H0, F3           # F3 = variance of |psi>
 
 # ===============================================
 # Step 2: Create shared Bell pair
@@ -86,7 +86,7 @@ res_fmt:
 # Step 4: Alice measures — get classical bits
 # ===============================================
     QOBSERVE H1, Q0, SAMPLE  # H1 = Int(k), projective measurement
-    HREDUCE H1, R4, 0    # R4 = measured state (classical bits)
+    HREDUCE ROUND, H1, R4    # R4 = measured state (classical bits)
 
 # Extract individual bits for correction
     IAND R5, R4, R1      # R5 = bit 0 (Alice's first measurement)
@@ -123,16 +123,16 @@ LABEL: teleport_verify
 
 # Measure Bob's state
     QSAMPLE H2, Q2, 0, R0, R0
-    HREDUCE H2, F4, 10   # F4 = mean of Bob's state
-    HREDUCE H2, F5, 13   # F5 = variance of Bob's state
+    HREDUCE MEANT, H2, F4   # F4 = mean of Bob's state
+    HREDUCE VARNC, H2, F5   # F5 = variance of Bob's state
 
 # Final destructive measurement
     QOBSERVE H3, Q2
-    HREDUCE H3, R7, 11   # R7 = Bob's measured state
+    HREDUCE MODEV, H3, R7   # R7 = Bob's measured state
 
 # Measure the Bell pair witness
     QOBSERVE H4, Q1
-    HREDUCE H4, R8, 11   # R8 = Bell pair measurement result
+    HREDUCE MODEV, H4, R8   # R8 = Bell pair measurement result
 
 # --- Store results ---
     FSTR F2, 0           # CMEM[0] = |psi> mean (original)

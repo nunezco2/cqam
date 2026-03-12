@@ -92,7 +92,7 @@ LABEL: simon_round
 
 # Step 5: Projective measurement -> y such that y . s = 0 (mod 2)
     QOBSERVE H0, Q0, SAMPLE  # H0 = Int(y), a single random outcome
-    HREDUCE H0, R7, 0    # R7 = measured y value (ROUND, identity on Int)
+    HREDUCE ROUND, H0, R7    # R7 = measured y value (ROUND, identity on Int)
 
 # Step 6: Store y value
     ISTRX R7, R5         # CMEM[R5] = y

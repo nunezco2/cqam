@@ -110,7 +110,7 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 |----------|----------|-----------|----------|
 | `JMP` | target | PC = address_of(target) | J |
 | `JIF` | pred, target | if R[pred] != 0: PC = address_of(target) | JR |
-| `JMPF` | flag_id, target | if PSW.flag[flag_id]: PC = address_of(target) | JR |
+| `JMPF` | flag_name, target | if PSW.flag[flag_name]: PC = address_of(target) | JR |
 | `CALL` | target | push PC+1; PC = address_of(target) | J |
 | `RET` | — | pop call stack; PC = saved address (HALT if empty) | N |
 | `HALT` | — | Sets trap_halt in PSW; terminates execution | N |
@@ -120,13 +120,13 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | Mnemonic | Operands | Operation | Encoding |
 |----------|----------|-----------|----------|
 | `QPREP` | dst, dist_id | Q[dst] = new quantum state with distribution dist_id | QP |
-| `QKERNEL` | dst, src, kernel_id, ctx0, ctx1 | Q[dst] = kernel(Q[src], R[ctx0], R[ctx1]) | Q |
+| `QKERNEL` | kern_mnem, dst, src, ctx0, ctx1 | Q[dst] = kernel(Q[src], R[ctx0], R[ctx1]) | Q |
 | `QOBSERVE` | dst_h, src_q, mode, ctx0, ctx1 | H[dst_h] = observe(Q[src_q], mode, R[ctx0], R[ctx1]); Q[src_q] = None | QO_EXT |
 | `QLOAD` | dst_q, addr8 | Q[dst_q] = QMEM[addr8] (clone) | QS |
 | `QSTORE` | src_q, addr8 | QMEM[addr8] = Q[src_q] (clone) | QS |
 | `QSAMPLE` | dst_h, src_q, mode, ctx0, ctx1 | H[dst_h] = sample(Q[src_q], mode, R[ctx0], R[ctx1]); non-destructive | QO_EXT |
-| `QKERNELF` | dst, src, kernel_id, fctx0, fctx1 | Q[dst] = kernel(Q[src], F[fctx0], F[fctx1]) | Q |
-| `QKERNELZ` | dst, src, kernel_id, zctx0, zctx1 | Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1]) | Q |
+| `QKERNELF` | kern_mnem, dst, src, fctx0, fctx1 | Q[dst] = kernel(Q[src], F[fctx0], F[fctx1]) | Q |
+| `QKERNELZ` | kern_mnem, dst, src, zctx0, zctx1 | Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1]) | Q |
 | `QPREPR` | dst, dist_reg | Q[dst] = new_qdist(R[dist_reg] as u8) | QR |
 | `QENCODE` | dst, src_base, count, file_sel | Q[dst] = from_statevector(regs[src_base..+count]) | QE |
 | `QHADM` | dst, src, mask_reg | Apply H to qubits selected by R[mask_reg] bitmask | QMK |
@@ -139,7 +139,7 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 |----------|----------|-----------|----------|
 | `HFORK` | — | Spawn parallel execution threads; set PSW.forked | N |
 | `HMERGE` | — | Join all forked threads; set PSW.merged | N |
-| `HREDUCE` | src, dst, func_id | Reduce H[src] to classical value; write to R or F register | HR |
+| `HREDUCE` | func_mnem, src, dst | Reduce H[src] to classical value; write to R, F, or Z register | HR |
 
 ### 1.11 Interrupt handling
 
@@ -225,32 +225,39 @@ following formats.
 
 ### 4.2 Kernel IDs (`kernel_id` module, used by `QKERNEL`)
 
-| Name | Value | Unitary | Description |
-|------|-------|---------|-------------|
-| `INIT` | 0 | H^n | Uniform superposition (ignores input state) |
-| `ENTANGLE` | 1 | CNOT_{0,1} | CNOT gate between qubit 0 (control) and qubit 1 (target) |
-| `FOURIER` | 2 | QFT | Quantum Fourier Transform: QFT[j][k] = exp(2pi i jk/N)/sqrt(N) |
-| `DIFFUSE` | 3 | D = 2\|s><s\| - I | Grover diffusion operator; D[j][k] = 2/N - delta(j,k) |
-| `GROVER_ITER` | 4 | D * O | One Grover iteration: oracle phase-flip at ctx0, then diffusion |
-| `ROTATE` | 5 | exp(i*theta*k) | Diagonal rotation; theta from F-file via QKERNELF |
-| `PHASE_SHIFT` | 6 | exp(i*|z|*k) | Phase shift; amplitude from Z-file via QKERNELZ |
-| `FOURIER_INV` | 7 | QFT† | Inverse Quantum Fourier Transform |
-| `CONTROLLED_U` | 8 | C-U | Controlled-U: applies sub-kernel conditioned on a control qubit; C-U^{2^k} via CMEM parameter block |
-| `DIAGONAL_UNITARY` | 9 | diag(d_0,...,d_{N-1}) | Arbitrary diagonal unitary: d_k from CMEM as (re,im) f64 pairs |
-| `PERMUTATION` | 10 | P_sigma | Basis-state permutation: sigma(k) from CMEM as i64 values |
+The text-format mnemonic is written as the first operand of `QKERNEL`, `QKERNELF`, and `QKERNELZ`.
 
-### 4.3 PSW Flag IDs (`flag_id` module, used by `JMPF`)
+| Name | Value | Mnemonic | Unitary | Description |
+|------|-------|----------|---------|-------------|
+| `INIT` | 0 | `UNIT` | H^n | Uniform superposition (ignores input state) |
+| `ENTANGLE` | 1 | `ENTG` | CNOT_{0,1} | CNOT gate between qubit 0 (control) and qubit 1 (target) |
+| `FOURIER` | 2 | `QFFT` | QFT | Quantum Fourier Transform: QFT[j][k] = exp(2pi i jk/N)/sqrt(N) |
+| `DIFFUSE` | 3 | `DIFF` | D = 2\|s><s\| - I | Grover diffusion operator; D[j][k] = 2/N - delta(j,k) |
+| `GROVER_ITER` | 4 | `GROV` | D * O | One Grover iteration: oracle phase-flip at ctx0, then diffusion |
+| `ROTATE` | 5 | `DROT` | exp(i*theta*k) | Diagonal rotation; theta from F-file via QKERNELF |
+| `PHASE_SHIFT` | 6 | `PHSH` | exp(i*|z|*k) | Phase shift; amplitude from Z-file via QKERNELZ |
+| `FOURIER_INV` | 7 | `QIFT` | QFT† | Inverse Quantum Fourier Transform |
+| `CONTROLLED_U` | 8 | `CTLU` | C-U | Controlled-U: applies sub-kernel conditioned on a control qubit; C-U^{2^k} via CMEM parameter block |
+| `DIAGONAL_UNITARY` | 9 | `DIAG` | diag(d_0,...,d_{N-1}) | Arbitrary diagonal unitary: d_k from CMEM as (re,im) f64 pairs |
+| `PERMUTATION` | 10 | `PERM` | P_sigma | Basis-state permutation: sigma(k) from CMEM as i64 values |
 
-| Name | Value | PSW field | Description |
-|------|-------|-----------|-------------|
-| `ZF` | 0 | `psw.zf` | Zero: last arithmetic result was zero |
-| `NF` | 1 | `psw.nf` | Negative: last arithmetic result was negative |
-| `OF` | 2 | `psw.of` | Overflow (reserved; not fully implemented) |
-| `PF` | 3 | `psw.pf` | Predicate: set by comparison instructions |
-| `QF` | 4 | `psw.qf` | Quantum active: at least one Q register is occupied |
-| `SF` | 5 | `psw.sf` | Superposition present after last QKERNEL |
-| `EF` | 6 | `psw.ef` | Entanglement present after last QKERNEL |
-| `HF` | 7 | `psw.hf` | Hybrid mode: inside an HFORK/HMERGE block |
+### 4.3 PSW Flag IDs (used by `JMPF`)
+
+`JMPF` takes a flag name mnemonic as its first operand (e.g., `JMPF EF, label`).
+SF, EF, and IF are intent-based flags: they are set by the identity of the quantum
+operation applied, not by dynamic state inspection.
+
+| Name | ID | PSW field | Set by | Description |
+|------|----|-----------|--------|-------------|
+| `ZF` | 0 | `psw.zf` | arithmetic ops | Zero: last arithmetic result was zero |
+| `NF` | 1 | `psw.nf` | arithmetic ops | Negative: last arithmetic result was negative |
+| `OF` | 2 | `psw.of` | arithmetic ops | Overflow (reserved; not fully implemented) |
+| `PF` | 3 | `psw.pf` | comparison ops | Predicate: set by comparison instructions |
+| `QF` | 4 | `psw.qf` | QPREP/QKERNEL | Quantum active: at least one Q register is occupied |
+| `SF` | 5 | `psw.sf` | QKERNEL intent | Superposition created: set by kernels that create superposition (UNIT, QFFT, QIFT, DIFF, GROV, DROT, PHSH) |
+| `EF` | 6 | `psw.ef` | QKERNEL intent | Entanglement created: set by kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP BELL/GHZ |
+| `HF` | 7 | `psw.hf` | HFORK/HMERGE | Hybrid mode: inside an HFORK/HMERGE block |
+| `IF` | 12 | `psw.if_flag` | QKERNEL intent | Interference: set by kernels that exploit interference (QFFT, QIFT, DIFF, GROV) |
 
 ### 4.4 Trap IDs (`trap_id` module, used by `SETIV`)
 
@@ -265,29 +272,33 @@ overridden with `SETIV`.
 
 ### 4.5 Reduction Function IDs (`reduce_fn` module, used by `HREDUCE`)
 
+`HREDUCE` uses mnemonic-first syntax: `HREDUCE MNEM, H_src, R/F/Z_dst`.
+
 Output register file depends on the function ID:
 - IDs 0-5: result written to integer register file (R).
-- IDs 6-13: result written to float register file (F).
+- IDs 6-9, 10 (mean), 13, 16: result written to float register file (F).
+- IDs 11-12: result written to integer register file (R).
 - IDs 14-15: result written to complex register file (Z).
 
-| Name | ID | Input | Output | Formula |
-|------|----|-------|--------|---------|
-| `ROUND` | 0 | Float/Int H value | R | round to nearest integer |
-| `FLOOR` | 1 | Float/Int H value | R | floor toward -infinity |
-| `CEIL` | 2 | Float/Int H value | R | ceiling toward +infinity |
-| `TRUNC` | 3 | Float/Int H value | R | truncate toward zero |
-| `ABS` | 4 | Float/Int H value | R | absolute value as integer |
-| `NEGATE` | 5 | Float/Int H value | R | negate as integer |
-| `MAGNITUDE` | 6 | Complex H value | F | sqrt(re^2 + im^2) |
-| `PHASE` | 7 | Complex H value | F | atan2(im, re) |
-| `REAL` | 8 | Complex H value | F | real part |
-| `IMAG` | 9 | Complex H value | F | imaginary part |
-| `MEAN` | 10 | Dist H value | F | sum(x_k * p_k) |
-| `MODE` | 11 | Dist H value | R | most probable basis state |
-| `ARGMAX` | 12 | Dist H value | R | index of most probable state |
-| `VARIANCE` | 13 | Dist H value | F | sum(p_k * (x_k - mean)^2) |
-| `CONJ_Z` | 14 | Complex H value | Z | Z[dst] = (re, -im) |
-| `NEGATE_Z` | 15 | Complex H value | Z | Z[dst] = (-re, -im) |
+| Name | ID | Mnemonic | Input | Output | Formula |
+|------|----|----------|-------|--------|---------|
+| `ROUND` | 0 | `ROUND` | Float/Int H value | R | round to nearest integer |
+| `FLOOR` | 1 | `FLOOR` | Float/Int H value | R | floor toward -infinity |
+| `CEIL` | 2 | `CEILI` | Float/Int H value | R | ceiling toward +infinity |
+| `TRUNC` | 3 | `TRUNC` | Float/Int H value | R | truncate toward zero |
+| `ABS` | 4 | `ABSOL` | Float/Int H value | R | absolute value as integer |
+| `NEGATE` | 5 | `NEGAT` | Float/Int H value | R | negate as integer |
+| `MAGNITUDE` | 6 | `MAGNI` | Complex H value | F | sqrt(re^2 + im^2) |
+| `PHASE` | 7 | `PHASE` | Complex H value | F | atan2(im, re) |
+| `REAL` | 8 | `REALP` | Complex H value | F | real part |
+| `IMAG` | 9 | `IMAGP` | Complex H value | F | imaginary part |
+| `MEAN` | 10 | `MEANT` | Dist H value | F | sum(x_k * p_k) |
+| `MODE` | 11 | `MODEV` | Dist H value | R | most probable basis state |
+| `ARGMAX` | 12 | `ARGMX` | Dist H value | R | index of most probable state |
+| `VARIANCE` | 13 | `VARNC` | Dist H value | F | sum(p_k * (x_k - mean)^2) |
+| `CONJ_Z` | 14 | `CONJZ` | Complex H value | Z | Z[dst] = (re, -im) |
+| `NEGATE_Z` | 15 | `NEGTZ` | Complex H value | Z | Z[dst] = (-re, -im) |
+| `EXPECT` | 16 | `EXPCT` | Dist H value | F | sum_k eigenvalue_k * p_k; eigenvalues from CMEM[R[ctx]..+n] |
 
 ### 4.6 Observation Mode IDs (`observe_mode` module)
 

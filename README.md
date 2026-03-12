@@ -36,10 +36,11 @@ The full lifecycle of a hybrid computation in CQAM:
    `QMIXED` assembles an explicit mixed state from weighted statevectors stored
    in classical memory.
 3. **Quantum evolution.** `QKERNEL` applies a unitary transformation — selected
-   by kernel ID and parameterised by classical registers. Kernels (Fourier,
-   inverse Fourier, Grover iteration, diffusion, entanglement, rotation,
-   phase-shift, controlled-unitary, diagonal unitary, permutation) encapsulate
-   multi-gate circuits as atomic ISA-level operations.
+   by a four-letter kernel mnemonic (QFFT, ENTG, GROV, DIFF, DROT, PHSH, QIFT,
+   CTLU, DIAG, PERM, UNIT) and parameterised by classical registers. Kernels
+   (Fourier, inverse Fourier, Grover iteration, diffusion, entanglement,
+   rotation, phase-shift, controlled-unitary, diagonal unitary, permutation)
+   encapsulate multi-gate circuits as atomic ISA-level operations.
    Individual qubit-level gates (QCNOT, QCZ, QSWAP, QROT, QHADM, QFLIP,
    QPHASE) provide fine-grained control. `QCUSTOM` applies a user-defined
    unitary read from classical memory. `QTENSOR` composes two registers via
@@ -56,8 +57,8 @@ The full lifecycle of a hybrid computation in CQAM:
    to extract a classical scalar from a measurement distribution, depositing it
    in an integer, float, or complex register.
 7. **Hybrid control flow.** `HFORK` and `HMERGE` delimit parallel execution
-   regions. `JMPF` provides conditional branching on PSW flags set by quantum
-   operations.
+   regions. `JMPF FLAG, label` provides conditional branching on named PSW flags
+   (ZF, NF, PF, QF, SF, EF, HF, IF) set by quantum and classical operations.
 8. **Interrupt-driven error handling.** A two-level interrupt model supports
    handler registration via `SETIV` and return via `RETI`, enabling the
    classical control layer to respond to arithmetic faults, quantum fidelity

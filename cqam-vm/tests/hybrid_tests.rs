@@ -920,7 +920,7 @@ ILDI R0, 2
 # QOBSERVE in PROB mode: H0 = p(|2>) = 0.25
 QOBSERVE H0, Q0, PROB, R0
 # Round 0.25 -> R1 = 0
-HREDUCE H0, R1, 0
+HREDUCE ROUND, H0, R1
 HALT
 "#;
 
@@ -950,7 +950,7 @@ ILDI R1, 3
 # QOBSERVE in AMP mode: H0 = rho[0][3] = Complex(0.5, 0.0)
 QOBSERVE H0, Q0, AMP, R0, R1
 # Conjugate: Z2 = conj(0.5 + 0i) = (0.5, -0.0)
-HREDUCE H0, Z2, 14
+HREDUCE CONJZ, H0, Z2
 HALT
 "#;
 

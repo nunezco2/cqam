@@ -189,8 +189,8 @@ LABEL: walk_step
 
 # Track statistics
     QSAMPLE H1, Q0, 0, R3, R3
-    HREDUCE H1, F1, 10    # F1 = mean
-    HREDUCE H1, F2, 13    # F2 = variance
+    HREDUCE MEANT, H1, F1    # F1 = mean
+    HREDUCE VARNC, H1, F2    # F2 = variance
 
 # Update step counter
     ILDM R5, 101           # R5 = step counter
@@ -218,8 +218,8 @@ LABEL: walk_step
 # Final measurement
 # ===========================================================================
     QOBSERVE H2, Q0
-    HREDUCE H2, R7, 11    # R7 = mode
-    HREDUCE H2, F3, 13    # F3 = final variance
+    HREDUCE MODEV, H2, R7    # R7 = mode
+    HREDUCE VARNC, H2, F3    # F3 = final variance
 
 # --- Print results ---
     ILDI R0, @res_fmt

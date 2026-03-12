@@ -198,7 +198,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
             format!("JMPF {}, {}", instruction::flag_name(*flag), target)
         }
         Instruction::HReduce { src, dst, func } => {
-            format!("HREDUCE H{}, R{}, {}", src, dst, instruction::reduce_fn_name(*func))
+            format!("HREDUCE {}, H{}, R{}", instruction::reduce_fn_mnemonic(*func), src, dst)
         }
 
         // Interrupt handling

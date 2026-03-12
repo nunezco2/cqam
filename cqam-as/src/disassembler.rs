@@ -270,7 +270,7 @@ fn format_instruction(instr: &Instruction) -> String {
             format!("JMPF {}, {}", cqam_core::instruction::flag_name(*flag), target)
         }
         Instruction::HReduce { src, dst, func } => {
-            format!("HREDUCE H{}, R{}, {}", src, dst, func)
+            format!("HREDUCE {}, H{}, R{}", cqam_core::instruction::reduce_fn_mnemonic(*func), src, dst)
         }
 
         // Interrupt handling

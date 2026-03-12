@@ -60,7 +60,7 @@ res_fmt:
 # --- Step 0: Initialize threshold from random measurement ---
     QPREP Q0, 0          # Uniform superposition
     QOBSERVE H0, Q0, SAMPLE  # Projective measurement -> random outcome
-    HREDUCE H0, R0, 0    # R0 = random initial threshold y
+    HREDUCE ROUND, H0, R0    # R0 = random initial threshold y
     ILDI R6, 0
     IADD R6, R0, R6      # R6 = y (current best)
 
@@ -88,8 +88,8 @@ LABEL: dh_grover_inner
 
 # --- Step 4: Sample full distribution for candidate ---
     QSAMPLE H1, Q0, 0, R1, R1
-    HREDUCE H1, R11, 12  # R11 = argmax (candidate solution)
-    HREDUCE H1, F0, 10   # F0 = mean of post-Grover distribution
+    HREDUCE ARGMX, H1, R11  # R11 = argmax (candidate solution)
+    HREDUCE MEANT, H1, F0   # F0 = mean of post-Grover distribution
 
 # --- Step 5: Threshold update via JIF ---
 # If measured state is different from current threshold, it may be better
@@ -118,7 +118,7 @@ LABEL: dh_no_update
 
 # --- Observe remaining quantum state (cleanup) ---
     QOBSERVE H2, Q0
-    HREDUCE H2, F1, 13  # F1 = variance at this round
+    HREDUCE VARNC, H2, F1  # F1 = variance at this round
 
 # Store round statistics
     FSTR F0, 200         # CMEM[200] = mean at this round (overwritten)
@@ -139,8 +139,8 @@ LABEL: dh_verify_loop
     JIF R14, dh_verify_loop
 
     QOBSERVE H3, Q1
-    HREDUCE H3, R15, 11  # R15 = verified minimum state (mode)
-    HREDUCE H3, F2, 10   # F2 = verification mean
+    HREDUCE MODEV, H3, R15  # R15 = verified minimum state (mode)
+    HREDUCE MEANT, H3, F2   # F2 = verification mean
 
 # Check consistency
     IEQ R14, R15, R6     # R14 = (verified == found minimum)

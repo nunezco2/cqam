@@ -367,8 +367,8 @@ fn test_bell_state_example_runs_through_vm() {
 # Bell state example
 QPREP Q0, 2
 QOBSERVE H0, Q0
-HREDUCE H0, R0, 11
-HREDUCE H0, F0, 10
+HREDUCE MODEV, H0, R0
+HREDUCE MEANT, H0, F0
 HALT
 "#;
 
@@ -615,11 +615,11 @@ QPREP Q0, 0
 # Non-destructive sample
 QSAMPLE H0, Q0
 # MEAN: 0*0.25 + 1*0.25 + 2*0.25 + 3*0.25 = 1.5
-HREDUCE H0, F0, 10
+HREDUCE MEANT, H0, F0
 # MODE: all equal, so max_by picks one (implementation-defined, but must be 0-3)
-HREDUCE H0, R0, 11
+HREDUCE MODEV, H0, R0
 # VARIANCE: E[X^2] - E[X]^2 = (0+1+4+9)*0.25 - 1.5^2 = 3.5 - 2.25 = 1.25
-HREDUCE H0, F1, 13
+HREDUCE VARNC, H0, F1
 HALT
 "#;
 
@@ -1203,7 +1203,7 @@ QKERNELF DROT, Q1, Q0, F0, F1
 # Observe Q1 -> H0 (full distribution)
 QOBSERVE H0, Q1
 # Reduce to mean
-HREDUCE H0, F2, 10
+HREDUCE MEANT, H0, F2
 HALT
 "#;
 
@@ -1248,7 +1248,7 @@ QKERNELZ PHSH, Q1, Q0, Z0, Z1
 # Non-destructive sample Q1 -> H0
 QSAMPLE H0, Q1
 # Reduce to mean
-HREDUCE H0, F0, 10
+HREDUCE MEANT, H0, F0
 HALT
 "#;
 

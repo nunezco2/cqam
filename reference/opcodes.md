@@ -140,21 +140,29 @@ Reserved: 0x2F (interrupt), 0x50 (reserved), 0x58-0xFF (future).
 
 ## 5. Kernel IDs (QKERNEL / QKERNELF / QKERNELZ kernel field)
 
-| ID | Name        | Description |
-|----|-------------|-------------|
-| 0  | init        | Re-initialize to uniform superposition |
-| 1  | entangle    | Create inter-qubit correlations (CNOT cascade) |
-| 2  | fourier     | Quantum Fourier Transform |
-| 3  | diffuse     | Grover diffusion operator (inversion about the mean) |
-| 4  | grover_iter | Oracle phase-flip + diffusion step |
-| 5  | rotate      | Diagonal rotation: U[k][k] = exp(i * theta * k) |
-| 6  | phase_shift | Phase shift: U[k][k] = exp(i * |z| * k) |
-| 7  | fourier_inv      | Inverse Quantum Fourier Transform |
-| 8  | controlled_u     | Controlled-U: apply sub-kernel conditioned on control qubit |
-| 9  | diagonal_unitary | Arbitrary diagonal unitary from CMEM complex pairs |
-| 10 | permutation      | Basis-state permutation from CMEM table |
+In source text, the kernel is identified by its four-letter mnemonic as the
+first operand (e.g., `QKERNEL ENTG, Q1, Q0, R0, R1`). The assembler encodes
+the mnemonic to the 5-bit numeric ID in the `kern` field.
+
+| ID | Name             | Mnemonic | Description |
+|----|------------------|----------|-------------|
+| 0  | init             | UNIT | Re-initialize to uniform superposition |
+| 1  | entangle         | ENTG | Create inter-qubit correlations (CNOT cascade) |
+| 2  | fourier          | QFFT | Quantum Fourier Transform |
+| 3  | diffuse          | DIFF | Grover diffusion operator (inversion about the mean) |
+| 4  | grover_iter      | GROV | Oracle phase-flip + diffusion step |
+| 5  | rotate           | DROT | Diagonal rotation: U[k][k] = exp(i * theta * k) |
+| 6  | phase_shift      | PHSH | Phase shift: U[k][k] = exp(i * |z| * k) |
+| 7  | fourier_inv      | QIFT | Inverse Quantum Fourier Transform |
+| 8  | controlled_u     | CTLU | Controlled-U: apply sub-kernel conditioned on control qubit |
+| 9  | diagonal_unitary | DIAG | Arbitrary diagonal unitary from CMEM complex pairs |
+| 10 | permutation      | PERM | Basis-state permutation from CMEM table |
 
 ## 6. PSW Flag IDs (JMPF flag field)
+
+`JMPF` uses flag name syntax in source text: `JMPF EF, label`. The assembler
+maps each name to its numeric ID for the binary `pred` field. SF, EF, and IF
+are intent-based flags set by kernel identity, not dynamic state inspection.
 
 | ID | Name | Description |
 |----|------|-------------|
@@ -163,31 +171,36 @@ Reserved: 0x2F (interrupt), 0x50 (reserved), 0x58-0xFF (future).
 | 2  | OF   | Overflow flag |
 | 3  | PF   | Predicate flag |
 | 4  | QF   | Quantum active |
-| 5  | SF   | Superposition present |
-| 6  | EF   | Entanglement present |
+| 5  | SF   | Superposition created by last kernel |
+| 6  | EF   | Entanglement created by last kernel |
 | 7  | HF   | Hybrid mode active |
+| 12 | IF   | Interference exploited by last kernel |
 
 ## 7. Reduction Function IDs (HREDUCE func field)
 
-| ID | Name      | Output File | Description |
-|----|-----------|-------------|-------------|
-| 0  | round     | R (i64) | Round to nearest integer |
-| 1  | floor     | R (i64) | Floor toward negative infinity |
-| 2  | ceil      | R (i64) | Ceiling toward positive infinity |
-| 3  | trunc     | R (i64) | Truncate toward zero |
-| 4  | abs       | R (i64) | Absolute value |
-| 5  | negate    | R (i64) | Negate |
-| 6  | magnitude | F (f64) | Complex magnitude: sqrt(re^2 + im^2) |
-| 7  | phase     | F (f64) | Complex phase: atan2(im, re) |
-| 8  | real      | F (f64) | Real part of complex |
-| 9  | imag      | F (f64) | Imaginary part of complex |
-| 10 | mean      | F (f64) | Distribution mean |
-| 11 | mode      | R (i64) | Distribution mode (most probable value) |
-| 12 | argmax    | R (i64) | Index of most probable state |
-| 13 | variance  | F (f64) | Distribution variance |
-| 14 | conj_z    | Z (f64,f64) | Complex conjugate: (re, -im) |
-| 15 | negate_z  | Z (f64,f64) | Complex negation: (-re, -im) |
-| 16 | expect    | F (f64) | Expectation value: sum_k eigenvalue_k * p_k; eigenvalues from CMEM[R[ctx]..+n] |
+`HREDUCE` uses mnemonic-first syntax: `HREDUCE MNEM, H_src, R/F/Z_dst`
+(e.g., `HREDUCE ARGMX, H0, R2`). The assembler maps each five-letter mnemonic
+to its numeric ID for the binary `func` field.
+
+| ID | Name      | Mnemonic | Output File | Description |
+|----|-----------|----------|-------------|-------------|
+| 0  | round     | ROUND | R (i64) | Round to nearest integer |
+| 1  | floor     | FLOOR | R (i64) | Floor toward negative infinity |
+| 2  | ceil      | CEILI | R (i64) | Ceiling toward positive infinity |
+| 3  | trunc     | TRUNC | R (i64) | Truncate toward zero |
+| 4  | abs       | ABSOL | R (i64) | Absolute value |
+| 5  | negate    | NEGAT | R (i64) | Negate |
+| 6  | magnitude | MAGNI | F (f64) | Complex magnitude: sqrt(re^2 + im^2) |
+| 7  | phase     | PHASE | F (f64) | Complex phase: atan2(im, re) |
+| 8  | real      | REALP | F (f64) | Real part of complex |
+| 9  | imag      | IMAGP | F (f64) | Imaginary part of complex |
+| 10 | mean      | MEANT | F (f64) | Distribution mean |
+| 11 | mode      | MODEV | R (i64) | Distribution mode (most probable value) |
+| 12 | argmax    | ARGMX | R (i64) | Index of most probable state |
+| 13 | variance  | VARNC | F (f64) | Distribution variance |
+| 14 | conj_z    | CONJZ | Z (f64,f64) | Complex conjugate: (re, -im) |
+| 15 | negate_z  | NEGTZ | Z (f64,f64) | Complex negation: (-re, -im) |
+| 16 | expect    | EXPCT | F (f64) | Expectation value: sum_k eigenvalue_k * p_k; eigenvalues from CMEM[R[ctx]..+n] |
 
 Output register file depends on the function ID:
 - IDs 0-5: result written to integer register file (R).

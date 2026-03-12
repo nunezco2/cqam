@@ -69,13 +69,21 @@ QMEM is accessed by QLoad, QStore.
 
 ### 3.2 Quantum State Flags
 
-| Flag | Description |
-|------|-------------|
-| QF | Quantum active: set after any QPREP/QKERNEL execution |
-| SF | Superposition present |
-| EF | Entanglement present |
-| DF | Decohered: set after measurement |
-| CF | Collapsed distribution |
+SF, EF, and IF are intent-based flags. They are set according to the identity of
+the kernel applied, not by dynamic state inspection: SF is set by kernels that
+create superposition (UNIT, QFFT, QIFT, DIFF, GROV, DROT, PHSH); EF is set by
+kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP with BELL/GHZ
+distributions; IF is set by kernels that exploit interference (QFFT, QIFT, DIFF,
+GROV).
+
+| Flag | ID | Description |
+|------|----|-------------|
+| QF | 4 | Quantum active: set after any QPREP/QKERNEL execution |
+| SF | 5 | Superposition created: set by kernels that create superposition |
+| EF | 6 | Entanglement created: set by kernels that create entanglement |
+| IF | 12 | Interference: set by kernels that exploit interference |
+| DF | — | Decohered: set after measurement |
+| CF | — | Collapsed distribution |
 
 ### 3.3 Hybrid Flags
 
@@ -296,22 +304,26 @@ flag. Current implementation is flag-based (not thread-based).
 
 ### 8.2 JMPF
 
-Conditional execution based on PSW flags. Reads the specified flag ID from the
-PSW and jumps to the target label if the flag is set.
+Conditional execution based on PSW flags. Uses flag name syntax:
+`JMPF FLAG_NAME, target` (e.g., `JMPF EF, entangled_path`). The flag name
+is assembled to the corresponding flag ID in the binary encoding. Jumps to
+the target label if the named flag is set.
 
 ### 8.3 HREDUCE
 
-17 reduction functions organized into four categories:
+Syntax: `HREDUCE MNEM, H_src, R/F/Z_dst` (e.g., `HREDUCE ARGMX, H0, R2`).
 
-| IDs | Category | Output | Functions |
+17 reduction functions in five-letter mnemonics, organized into four categories:
+
+| IDs | Category | Output | Mnemonics |
 |-----|----------|--------|-----------|
-| 0-5 | Float-to-Int | R[dst] (i64) | round, floor, ceil, trunc, abs, negate |
-| 6-9 | Complex-to-Float | F[dst] (f64) | magnitude, phase, real, imag |
-| 10-13 | Distribution | F[dst] or R[dst] | mean, mode, argmax, variance |
-| 14-15 | Complex-to-Complex | Z[dst] (f64, f64) | conj_z, negate_z |
-| 16 | Expectation | F[dst] (f64) | expect: sum_k eigenvalue_k * p_k |
+| 0-5 | Float-to-Int | R[dst] (i64) | ROUND, FLOOR, CEILI, TRUNC, ABSOL, NEGAT |
+| 6-9 | Complex-to-Float | F[dst] (f64) | MAGNI, PHASE, REALP, IMAGP |
+| 10-13 | Distribution | F[dst] or R[dst] | MEANT (F), MODEV (R), ARGMX (R), VARNC (F) |
+| 14-15 | Complex-to-Complex | Z[dst] (f64, f64) | CONJZ, NEGTZ |
+| 16 | Expectation | F[dst] (f64) | EXPCT: sum_k eigenvalue_k * p_k |
 
-The `expect` function (ID 16) reads `n` eigenvalues as f64 from CMEM starting
+The `EXPCT` function (ID 16) reads `n` eigenvalues as f64 from CMEM starting
 at R[ctx], where n is the distribution length, and computes the weighted sum
 against the distribution probabilities.
 
@@ -495,10 +507,10 @@ Note: Q[src] is NOT consumed.
 
 **Hybrid Reduce (HREDUCE):**
 ```
-    H[src] = val     result = reduce(val, func)
+    H[src] = val     result = reduce(val, func_mnem)
   -------------------------------------------------------
-  sigma --HREDUCE(src, dst, func)--> sigma[target_reg[dst] := result,
-                                           PC := PC + 1]
+  sigma --HREDUCE(func_mnem, src, dst)--> sigma[target_reg[dst] := result,
+                                                PC := PC + 1]
 ```
 
 **Halt (HALT):**
@@ -634,5 +646,5 @@ msg:
 .code
     ILDI R0, @diag         # R0 = 200 (CMEM base address of diag)
     ILDI R1, @diag.len     # R1 = 4  (complex entry count)
-    QKERNEL Q1, Q0, 9, R0, R1
+    QKERNEL DIAG, Q1, Q0, R0, R1
 ```

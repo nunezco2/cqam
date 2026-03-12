@@ -814,3 +814,55 @@ pub fn reduce_fn_name(id: u8) -> &'static str {
         _ => "unknown",
     }
 }
+
+/// Five-letter assembly mnemonic for a reduction function ID.
+pub fn reduce_fn_mnemonic(id: u8) -> &'static str {
+    match id {
+        reduce_fn::ROUND => "ROUND",
+        reduce_fn::FLOOR => "FLOOR",
+        reduce_fn::CEIL => "CEILI",
+        reduce_fn::TRUNC => "TRUNC",
+        reduce_fn::ABS => "ABSOL",
+        reduce_fn::NEGATE => "NEGAT",
+        reduce_fn::MAGNITUDE => "MAGNI",
+        reduce_fn::PHASE => "PHASE",
+        reduce_fn::REAL => "REALP",
+        reduce_fn::IMAG => "IMAGP",
+        reduce_fn::MEAN => "MEANT",
+        reduce_fn::MODE => "MODEV",
+        reduce_fn::ARGMAX => "ARGMX",
+        reduce_fn::VARIANCE => "VARNC",
+        reduce_fn::CONJ_Z => "CONJZ",
+        reduce_fn::NEGATE_Z => "NEGTZ",
+        reduce_fn::EXPECT => "EXPCT",
+        _ => "?????",
+    }
+}
+
+/// Parse a reduction function mnemonic to its numeric ID.
+///
+/// Accepts five-letter mnemonics (ROUND, FLOOR, CEILI, TRUNC, ABSOL, NEGAT,
+/// MAGNI, PHASE, REALP, IMAGP, MEANT, MODEV, ARGMX, VARNC, CONJZ, NEGTZ,
+/// EXPCT). Returns `None` for unrecognized names.
+pub fn reduce_fn_name_to_id(name: &str) -> Option<u8> {
+    match name {
+        "ROUND" => Some(reduce_fn::ROUND),
+        "FLOOR" => Some(reduce_fn::FLOOR),
+        "CEILI" => Some(reduce_fn::CEIL),
+        "TRUNC" => Some(reduce_fn::TRUNC),
+        "ABSOL" => Some(reduce_fn::ABS),
+        "NEGAT" => Some(reduce_fn::NEGATE),
+        "MAGNI" => Some(reduce_fn::MAGNITUDE),
+        "PHASE" => Some(reduce_fn::PHASE),
+        "REALP" => Some(reduce_fn::REAL),
+        "IMAGP" => Some(reduce_fn::IMAG),
+        "MEANT" => Some(reduce_fn::MEAN),
+        "MODEV" => Some(reduce_fn::MODE),
+        "ARGMX" => Some(reduce_fn::ARGMAX),
+        "VARNC" => Some(reduce_fn::VARIANCE),
+        "CONJZ" => Some(reduce_fn::CONJ_Z),
+        "NEGTZ" => Some(reduce_fn::NEGATE_Z),
+        "EXPCT" => Some(reduce_fn::EXPECT),
+        _ => None,
+    }
+}

@@ -132,9 +132,9 @@ Complex operations are lowered to paired float operations:
 
 | CQAM | QASM |
 |------|------|
-| `QKERNEL Q1, Q0, 2, R0, R1` | Kernel header comment + gate call or expanded template |
-| `QKERNELF Q1, Q0, 5, F0, F1` | Same as QKERNEL but params from F-file |
-| `QKERNELZ Q1, Q0, 6, Z0, Z1` | Same as QKERNEL but params from Z-file |
+| `QKERNEL QFFT, Q1, Q0, R0, R1` | Kernel header comment + gate call or expanded template |
+| `QKERNELF DROT, Q1, Q0, F0, F1` | Same as QKERNEL but params from F-file |
+| `QKERNELZ PHSH, Q1, Q0, Z0, Z1` | Same as QKERNEL but params from Z-file |
 
 ### 4.12 Qubit-Level Gate Operations
 
@@ -180,8 +180,8 @@ All hybrid operations emit CQAM-specific annotation comments:
 |------|------|
 | `HFORK` | `// @cqam.hfork: begin parallel execution region` |
 | `HMERGE` | `// @cqam.hmerge: end parallel execution region, merge results` |
-| `JMPF 3, target` | `// @cqam.jmpf: if PSW.PF goto target` |
-| `HREDUCE H0, R2, 11` | `// @cqam.hreduce: R2 = mode(H0)` |
+| `JMPF EF, target` | `// @cqam.jmpf: if PSW.EF goto target` |
+| `HREDUCE MODEV, H0, R2` | `// @cqam.hreduce: R2 = mode(H0)` |
 
 ### 4.16 Interrupt Operations
 

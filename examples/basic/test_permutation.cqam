@@ -101,10 +101,10 @@ done_msg:
     # Sample P(1) and P(2) before permutation
     ILDI R9, 1
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8              # F1 = P(1) -- expect 0
+    HREDUCE REALP, H0, F1              # F1 = P(1) -- expect 0
     ILDI R9, 2
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F2, 8              # F2 = P(2) -- expect 1
+    HREDUCE REALP, H0, F2              # F2 = P(2) -- expect 1
 
     ILDI R0, @t1_pre
     ILDI R1, @t1_pre.len
@@ -120,10 +120,12 @@ done_msg:
     # Sample after permutation: expect P(1)=1, P(2)=0
     ILDI R9, 1
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R9, 2
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
 
     ILDI R0, @t1_post
     ILDI R1, @t1_post.len
@@ -186,10 +188,10 @@ LABEL: t1_end
     # Sample P(0) and P(1) before shift
     ILDI R9, 0
     QSAMPLE H0, Q1, 1, R9, R9
-    HREDUCE H0, F1, 8              # F1 = P(0) -- expect 1
+    HREDUCE REALP, H0, F1              # F1 = P(0) -- expect 1
     ILDI R9, 1
     QSAMPLE H0, Q1, 1, R9, R9
-    HREDUCE H0, F2, 8              # F2 = P(1) -- expect 0
+    HREDUCE REALP, H0, F2              # F2 = P(1) -- expect 0
 
     ILDI R0, @t2_pre
     ILDI R1, @t2_pre.len
@@ -205,10 +207,12 @@ LABEL: t1_end
     # After: sigma(0)=1, so P(0)=0, P(1)=1
     ILDI R9, 0
     QSAMPLE H0, Q1, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R9, 1
     QSAMPLE H0, Q1, 1, R9, R9
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
 
     ILDI R0, @t2_post
     ILDI R1, @t2_post.len
@@ -274,7 +278,7 @@ LABEL: t2_end
     # Sample P(4) before oracle
     ILDI R9, 4
     QSAMPLE H0, Q2, 1, R9, R9
-    HREDUCE H0, F1, 8              # F1 = P(4) -- expect 1
+    HREDUCE REALP, H0, F1              # F1 = P(4) -- expect 1
 
     ILDI R0, @t3_pre
     ILDI R1, @t3_pre.len
@@ -290,10 +294,12 @@ LABEL: t2_end
     # After: expect P(4)=0, P(1)=1
     ILDI R9, 4
     QSAMPLE H0, Q2, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R9, 1
     QSAMPLE H0, Q2, 1, R9, R9
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
 
     ILDI R0, @t3_post
     ILDI R1, @t3_post.len
@@ -349,10 +355,10 @@ LABEL: t3_end
     # Sample P(2) and P(1) before identity
     ILDI R9, 2
     QSAMPLE H0, Q3, 1, R9, R9
-    HREDUCE H0, F1, 8              # F1 = P(2) -- expect 1
+    HREDUCE REALP, H0, F1              # F1 = P(2) -- expect 1
     ILDI R9, 1
     QSAMPLE H0, Q3, 1, R9, R9
-    HREDUCE H0, F2, 8              # F2 = P(1) -- expect 0
+    HREDUCE REALP, H0, F2              # F2 = P(1) -- expect 0
 
     ILDI R0, @t4_pre
     ILDI R1, @t4_pre.len
@@ -368,10 +374,12 @@ LABEL: t3_end
     # After: expect P(2)=1, P(1)=0 (unchanged)
     ILDI R9, 2
     QSAMPLE H0, Q3, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R9, 1
     QSAMPLE H0, Q3, 1, R9, R9
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
 
     ILDI R0, @t4_post
     ILDI R1, @t4_post.len

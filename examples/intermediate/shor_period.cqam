@@ -86,18 +86,18 @@ res_fmt:
 # ===============================================
 # Non-destructive sampling first
     QSAMPLE H0, Q1, 0, R2, R2   # Full distribution
-    HREDUCE H0, F2, 10           # F2 = mean (expected frequency)
-    HREDUCE H0, F3, 13           # F3 = variance
+    HREDUCE MEANT, H0, F2           # F2 = mean (expected frequency)
+    HREDUCE VARNC, H0, F3           # F3 = variance
 
 # Check specific probability peaks
     ILDI R8, 0
     QSAMPLE H1, Q1, 1, R8, R8   # P(|0>) — should have a peak
-    HREDUCE H1, F4, 8            # F4 = P(|0>)
+    HREDUCE REALP, H1, F4            # F4 = P(|0>)
 
 # Destructive measurement
     QOBSERVE H2, Q1              # Full measurement
-    HREDUCE H2, R9, 12           # R9 = argmax = s (encodes s/r)
-    HREDUCE H2, R10, 11          # R10 = mode
+    HREDUCE ARGMX, H2, R9           # R9 = argmax = s (encodes s/r)
+    HREDUCE MODEV, H2, R10          # R10 = mode
 
 # ===============================================
 # Step 5: Classical post-processing (continued fractions)

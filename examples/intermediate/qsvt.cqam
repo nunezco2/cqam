@@ -87,8 +87,8 @@ res_fmt:
 
 # --- Sample initial distribution ---
     QSAMPLE H0, Q0, 0, R1, R1
-    HREDUCE H0, F7, 10   # F7 = initial mean
-    HREDUCE H0, F8, 13   # F8 = initial variance
+    HREDUCE MEANT, H0, F7   # F7 = initial mean
+    HREDUCE VARNC, H0, F8   # F8 = initial variance
 
 # === QSVT main loop: interleave R(phi_k) and W ===
 # Structure: R(phi_0) -> W -> R(phi_1) -> W -> ... -> R(phi_{d-1})
@@ -129,22 +129,22 @@ LABEL: qsvt_loop
 
 # Non-destructive sampling of QSVT output
     QSAMPLE H1, Q0, 0, R1, R1   # Full distribution
-    HREDUCE H1, F11, 10          # F11 = mean of output distribution
-    HREDUCE H1, F12, 13          # F12 = variance of output
+    HREDUCE MEANT, H1, F11          # F11 = mean of output distribution
+    HREDUCE VARNC, H1, F12          # F12 = variance of output
 
 # Check probability of target state (should be amplified)
     QSAMPLE H2, Q0, 1, R0, R0   # P(target state)
-    HREDUCE H2, F13, 8           # F13 = P(target)
+    HREDUCE REALP, H2, F13           # F13 = P(target)
 
 # Check probability of |0> (signal qubit outcome)
     ILDI R8, 0
     QSAMPLE H3, Q0, 1, R8, R8   # P(|0>)
-    HREDUCE H3, F14, 8           # F14 = P(|0>) -- encodes polynomial value
+    HREDUCE REALP, H3, F14           # F14 = P(|0>) -- encodes polynomial value
 
 # Destructive measurement
     QOBSERVE H4, Q0
-    HREDUCE H4, R9, 11          # R9 = mode (most probable state)
-    HREDUCE H4, R10, 12         # R10 = argmax
+    HREDUCE MODEV, H4, R9          # R9 = mode (most probable state)
+    HREDUCE ARGMX, H4, R10         # R10 = argmax
 
 # === Store results ===
     FSTR F7, 0           # CMEM[0] = initial mean

@@ -57,7 +57,7 @@ res_fmt:
     QCNOT Q0, Q0, R0, R1    # CNOT ctrl=q0, tgt=q1
     QHADM Q0, Q0, R1        # Hadamard on qubit 0 (mask=1)
     QOBSERVE H0, Q0
-    HREDUCE H0, R3, 11      # R3 = decoded message for 00 (expect 0)
+    HREDUCE MODEV, H0, R3      # R3 = decoded message for 00 (expect 0)
 
 # ===============================================
 # Message 01: Bit-flip (X on Alice's qubit = q0)
@@ -69,7 +69,7 @@ res_fmt:
     QCNOT Q1, Q1, R0, R1
     QHADM Q1, Q1, R1
     QOBSERVE H1, Q1
-    HREDUCE H1, R4, 11      # R4 = decoded message for 01 (expect 1)
+    HREDUCE MODEV, H1, R4      # R4 = decoded message for 01 (expect 1)
 
 # ===============================================
 # Message 10: Phase-flip (Z on Alice's qubit = q0)
@@ -81,7 +81,7 @@ res_fmt:
     QCNOT Q2, Q2, R0, R1
     QHADM Q2, Q2, R1
     QOBSERVE H2, Q2
-    HREDUCE H2, R5, 11      # R5 = decoded message for 10 (expect 2)
+    HREDUCE MODEV, H2, R5      # R5 = decoded message for 10 (expect 2)
 
 # ===============================================
 # Message 11: XZ (bit-flip + phase-flip on q0)
@@ -94,7 +94,7 @@ res_fmt:
     QCNOT Q3, Q3, R0, R1
     QHADM Q3, Q3, R1
     QOBSERVE H3, Q3
-    HREDUCE H3, R6, 11      # R6 = decoded message for 11 (expect 3)
+    HREDUCE MODEV, H3, R6      # R6 = decoded message for 11 (expect 3)
 
 # ===============================================
 # Verify all messages decoded correctly

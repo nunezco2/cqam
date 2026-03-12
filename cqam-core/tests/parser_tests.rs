@@ -687,7 +687,7 @@ fn test_parse_jmpf_by_number() {
 #[test]
 fn test_parse_hreduce() {
     assert_eq!(
-        parse_instruction("HREDUCE H0, R1, 0").unwrap(),
+        parse_instruction("HREDUCE ROUND, H0, R1").unwrap(),
         Instruction::HReduce { src: 0, dst: 1, func: 0 }
     );
 }
@@ -843,7 +843,7 @@ fn test_parse_program_quantum_workflow() {
 QPREP Q0, 0
 QKERNEL ENTG, Q1, Q0, R0, R1
 QOBSERVE H0, Q1
-HREDUCE H0, R2, 12
+HREDUCE ARGMX, H0, R2
 HALT
 ";
     let program = parse_program(source).unwrap().instructions;

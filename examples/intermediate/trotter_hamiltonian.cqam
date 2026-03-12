@@ -86,8 +86,8 @@ res_fmt:
 
 # Measure initial energy
     QSAMPLE H0, Q0, 0, R3, R3
-    HREDUCE H0, F8, 10   # F8 = initial mean (energy proxy)
-    HREDUCE H0, F9, 13   # F9 = initial variance
+    HREDUCE MEANT, H0, F8   # F8 = initial mean (energy proxy)
+    HREDUCE VARNC, H0, F9   # F9 = initial variance
 
 # === Trotter step loop ===
 LABEL: trotter_loop
@@ -121,8 +121,8 @@ LABEL: trotter_loop
 
 # Track evolution at each step (non-destructive)
     QSAMPLE H1, Q0, 0, R3, R3
-    HREDUCE H1, F10, 10       # F10 = mean at this step
-    HREDUCE H1, F11, 13       # F11 = variance at this step
+    HREDUCE MEANT, H1, F10       # F10 = mean at this step
+    HREDUCE VARNC, H1, F11       # F11 = variance at this step
 
 # Store per-step statistics
     FSTR F10, 300              # Overwritten each step (final value kept)
@@ -137,23 +137,23 @@ LABEL: trotter_loop
 
 # Non-destructive probe before destruction
     QSAMPLE H2, Q0, 0, R3, R3
-    HREDUCE H2, F12, 10       # F12 = final mean
-    HREDUCE H2, F13, 13       # F13 = final variance
+    HREDUCE MEANT, H2, F12       # F12 = final mean
+    HREDUCE VARNC, H2, F13       # F13 = final variance
 
 # Check specific state probabilities
     ILDI R8, 0
     QSAMPLE H3, Q0, 1, R8, R8  # P(|0000>)
-    HREDUCE H3, F14, 8          # F14 = P(ground state)
+    HREDUCE REALP, H3, F14          # F14 = P(ground state)
 
 # Destructive measurement
     QOBSERVE H4, Q0
-    HREDUCE H4, R9, 11         # R9 = mode (most probable state)
-    HREDUCE H4, R10, 12        # R10 = argmax
+    HREDUCE MODEV, H4, R9         # R9 = mode (most probable state)
+    HREDUCE ARGMX, H4, R10        # R10 = argmax
 
 # Reload initial state for comparison
     QLOAD Q1, 0
     QSAMPLE H5, Q1, 0, R3, R3
-    HREDUCE H5, F15, 10        # F15 = initial mean (for comparison)
+    HREDUCE MEANT, H5, F15        # F15 = initial mean (for comparison)
     QOBSERVE H6, Q1
 
 # === Store results ===

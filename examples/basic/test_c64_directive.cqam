@@ -109,7 +109,8 @@ LABEL: len_done
     # P(|1>) before oracle (should be 0.25)
     ILDI R9, 1
     QSAMPLE H0, Q0, 1, R9, R9
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R0, @pre_msg
     ILDI R1, @pre_msg.len
     ISUB R1, R1, R15
@@ -123,7 +124,8 @@ LABEL: len_done
     # P(|1>) after oracle (should still be 0.25 -- phase flip preserves probs)
     ILDI R9, 1
     QSAMPLE H1, Q0, 1, R9, R9
-    HREDUCE H1, F1, 8
+    HREDUCE REALP, H1, F1
+
     ILDI R0, @post_msg
     ILDI R1, @post_msg.len
     ISUB R1, R1, R15
@@ -137,7 +139,8 @@ LABEL: len_done
     # P(|1>) after one Grover iteration
     ILDI R9, 1
     QSAMPLE H2, Q0, 1, R9, R9
-    HREDUCE H2, F1, 8
+    HREDUCE REALP, H2, F1
+
     ILDI R0, @grv_msg
     ILDI R1, @grv_msg.len
     ISUB R1, R1, R15
@@ -145,7 +148,7 @@ LABEL: len_done
 
     # Final measurement -- use MODE (func=11) to get basis state with max prob
     QOBSERVE H3, Q0
-    HREDUCE H3, R2, 11   # R2 = mode (basis state key with highest probability)
+    HREDUCE MODEV, H3, R2   # R2 = mode (basis state key with highest probability)
     ILDI R0, @meas_msg
     ILDI R1, @meas_msg.len
     ISUB R1, R1, R15

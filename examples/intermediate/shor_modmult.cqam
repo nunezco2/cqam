@@ -183,16 +183,20 @@ res_fmt:
 # --- U^0 (initial state) ---
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 2
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R10, 4
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F3, 8
+    HREDUCE REALP, H0, F3
+
     ILDI R10, 8
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F4, 8
+    HREDUCE REALP, H0, F4
+
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
     ILDI R15, 1
@@ -204,16 +208,20 @@ res_fmt:
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 2
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R10, 4
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F3, 8
+    HREDUCE REALP, H0, F3
+
     ILDI R10, 8
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F4, 8
+    HREDUCE REALP, H0, F4
+
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
     ILDI R15, 1
@@ -225,16 +233,20 @@ res_fmt:
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 2
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R10, 4
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F3, 8
+    HREDUCE REALP, H0, F3
+
     ILDI R10, 8
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F4, 8
+    HREDUCE REALP, H0, F4
+
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
     ILDI R15, 1
@@ -246,16 +258,20 @@ res_fmt:
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 2
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R10, 4
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F3, 8
+    HREDUCE REALP, H0, F3
+
     ILDI R10, 8
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F4, 8
+    HREDUCE REALP, H0, F4
+
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
     ILDI R15, 1
@@ -267,16 +283,20 @@ res_fmt:
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 2
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R10, 4
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F3, 8
+    HREDUCE REALP, H0, F3
+
     ILDI R10, 8
     QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE H0, F4, 8
+    HREDUCE REALP, H0, F4
+
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
     ILDI R15, 1
@@ -326,10 +346,12 @@ LABEL: t1_end
 # --- (U^2)^0: initial state ---
     ILDI R10, 1
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 4
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
     ILDI R15, 1
@@ -341,10 +363,12 @@ LABEL: t1_end
     QKERNEL PERM, Q1, Q1, R7, R9
     ILDI R10, 1
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 4
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
     ILDI R15, 1
@@ -356,10 +380,12 @@ LABEL: t1_end
     QKERNEL PERM, Q1, Q1, R7, R9
     ILDI R10, 1
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F1, 8
+    HREDUCE REALP, H0, F1
+
     ILDI R10, 4
     QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE H0, F2, 8
+    HREDUCE REALP, H0, F2
+
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
     ILDI R15, 1

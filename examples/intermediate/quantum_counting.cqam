@@ -76,8 +76,8 @@ LABEL: grover_count_inner
 
 # --- Measure the QFT output ---
     QOBSERVE H0, Q1      # Full distribution
-    HREDUCE H0, R9, 12   # R9 = argmax (peak frequency bin)
-    HREDUCE H0, F0, 10   # F0 = mean frequency
+    HREDUCE ARGMX, H0, R9   # R9 = argmax (peak frequency bin)
+    HREDUCE MEANT, H0, F0   # F0 = mean frequency
 
 # --- Store phase estimate ---
     ISTRX R9, R6         # CMEM[R6] = phase index for this depth

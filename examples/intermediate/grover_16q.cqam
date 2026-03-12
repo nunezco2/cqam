@@ -100,10 +100,10 @@ LABEL: grover_loop
     QOBSERVE H0, Q0      # H0 = full probability distribution (destructive)
 
 # --- Extract classical results ---
-    HREDUCE H0, R5, 11   # R5 = mode (most probable state)
-    HREDUCE H0, R6, 12   # R6 = argmax (index of max probability)
-    HREDUCE H0, F0, 10   # F0 = mean of distribution
-    HREDUCE H0, F1, 13   # F1 = variance of distribution
+    HREDUCE MODEV, H0, R5   # R5 = mode (most probable state)
+    HREDUCE ARGMX, H0, R6   # R6 = argmax (index of max probability)
+    HREDUCE MEANT, H0, F0   # F0 = mean of distribution
+    HREDUCE VARNC, H0, F1   # F1 = variance of distribution
 
 # --- Verify: did we find the target? ---
     IEQ R7, R5, R0       # R7 = (mode == target) ? 1 : 0
