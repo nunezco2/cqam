@@ -85,7 +85,7 @@ impl Statevector {
     ///
     /// Returns Err if num_qubits < 2 or > MAX_SV_QUBITS.
     pub fn new_ghz(num_qubits: u8) -> Result<Self, String> {
-        if num_qubits < 2 || num_qubits > MAX_SV_QUBITS {
+        if !(2..=MAX_SV_QUBITS).contains(&num_qubits) {
             return Err(format!(
                 "GHZ state requires 2..={} qubits, got {}",
                 MAX_SV_QUBITS, num_qubits

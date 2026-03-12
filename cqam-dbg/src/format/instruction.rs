@@ -2,6 +2,7 @@
 //!
 //! Provides formatting functions to render `Instruction` values as
 //! human-readable assembly mnemonics for the debugger's CODE pane.
+#![allow(dead_code)]
 
 use cqam_core::instruction::{
     self, Instruction,

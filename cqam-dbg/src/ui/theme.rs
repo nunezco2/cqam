@@ -1,6 +1,7 @@
 //! Color constants and style constructors for the TUI debugger.
 //!
 //! All colors are specified as ANSI 256 values. The scheme is designed for dark
+#![allow(dead_code)]
 //! terminals (black or near-black backgrounds).
 
 use ratatui::style::{Color, Modifier, Style};

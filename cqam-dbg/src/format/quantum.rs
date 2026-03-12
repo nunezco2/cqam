@@ -1,5 +1,6 @@
 //! Quantum state extraction, top-K filtering, bar chart rendering, and
 //! coherence summary formatting for the QUANTUM pane.
+#![allow(dead_code)]
 
 use cqam_sim::quantum_register::QuantumRegister;
 

@@ -2,6 +2,7 @@
 //!
 //! Provides formatting functions for integer, float, complex, hybrid, and
 //! quantum register values, including change detection styling.
+#![allow(dead_code)]
 
 use cqam_core::register::HybridValue;
 use cqam_sim::quantum_register::QuantumRegister;

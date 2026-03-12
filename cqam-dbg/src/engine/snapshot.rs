@@ -25,19 +25,13 @@ impl RegisterSnapshot {
     /// Create a snapshot from the current execution context.
     pub fn capture(ctx: &ExecutionContext) -> Self {
         let mut iregs = [0i64; 16];
-        for i in 0..16 {
-            iregs[i] = ctx.iregs.regs[i];
-        }
+        iregs.copy_from_slice(&ctx.iregs.regs);
 
         let mut fregs = [0.0f64; 16];
-        for i in 0..16 {
-            fregs[i] = ctx.fregs.regs[i];
-        }
+        fregs.copy_from_slice(&ctx.fregs.regs);
 
         let mut zregs = [(0.0f64, 0.0f64); 16];
-        for i in 0..16 {
-            zregs[i] = ctx.zregs.regs[i];
-        }
+        zregs.copy_from_slice(&ctx.zregs.regs);
 
         let psw_flags = [
             ctx.psw.zf,

@@ -188,7 +188,8 @@ fn build_psw_lines(app: &AppState, lines: &mut Vec<ListItem<'static>>) {
     let ctx = &app.engine.ctx;
 
     // Group definitions: (label, background, flag_names, flag_values, flag_ids)
-    let groups: &[(&str, ratatui::style::Color, &[&str], &[bool], &[usize])] = &[
+    type FlagGroup<'a> = (&'a str, ratatui::style::Color, &'a [&'a str], &'a [bool], &'a [usize]);
+    let groups: &[FlagGroup] = &[
         ("Classical", theme::BG_FLAG_CLASSICAL, &["ZF", "NF", "OF", "PF"], &[psw.zf, psw.nf, psw.of, psw.pf], &[0, 1, 2, 3]),
         ("Quantum", theme::BG_FLAG_QUANTUM, &["QF", "SF", "EF", "IF"], &[psw.qf, psw.sf, psw.ef, psw.inf], &[4, 5, 6, 12]),
         ("Hybrid", theme::BG_FLAG_HYBRID, &["HF", "DF", "CF", "FK", "MG"], &[psw.hf, psw.df, psw.cf, psw.forked, psw.merged], &[7, 8, 9, 10, 11]),
