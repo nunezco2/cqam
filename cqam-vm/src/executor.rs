@@ -631,11 +631,11 @@ pub fn execute_instruction(
 
         Instruction::HFork
         | Instruction::HMerge
-        | Instruction::HCExec { .. }
+        | Instruction::JmpF { .. }
         | Instruction::HReduce { .. } => {
             let jumped = execute_hybrid(ctx, instr, fork_mgr)?;
             if jumped {
-                return Ok(()); // HCExec took a jump: do NOT advance PC
+                return Ok(()); // JmpF took a jump: do NOT advance PC
             }
         }
 
@@ -691,7 +691,7 @@ pub fn run_program(ctx: &mut ExecutionContext, fork_mgr: &mut ForkManager) -> Re
         // Clone is required here due to Rust's borrow rules: ctx.program[pc]
         // borrows ctx immutably, but execute_instruction needs &mut ctx.
         // The cost is O(1) for most variants; only String-containing variants
-        // (Label, Jmp, Jif, Call, HCExec) allocate, and these are a small
+        // (Label, Jmp, Jif, Call, JmpF) allocate, and these are a small
         // fraction of typical execution. Eliminating this clone would require
         // splitting ExecutionContext into separate immutable/mutable parts.
         let instr = ctx.program[ctx.pc].clone();

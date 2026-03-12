@@ -369,7 +369,7 @@ This enables data-driven state preparation in loops:
 |-------------|---------|-------------|
 | HFORK | `HFORK` | Fork hybrid execution (set fork flags) |
 | HMERGE | `HMERGE` | Merge hybrid branches (set merge flags) |
-| HCEXEC | `HCEXEC 3, label` | Conditional jump if PSW flag 3 (PF) is set |
+| JMPF | `JMPF 3, label` | Conditional jump if PSW flag 3 (PF) is set |
 | HREDUCE | `HREDUCE H0, R2, 11` | Reduce H0 using func 11 (mode), store in R2 |
 
 Reduction function IDs: 0=round, 1=floor, 2=ceil, 3=trunc, 4=abs, 5=negate,

@@ -136,7 +136,7 @@ fn test_all_quantum_variants() {
 fn test_all_hybrid_variants() {
     let _fork = Instruction::HFork;
     let _merge = Instruction::HMerge;
-    let _cexec = Instruction::HCExec { flag: flag_id::QF, target: "THEN".into() };
+    let _cexec = Instruction::JmpF { flag: flag_id::QF, target: "THEN".into() };
     let _reduce = Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ROUND };
 }
 

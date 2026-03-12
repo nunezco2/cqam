@@ -82,7 +82,7 @@ fn test_resource_control_flow() {
 fn test_resource_hybrid_operations() {
     let instrs = [
         Instruction::HFork,
-        Instruction::HCExec { flag: 0, target: "T".into() },
+        Instruction::JmpF { flag: 0, target: "T".into() },
         Instruction::HMerge,
         Instruction::HReduce { src: 0, dst: 0, func: 0 },
     ];

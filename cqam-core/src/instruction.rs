@@ -416,7 +416,7 @@ pub enum Instruction {
     /// Conditional execution based on PSW flag.
     /// if PSW.flag[flag] then PC = address_of(target)
     /// flag: flag ID (see flag_id module)
-    HCExec { flag: u8, target: String },
+    JmpF { flag: u8, target: String },
 
     /// Reduce hybrid value to classical value.
     /// The output register file depends on the reduction function:
@@ -500,7 +500,7 @@ pub mod kernel_id {
     pub const PERMUTATION: u8 = 10;
 }
 
-/// PSW flag IDs for HCExec.
+/// PSW flag IDs for JmpF.
 pub mod flag_id {
     /// Zero flag.
     pub const ZF: u8 = 0;

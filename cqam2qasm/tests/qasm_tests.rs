@@ -383,7 +383,7 @@ fn test_qasm_control_flow() {
 fn test_qasm_hybrid_annotations() {
     let program = vec![
         Instruction::HFork,
-        Instruction::HCExec { flag: flag_id::QF, target: "QBRANCH".into() },
+        Instruction::JmpF { flag: flag_id::QF, target: "QBRANCH".into() },
         Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::MEAN },
         Instruction::HMerge,
     ];
@@ -391,7 +391,7 @@ fn test_qasm_hybrid_annotations() {
     let output = emit_qasm_program(&program, &config);
 
     assert!(output.contains("@cqam.hfork"));
-    assert!(output.contains("@cqam.hcexec"));
+    assert!(output.contains("@cqam.jmpf"));
     assert!(output.contains("@cqam.hreduce"));
     assert!(output.contains("@cqam.hmerge"));
     assert!(output.contains("QF"));

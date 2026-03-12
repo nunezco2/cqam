@@ -56,7 +56,7 @@ fn print_doc_reference() {
     eprintln!("  Quantum measurement:  QSAMPLE  QOBSERVE  QMEAS");
     eprintln!("  Quantum memory:       QLOAD  QSTORE  QPTRACE  QRESET");
     eprintln!();
-    eprintln!("  Hybrid:               HFORK  HMERGE  HCEXEC  HREDUCE");
+    eprintln!("  Hybrid:               HFORK  HMERGE  JMPF  HREDUCE");
 }
 
 fn main() {

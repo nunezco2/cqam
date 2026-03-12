@@ -1,4 +1,4 @@
-//! Tests for hybrid operations: HFORK/HMERGE parallelism, HCEXEC conditional
+//! Tests for hybrid operations: HFORK/HMERGE parallelism, JMPF conditional
 //! branching, and HREDUCE reductions across all supported function IDs.
 
 use cqam_core::instruction::*;
@@ -28,7 +28,7 @@ fn test_hmerge_sets_flag() {
 }
 
 #[test]
-fn test_hcexec_jump_on_qf() {
+fn test_jmpf_jump_on_qf() {
     let program = vec![
         Instruction::Label("THEN".into()),
         Instruction::ILdi { dst: 0, imm: 42 },
@@ -40,7 +40,7 @@ fn test_hcexec_jump_on_qf() {
     let mut fm = ForkManager::new();
     let jumped = execute_hybrid(
         &mut ctx,
-        &Instruction::HCExec { flag: flag_id::QF, target: "THEN".into() },
+        &Instruction::JmpF { flag: flag_id::QF, target: "THEN".into() },
         &mut fm,
     ).unwrap();
 
@@ -49,7 +49,7 @@ fn test_hcexec_jump_on_qf() {
 }
 
 #[test]
-fn test_hcexec_no_jump_on_false_flag() {
+fn test_jmpf_no_jump_on_false_flag() {
     let program = vec![
         Instruction::Label("THEN".into()),
         Instruction::ILdi { dst: 0, imm: 42 },
@@ -61,7 +61,7 @@ fn test_hcexec_no_jump_on_false_flag() {
     let mut fm = ForkManager::new();
     let jumped = execute_hybrid(
         &mut ctx,
-        &Instruction::HCExec { flag: flag_id::QF, target: "THEN".into() },
+        &Instruction::JmpF { flag: flag_id::QF, target: "THEN".into() },
         &mut fm,
     ).unwrap();
 
@@ -241,7 +241,7 @@ fn test_hfork_merge_flow_simulation() {
 
     for instr in &program {
         match instr {
-            Instruction::HFork | Instruction::HMerge | Instruction::HCExec { .. }
+            Instruction::HFork | Instruction::HMerge | Instruction::JmpF { .. }
             | Instruction::HReduce { .. } => {
                 execute_hybrid(&mut ctx, instr, &mut fm).unwrap();
                 ctx.advance_pc();

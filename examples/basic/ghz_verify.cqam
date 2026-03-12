@@ -113,13 +113,13 @@ LABEL: ghz_pow2_done
     HREDUCE H5, F10, 10  # F10 = mean of encoded state
 
 # ===============================================
-# Entanglement verification via HCEXEC
+# Entanglement verification via JMPF
 # ===============================================
     HFORK
 # Check if entanglement flag (EF, flag_id=6) is set
     QPREP Q3, 3          # GHZ should set EF
     QKERNEL Q3, Q3, 1, R2, R2   # Entangle (should set SF and EF)
-    HCEXEC 6, entangled_branch   # Jump if EF set
+    JMPF 6, entangled_branch   # Jump if EF set
 
 # Not entangled path
     ILDI R7, 0

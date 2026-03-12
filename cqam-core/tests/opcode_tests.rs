@@ -461,13 +461,13 @@ fn roundtrip_jif_max_address() {
 }
 
 #[test]
-fn roundtrip_hcexec() {
+fn roundtrip_jmpf() {
     let labels = test_labels();
-    let instr = Instruction::HCExec { flag: 5, target: "end".to_string() };
+    let instr = Instruction::JmpF { flag: 5, target: "end".to_string() };
     let decoded = roundtrip_with_labels(&instr, &labels);
     assert_eq!(
         decoded,
-        Instruction::HCExec {
+        Instruction::JmpF {
             flag: 5,
             target: "@42".to_string()
         }
@@ -810,9 +810,9 @@ fn error_unresolved_label_jif() {
 }
 
 #[test]
-fn error_unresolved_label_hcexec() {
+fn error_unresolved_label_jmpf() {
     let labels = HashMap::new();
-    let instr = Instruction::HCExec { flag: 0, target: "missing".to_string() };
+    let instr = Instruction::JmpF { flag: 0, target: "missing".to_string() };
     let result = encode(&instr, &labels);
     assert!(result.is_err());
 }
@@ -932,10 +932,10 @@ fn error_jif_address_overflow() {
 }
 
 #[test]
-fn error_hcexec_address_overflow() {
+fn error_jmpf_address_overflow() {
     let mut labels = HashMap::new();
     labels.insert("too_far".to_string(), 0x10000u32);
-    let instr = Instruction::HCExec {
+    let instr = Instruction::JmpF {
         flag: 0,
         target: "too_far".to_string(),
     };
@@ -1125,7 +1125,7 @@ fn mnemonic_all_assigned_opcodes() {
         (op::ZSTRX, "ZSTRX"),
         (op::HFORK, "HFORK"),
         (op::HMERGE, "HMERGE"),
-        (op::HCEXEC, "HCEXEC"),
+        (op::JMPF, "JMPF"),
         (op::HREDUCE, "HREDUCE"),
     ];
 

@@ -8,7 +8,7 @@
 ///
 /// Condition flags are updated by arithmetic, comparison, and quantum
 /// instructions. Trap flags are set by runtime faults and checked by the ISR
-/// dispatch loop after each instruction. The flag IDs used by `HCEXEC` and
+/// dispatch loop after each instruction. The flag IDs used by `JMPF` and
 /// `get_flag` are defined in [`cqam_core::instruction::flag_id`].
 #[derive(Debug, Default, Clone)]
 pub struct ProgramStateWord {

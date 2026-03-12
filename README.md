@@ -56,7 +56,7 @@ The full lifecycle of a hybrid computation in CQAM:
    to extract a classical scalar from a measurement distribution, depositing it
    in an integer, float, or complex register.
 7. **Hybrid control flow.** `HFORK` and `HMERGE` delimit parallel execution
-   regions. `HCEXEC` provides conditional branching on PSW flags set by quantum
+   regions. `JMPF` provides conditional branching on PSW flags set by quantum
    operations.
 8. **Interrupt-driven error handling.** A two-level interrupt model supports
    handler registration via `SETIV` and return via `RETI`, enabling the

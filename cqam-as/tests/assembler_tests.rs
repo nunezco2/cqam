@@ -233,9 +233,9 @@ fn test_jif_label_resolution() {
 }
 
 #[test]
-fn test_hcexec_label_resolution() {
+fn test_jmpf_label_resolution() {
     let program = vec![
-        Instruction::HCExec { flag: 0, target: "branch".to_string() },
+        Instruction::JmpF { flag: 0, target: "branch".to_string() },
         Instruction::Halt,
         Instruction::Label("branch".to_string()),
         Instruction::HMerge,
@@ -416,7 +416,7 @@ fn test_strip_cqb_roundtrip_code_words_exact() {
     }
 }
 
-// -- Verify decoded JMP/CALL/JIF/HCEXEC targets in stripped output ------------
+// -- Verify decoded JMP/CALL/JIF/JMPF targets in stripped output ------------
 
 #[test]
 fn test_strip_jmp_decoded_target_correct() {
@@ -481,13 +481,13 @@ fn test_strip_jif_decoded_target_correct() {
 }
 
 #[test]
-fn test_strip_hcexec_decoded_target_correct() {
-    // HCEXEC 0, branch  (idx 0, stripped pos 0) -- target should be stripped addr
+fn test_strip_jmpf_decoded_target_correct() {
+    // JMPF 0, branch  (idx 0, stripped pos 0) -- target should be stripped addr
     // HALT              (idx 1, stripped pos 1)
     // LABEL branch      (idx 2, labels_before=0, stripped=2)
     // HMERGE            (idx 3, stripped pos 2)
     let program = vec![
-        Instruction::HCExec { flag: 0, target: "branch".to_string() },
+        Instruction::JmpF { flag: 0, target: "branch".to_string() },
         Instruction::Halt,
         Instruction::Label("branch".to_string()),
         Instruction::HMerge,
@@ -498,7 +498,7 @@ fn test_strip_hcexec_decoded_target_correct() {
     let decoded = decode_ok(result.code[0]);
     assert_eq!(
         decoded,
-        Instruction::HCExec { flag: 0, target: "@2".to_string() }
+        Instruction::JmpF { flag: 0, target: "@2".to_string() }
     );
 }
 
@@ -639,7 +639,7 @@ fn test_backward_compat_assemble_source_wrapper() {
 
 #[test]
 fn test_strip_complex_program_all_branch_types() {
-    // A program exercising JMP, CALL, JIF, HCEXEC with multiple labels
+    // A program exercising JMP, CALL, JIF, JMPF with multiple labels
     // interleaved among code, including forward and backward references.
     //
     // Index  Instruction           labels_before  stripped_pos
@@ -653,7 +653,7 @@ fn test_strip_complex_program_all_branch_types() {
     // 7      HALT                  -              4
     // 8      LABEL: sub            3              -> stripped addr 5
     // 9      ILDI R1, 99           -              5
-    // 10     HCEXEC 0, end         -              6  (target: "end"  = stripped 4)
+    // 10     JMPF 0, end         -              6  (target: "end"  = stripped 4)
     // 11     RET                   -              7
     let program = vec![
         Instruction::Label("start".to_string()),
@@ -666,7 +666,7 @@ fn test_strip_complex_program_all_branch_types() {
         Instruction::Halt,
         Instruction::Label("sub".to_string()),
         Instruction::ILdi { dst: 1, imm: 99 },
-        Instruction::HCExec { flag: 0, target: "end".to_string() },
+        Instruction::JmpF { flag: 0, target: "end".to_string() },
         Instruction::Ret,
     ];
 
@@ -693,11 +693,11 @@ fn test_strip_complex_program_all_branch_types() {
     let jmp = decode_ok(result.code[3]);
     assert_eq!(jmp, Instruction::Jmp { target: "@0".to_string() });
 
-    // code[6] = HCEXEC 0, end -> target @4
-    let hcexec = decode_ok(result.code[6]);
+    // code[6] = JMPF 0, end -> target @4
+    let jmpf = decode_ok(result.code[6]);
     assert_eq!(
-        hcexec,
-        Instruction::HCExec { flag: 0, target: "@4".to_string() }
+        jmpf,
+        Instruction::JmpF { flag: 0, target: "@4".to_string() }
     );
 
     // .cqb round-trip should preserve everything

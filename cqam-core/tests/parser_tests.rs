@@ -660,10 +660,10 @@ fn test_parse_hmerge() {
 }
 
 #[test]
-fn test_parse_hcexec() {
+fn test_parse_jmpf() {
     assert_eq!(
-        parse_instruction("HCEXEC 4, THEN").unwrap(),
-        Instruction::HCExec { flag: 4, target: "THEN".into() }
+        parse_instruction("JMPF 4, THEN").unwrap(),
+        Instruction::JmpF { flag: 4, target: "THEN".into() }
     );
 }
 

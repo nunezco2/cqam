@@ -1,4 +1,4 @@
-//! Hybrid operation handlers (HFORK, HMERGE, HCEXEC, HREDUCE).
+//! Hybrid operation handlers (HFORK, HMERGE, JMPF, HREDUCE).
 //!
 //! Provides fork/merge parallelism and reduction operations that bridge
 //! quantum measurement results into classical register values.
@@ -15,7 +15,7 @@ const PAR_THRESHOLD: usize = 256;
 
 /// Execute a hybrid instruction with fork/merge support.
 ///
-/// Returns `Ok(true)` if a jump was taken (HCExec with condition true), in which
+/// Returns `Ok(true)` if a jump was taken (JmpF with condition true), in which
 /// case the caller should NOT advance the PC. Returns `Ok(false)` otherwise.
 /// Returns `Err(CqamError)` on runtime errors (unknown reduce function, type mismatch).
 pub fn execute_hybrid(
@@ -50,7 +50,7 @@ pub fn execute_hybrid(
             Ok(false)
         }
 
-        Instruction::HCExec { flag, target } => {
+        Instruction::JmpF { flag, target } => {
             let cond = ctx.psw.get_flag(*flag);
             ctx.psw.update_from_predicate(cond);
 

@@ -26,7 +26,7 @@ Design philosophy:
 - Type: `usize` (index into instruction memory)
 - The executor is the sole authority on PC advancement.
 - Non-jump instructions advance PC by 1 after execution.
-- Jump instructions (JMP, JIF, CALL, HCEXEC) set PC directly.
+- Jump instructions (JMP, JIF, CALL, JMPF) set PC directly.
 
 ### 2.2 Register Files
 
@@ -294,7 +294,7 @@ HFORK marks the beginning of a parallel execution region by setting the hybrid
 mode and fork flags in the PSW. HMERGE ends the region by setting the merge
 flag. Current implementation is flag-based (not thread-based).
 
-### 8.2 HCEXEC
+### 8.2 JMPF
 
 Conditional execution based on PSW flags. Reads the specified flag ID from the
 PSW and jumps to the target label if the flag is set.

@@ -193,8 +193,8 @@ pub fn format_instruction(instr: &Instruction) -> String {
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
         Instruction::HMerge => "HMERGE".to_string(),
-        Instruction::HCExec { flag, target } => {
-            format!("HCEXEC {}, {}", instruction::flag_name(*flag), target)
+        Instruction::JmpF { flag, target } => {
+            format!("JMPF {}, {}", instruction::flag_name(*flag), target)
         }
         Instruction::HReduce { src, dst, func } => {
             format!("HREDUCE H{}, R{}, {}", src, dst, instruction::reduce_fn_name(*func))
@@ -240,7 +240,7 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         // Hybrid class
         Instruction::HFork
         | Instruction::HMerge
-        | Instruction::HCExec { .. }
+        | Instruction::JmpF { .. }
         | Instruction::HReduce { .. } => Some("hybrid"),
 
         // Branch class

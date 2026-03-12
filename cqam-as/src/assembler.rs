@@ -495,9 +495,9 @@ mod tests {
     }
 
     #[test]
-    fn test_strip_hcexec_target_resolved() {
+    fn test_strip_jmpf_target_resolved() {
         let program = vec![
-            Instruction::HCExec { flag: 0, target: "branch".to_string() },
+            Instruction::JmpF { flag: 0, target: "branch".to_string() },
             Instruction::Halt,
             Instruction::Label("branch".to_string()),
             Instruction::HMerge,

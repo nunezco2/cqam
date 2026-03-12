@@ -409,7 +409,7 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         },
 
         // Hybrid conditional exec: 1 cycle
-        Instruction::HCExec { .. } => ResourceDelta {
+        Instruction::JmpF { .. } => ResourceDelta {
             time: 1,
             space: 0,
             ..Default::default()

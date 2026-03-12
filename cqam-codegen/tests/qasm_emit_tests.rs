@@ -952,11 +952,11 @@ fn test_emit_hmerge() {
 }
 
 #[test]
-fn test_emit_hcexec() {
-    let instr = Instruction::HCExec { flag: flag_id::QF, target: "LBL".into() };
+fn test_emit_jmpf() {
+    let instr = Instruction::JmpF { flag: flag_id::QF, target: "LBL".into() };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
-    assert!(lines[0].contains("@cqam.hcexec"));
+    assert!(lines[0].contains("@cqam.jmpf"));
     assert!(lines[0].contains("QF"));
     assert!(lines[0].contains("LBL"));
 }

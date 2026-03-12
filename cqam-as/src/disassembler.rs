@@ -266,8 +266,8 @@ fn format_instruction(instr: &Instruction) -> String {
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
         Instruction::HMerge => "HMERGE".to_string(),
-        Instruction::HCExec { flag, target } => {
-            format!("HCEXEC {}, {}", flag, target)
+        Instruction::JmpF { flag, target } => {
+            format!("JMPF {}, {}", flag, target)
         }
         Instruction::HReduce { src, dst, func } => {
             format!("HREDUCE H{}, R{}, {}", src, dst, func)

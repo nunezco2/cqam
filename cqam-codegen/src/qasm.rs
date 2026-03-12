@@ -558,9 +558,9 @@ impl QasmFormat for Instruction {
             Instruction::HMerge => {
                 vec!["// @cqam.hmerge: end parallel execution region, merge results".to_string()]
             }
-            Instruction::HCExec { flag, target } => {
+            Instruction::JmpF { flag, target } => {
                 vec![format!(
-                    "// @cqam.hcexec: if PSW.{} goto {}",
+                    "// @cqam.jmpf: if PSW.{} goto {}",
                     flag_name(*flag), target
                 )]
             }
@@ -944,7 +944,7 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
 
         // -- Hybrid operations --
         Instruction::HFork | Instruction::HMerge => {}
-        Instruction::HCExec { .. } => {}
+        Instruction::JmpF { .. } => {}
         Instruction::HReduce { src, dst, func } => {
             used.hybrid_regs.insert(*src);
             match *func {

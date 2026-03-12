@@ -110,6 +110,7 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 |----------|----------|-----------|----------|
 | `JMP` | target | PC = address_of(target) | J |
 | `JIF` | pred, target | if R[pred] != 0: PC = address_of(target) | JR |
+| `JMPF` | flag_id, target | if PSW.flag[flag_id]: PC = address_of(target) | JR |
 | `CALL` | target | push PC+1; PC = address_of(target) | J |
 | `RET` | — | pop call stack; PC = saved address (HALT if empty) | N |
 | `HALT` | — | Sets trap_halt in PSW; terminates execution | N |
@@ -138,7 +139,6 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 |----------|----------|-----------|----------|
 | `HFORK` | — | Spawn parallel execution threads; set PSW.forked | N |
 | `HMERGE` | — | Join all forked threads; set PSW.merged | N |
-| `HCEXEC` | flag_id, target | if PSW.flag[flag_id]: PC = address_of(target) | JR |
 | `HREDUCE` | src, dst, func_id | Reduce H[src] to classical value; write to R or F register | HR |
 
 ### 1.11 Interrupt handling
@@ -183,7 +183,7 @@ following formats.
 | **ZI** | opcode[8] | dst[4] _[4] re8[8] im8[8] | ZLDI |
 | **RA** | opcode[8] | reg[4] _[4] addr16[16] | ILDM, ISTR, FLDM, FSTR, ZLDM, ZSTR |
 | **J** | opcode[8] | addr24[24] | JMP, CALL |
-| **JR** | opcode[8] | pred[4] _[4] addr16[16] | JIF, HCEXEC, SETIV |
+| **JR** | opcode[8] | pred[4] _[4] addr16[16] | JIF, JMPF, SETIV |
 | **QP** | opcode[8] | dst[3] dist[3] _[18] | QPREP |
 | **Q** | opcode[8] | dst[3] src[3] kernel[5] ctx0[4] ctx1[4] _[5] | QKERNEL |
 | **QO_EXT** | opcode[8] | dst_h[3] src_q[3] mode[2] ctx0[4] ctx1[4] _[8] | QOBSERVE, QSAMPLE |
@@ -239,7 +239,7 @@ following formats.
 | `DIAGONAL_UNITARY` | 9 | diag(d_0,...,d_{N-1}) | Arbitrary diagonal unitary: d_k from CMEM as (re,im) f64 pairs |
 | `PERMUTATION` | 10 | P_sigma | Basis-state permutation: sigma(k) from CMEM as i64 values |
 
-### 4.3 PSW Flag IDs (`flag_id` module, used by `HCEXEC`)
+### 4.3 PSW Flag IDs (`flag_id` module, used by `JMPF`)
 
 | Name | Value | PSW field | Description |
 |------|-------|-----------|-------------|

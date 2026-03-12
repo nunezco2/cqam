@@ -17,7 +17,7 @@ bits [31:24] contain the 8-bit opcode.
 | ZI | `[opcode:8][dst:4][_:4][re:8][im:8]` | ZLDI |
 | RA | `[opcode:8][reg:4][_:4][addr16:16]` | Memory load/store |
 | J | `[opcode:8][addr24:24]` | JMP, CALL |
-| JR | `[opcode:8][pred:4][_:4][addr16:16]` | JIF, HCEXEC, SETIV |
+| JR | `[opcode:8][pred:4][_:4][addr16:16]` | JIF, JMPF, SETIV |
 | QP | `[opcode:8][dst_q:3][dist:3][_:18]` | QPREP |
 | Q | `[opcode:8][dst:3][src:3][kern:5][c0:4][c1:4][_:5]` | QKERNEL, QKERNELF, QKERNELZ |
 | QO_EXT | `[opcode:8][dst_h:3][src_q:3][mode:2][ctx0:4][ctx1:4][_:8]` | QOBSERVE, QSAMPLE |
@@ -98,7 +98,7 @@ bits [31:24] contain the 8-bit opcode.
 | 0x37 | FLDX     | RR     | F[dst] = f64::from_bits(CMEM[R[addr_reg]]) |
 | 0x38 | HFORK    | N      | Set hybrid fork flags |
 | 0x39 | HMERGE   | N      | Set hybrid merge flags |
-| 0x3A | HCEXEC   | JR     | if PSW.flag: PC = addr16 |
+| 0x3A | JMPF   | JR     | if PSW.flag: PC = addr16 |
 | 0x3B | HREDUCE  | HR     | dst = reduce(H[src], func) |
 | 0x3C | FSTRX    | RR     | CMEM[R[addr_reg]] = F[src].to_bits() |
 | 0x3D | ZLDX     | RR     | Z[dst] from CMEM[R[addr_reg]]..+1 |
@@ -154,7 +154,7 @@ Reserved: 0x2F (interrupt), 0x50 (reserved), 0x58-0xFF (future).
 | 9  | diagonal_unitary | Arbitrary diagonal unitary from CMEM complex pairs |
 | 10 | permutation      | Basis-state permutation from CMEM table |
 
-## 6. PSW Flag IDs (HCEXEC flag field)
+## 6. PSW Flag IDs (JMPF flag field)
 
 | ID | Name | Description |
 |----|------|-------------|

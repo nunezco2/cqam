@@ -738,25 +738,25 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
         // -- Hybrid -----------------------------------------------------------
         "HFORK" => Ok(Instruction::HFork),
         "HMERGE" => Ok(Instruction::HMerge),
-        "HCEXEC" => {
+        "JMPF" => {
             if ops.len() != 2 {
                 return Err(CqamError::ParseError {
                     line: line_num,
-                    message: format!("HCEXEC requires 2 operands, got {}", ops.len()),
+                    message: format!("JMPF requires 2 operands, got {}", ops.len()),
                 });
             }
             let flag = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("HCEXEC: invalid flag ID '{}'", ops[0]),
+                message: format!("JMPF: invalid flag ID '{}'", ops[0]),
             })?;
             let target = ops[1].to_string();
             if target.is_empty() {
                 return Err(CqamError::ParseError {
                     line: line_num,
-                    message: "HCEXEC: missing target label".to_string(),
+                    message: "JMPF: missing target label".to_string(),
                 });
             }
-            Ok(Instruction::HCExec { flag, target })
+            Ok(Instruction::JmpF { flag, target })
         }
         "HREDUCE" => {
             if ops.len() != 3 {

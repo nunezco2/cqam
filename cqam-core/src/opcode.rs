@@ -137,7 +137,7 @@ pub mod op {
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;
-    pub const HCEXEC: u8 = 0x3A;
+    pub const JMPF: u8 = 0x3A;
     pub const HREDUCE: u8 = 0x3B;
 }
 
@@ -185,7 +185,7 @@ const MAX_ADDR24: u32 = 0x00FF_FFFF;
 ///
 /// * `instr` - The instruction to encode.
 /// * `label_map` - Maps label names to resolved word addresses. Required for
-///   encoding JMP, JIF, CALL, HCEXEC, and LABEL instructions.
+///   encoding JMP, JIF, CALL, JMPF, and LABEL instructions.
 ///
 /// # Errors
 ///
@@ -309,9 +309,9 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             let addr = resolve_label_u16(target, label_map)?;
             encode_jr(op::JIF, *pred, addr)
         }
-        Instruction::HCExec { flag, target } => {
+        Instruction::JmpF { flag, target } => {
             let addr = resolve_label_u16(target, label_map)?;
-            encode_jr(op::HCEXEC, *flag, addr)
+            encode_jr(op::JMPF, *flag, addr)
         }
         Instruction::SetIV { trap_id, target } => {
             let addr = resolve_label_u16(target, label_map)?;
@@ -672,10 +672,10 @@ pub fn decode_with_debug(
                 target: format!("@{}", addr),
             })
         }
-        op::HCEXEC => {
+        op::JMPF => {
             let flag = extract_reg4(word, 20);
             let addr = extract_u16(word);
-            Ok(Instruction::HCExec {
+            Ok(Instruction::JmpF {
                 flag,
                 target: format!("@{}", addr),
             })
@@ -1041,7 +1041,7 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::ZSTRX => Some("ZSTRX"),
         op::HFORK => Some("HFORK"),
         op::HMERGE => Some("HMERGE"),
-        op::HCEXEC => Some("HCEXEC"),
+        op::JMPF => Some("JMPF"),
         op::HREDUCE => Some("HREDUCE"),
         op::RETI => Some("RETI"),
         op::SETIV => Some("SETIV"),

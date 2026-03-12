@@ -180,7 +180,7 @@ All hybrid operations emit CQAM-specific annotation comments:
 |------|------|
 | `HFORK` | `// @cqam.hfork: begin parallel execution region` |
 | `HMERGE` | `// @cqam.hmerge: end parallel execution region, merge results` |
-| `HCEXEC 3, target` | `// @cqam.hcexec: if PSW.PF goto target` |
+| `JMPF 3, target` | `// @cqam.jmpf: if PSW.PF goto target` |
 | `HREDUCE H0, R2, 11` | `// @cqam.hreduce: R2 = mode(H0)` |
 
 ### 4.16 Interrupt Operations

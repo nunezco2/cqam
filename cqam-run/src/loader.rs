@@ -90,7 +90,7 @@ fn patch_target(instr: &mut Instruction, map: &HashMap<String, String>) {
             }
         }
         Instruction::Jif { target, .. }
-        | Instruction::HCExec { target, .. } => {
+        | Instruction::JmpF { target, .. } => {
             if let Some(name) = map.get(target.as_str()) {
                 *target = name.clone();
             }

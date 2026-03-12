@@ -104,7 +104,7 @@ fn test_qasm_no_raw_cqam_opcodes() {
     let cqam_opcodes = [
         "ILDI", "IADD", "ISUB", "IMUL", "IDIV", "IMOD",
         "QPREP", "QKERNEL", "QOBSERVE", "HFORK", "HMERGE",
-        "HCEXEC", "HREDUCE", "RETI", "SETIV",
+        "JMPF", "HREDUCE", "RETI", "SETIV",
     ];
 
     for line in output.lines() {

@@ -101,7 +101,7 @@ fn ghz_verify() {
         "|rho[0][N-1]| should be 0.5, got {}",
         coherence
     );
-    // Entanglement flag: the HCEXEC/HFORK/HMERGE path may or may not set this
+    // Entanglement flag: the JMPF/HFORK/HMERGE path may or may not set this
     // depending on the kernel implementation, but the quantum state itself is correct.
     // Accept either 0 or 1 (the important thing is the probabilities above).
     println!("  entanglement flag = {} (informational)", entangled);
@@ -260,7 +260,7 @@ fn test_ef_flag_ghz() {
         "IF should be false after QOBSERVE"
     );
 
-    // The program itself verified entanglement mid-execution via HCEXEC on
+    // The program itself verified entanglement mid-execution via JMPF on
     // the EF flag and stored the result in CMEM[4].  That should be 1.
     let entangled = engine.ctx.cmem.load(4);
     assert_eq!(
