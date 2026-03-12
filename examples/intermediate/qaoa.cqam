@@ -69,20 +69,20 @@ res_fmt:
 # === QAOA Round 1 ===
 # Cost layer: phase_shift kernel (register-level)
     ZLDI Z0, 1, 0        # Z0 = (gamma_1, 0)
-    QKERNELZ Q0, Q0, 6, Z0, Z1
+    QKERNELZ PHSH, Q0, Q0, Z0, Z1
 
 # Mixer layer: rotation kernel (register-level)
-    QKERNELF Q0, Q0, 5, F3, F6
+    QKERNELF DROT, Q0, Q0, F3, F6
 
 # === QAOA Round 2 ===
     ZLDI Z0, 2, 0        # Z0 = (gamma_2, 0)
-    QKERNELZ Q0, Q0, 6, Z0, Z1
-    QKERNELF Q0, Q0, 5, F4, F6
+    QKERNELZ PHSH, Q0, Q0, Z0, Z1
+    QKERNELF DROT, Q0, Q0, F4, F6
 
 # === QAOA Round 3 ===
     ZLDI Z0, 3, 0        # Z0 = (gamma_3, 0)
-    QKERNELZ Q0, Q0, 6, Z0, Z1
-    QKERNELF Q0, Q0, 5, F5, F6
+    QKERNELZ PHSH, Q0, Q0, Z0, Z1
+    QKERNELF DROT, Q0, Q0, F5, F6
 
 # === Sample before destroying ===
     QSAMPLE H0, Q0, 0, R1, R1    # H0 = full distribution (non-destructive)

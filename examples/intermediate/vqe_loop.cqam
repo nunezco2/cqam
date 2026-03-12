@@ -55,8 +55,8 @@ LABEL: vqe_loop
 
 # --- Step 1: Prepare trial state ---
     QPREP Q0, 0          # Start with uniform superposition
-    QKERNEL Q0, Q0, 1, R3, R3   # Entangle (create correlations)
-    QKERNELF Q0, Q0, 5, F0, F1  # Apply rotation with angle theta=F0
+    QKERNEL ENTG, Q0, Q0, R3, R3   # Entangle (create correlations)
+    QKERNELF DROT, Q0, Q0, F0, F1  # Apply rotation with angle theta=F0
 
 # --- Step 2: Measure energy (mean of distribution) ---
     QOBSERVE H0, Q0      # H0 = full distribution
@@ -98,8 +98,8 @@ LABEL: vqe_done
 
 # --- Final measurement at best theta ---
     QPREP Q1, 0
-    QKERNEL Q1, Q1, 1, R3, R3
-    QKERNELF Q1, Q1, 5, F0, F1
+    QKERNEL ENTG, Q1, Q1, R3, R3
+    QKERNELF DROT, Q1, Q1, F0, F1
     QOBSERVE H1, Q1
     HREDUCE H1, F7, 10   # F7 = final energy estimate
     HREDUCE H1, R7, 11   # R7 = most probable state at optimum

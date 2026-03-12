@@ -67,13 +67,13 @@ LABEL: count_outer
 # --- Apply 2^k Grover iterations ---
     ILDI R7, 0           # R7 = inner iteration counter
 LABEL: grover_inner_count
-    QKERNEL Q0, Q0, 4, R0, R1   # One Grover iteration (kernel 4)
+    QKERNEL GROV, Q0, Q0, R0, R1   # One Grover iteration (kernel 4)
     IADD R7, R7, R3              # R7++
     ILT R8, R7, R5              # R8 = (R7 < 2^k)
     JIF R8, grover_inner_count
 
 # --- Apply inverse QFT to extract phase ---
-    QKERNEL Q1, Q0, 7, R1, R1   # Q1 = IQFT(Grover^{2^k} |+>) (kernel 7)
+    QKERNEL QIFT, Q1, Q0, R1, R1   # Q1 = IQFT(Grover^{2^k} |+>) (kernel 7)
 
 # --- Measure the IQFT output ---
     QOBSERVE H0, Q1             # H0 = full distribution (destructive)

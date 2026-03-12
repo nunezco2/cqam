@@ -185,7 +185,7 @@ LABEL: walk_step
     QHADM Q0, Q0, R4
 
 # Step 2: Shift — apply permutation (register-level)
-    QKERNEL Q0, Q0, 10, R8, R9
+    QKERNEL PERM, Q0, Q0, R8, R9
 
 # Track statistics
     QSAMPLE H1, Q0, 0, R3, R3

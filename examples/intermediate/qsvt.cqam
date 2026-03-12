@@ -108,7 +108,7 @@ LABEL: qsvt_loop
 
 # --- Block-encoding operator W (Grover iterate) ---
 # G = (2|s><s| - I) * O_target
-    QKERNEL Q0, Q0, 4, R0, R1  # Grover iteration (kernel 4)
+    QKERNEL GROV, Q0, Q0, R0, R1  # Grover iteration (kernel 4)
 
 # --- Projector-controlled phase: CNOT(signal, control) ---
 # This implements the interleaved projector structure of QSVT

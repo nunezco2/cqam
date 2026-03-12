@@ -111,11 +111,11 @@ res_fmt:
     QPREP Q4, 0          # Start uniform
     FLDI F11, 1          # theta = 1
     FLDI F12, 0          # unused
-    QKERNELF Q4, Q4, 5, F11, F12  # Rotate by theta=1
+    QKERNELF DROT, Q4, Q4, F11, F12  # Rotate by theta=1
 
     QPREP Q5, 0          # Start uniform
     FLDI F13, 2          # theta = 2 (different rotation)
-    QKERNELF Q5, Q5, 5, F13, F12  # Rotate by theta=2
+    QKERNELF DROT, Q5, Q5, F13, F12  # Rotate by theta=2
 
 # Compare distributions
     QSAMPLE H0, Q4, 0, R0, R0

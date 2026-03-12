@@ -1199,7 +1199,7 @@ QPREP Q0, 0
 FLDI F0, 0
 FLDI F1, 0
 # Apply QKERNELF with ROTATE kernel (kernel_id=5)
-QKERNELF Q1, Q0, 5, F0, F1
+QKERNELF DROT, Q1, Q0, F0, F1
 # Observe Q1 -> H0 (full distribution)
 QOBSERVE H0, Q1
 # Reduce to mean
@@ -1244,7 +1244,7 @@ QPREP Q0, 0
 ZLDI Z0, 0, 0
 ZLDI Z1, 0, 0
 # Apply QKERNELZ with PHASE_SHIFT kernel (kernel_id=6)
-QKERNELZ Q1, Q0, 6, Z0, Z1
+QKERNELZ PHSH, Q1, Q0, Z0, Z1
 # Non-destructive sample Q1 -> H0
 QSAMPLE H0, Q1
 # Reduce to mean

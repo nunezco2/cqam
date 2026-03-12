@@ -77,7 +77,7 @@ LABEL: dh_loop
 # Search for states below current threshold R0
     ILDI R8, 0           # R8 = Grover inner counter
 LABEL: dh_grover_inner
-    QKERNEL Q0, Q0, 4, R0, R1   # Grover iteration targeting R0
+    QKERNEL GROV, Q0, Q0, R0, R1   # Grover iteration targeting R0
     IADD R8, R8, R3              # R8++
     ILT R9, R8, R5              # R9 = (R8 < iterations_per_round)
     JIF R9, dh_grover_inner
@@ -134,7 +134,7 @@ LABEL: dh_no_update
 # Apply extra Grover iterations at the found minimum target
     ILDI R14, 8          # R14 = verification iterations
 LABEL: dh_verify_loop
-    QKERNEL Q1, Q1, 4, R6, R1
+    QKERNEL GROV, Q1, Q1, R6, R1
     ISUB R14, R14, R3
     JIF R14, dh_verify_loop
 

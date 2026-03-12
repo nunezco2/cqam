@@ -65,7 +65,7 @@ res_msg:
     # Apply diagonal oracle
     ILDI R0, @diag
     ILDI R1, @diag.len
-    QKERNEL Q0, Q0, 9, R0, R1   # Apply diagonal unitary
+    QKERNEL DIAG, Q0, Q0, R0, R1   # Apply diagonal unitary
 
     # Sample P(|5>) after oracle (should still be 1/16 = 0.0625)
     # Phase flip does NOT change diagonal probabilities
@@ -85,7 +85,7 @@ res_msg:
 # ===========================================================================
     ILDI R0, 0
     ILDI R1, 0
-    QKERNEL Q0, Q0, 3, R0, R1   # Diffuse
+    QKERNEL DIFF, Q0, Q0, R0, R1   # Diffuse
 
     # Sample P(|5>) after one Grover iteration
     ILDI R9, 5
@@ -105,12 +105,12 @@ res_msg:
     # Re-apply oracle
     ILDI R0, @diag
     ILDI R1, @diag.len
-    QKERNEL Q0, Q0, 9, R0, R1
+    QKERNEL DIAG, Q0, Q0, R0, R1
 
     # Diffusion
     ILDI R0, 0
     ILDI R1, 0
-    QKERNEL Q0, Q0, 3, R0, R1
+    QKERNEL DIFF, Q0, Q0, R0, R1
 
     # Sample P(|5>) after two Grover iterations
     ILDI R9, 5

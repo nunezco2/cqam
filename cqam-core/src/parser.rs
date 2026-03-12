@@ -332,17 +332,14 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("QKERNEL requires 5 operands, got {}", ops.len()),
                 });
             }
-            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+            let kernel = parse_kernel_id(ops[0], "QKERNEL", line_num)?;
+            let dst = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("QKERNEL: invalid dst register '{}'", ops[0]),
+                message: format!("QKERNEL: invalid dst register '{}'", ops[1]),
             })?;
-            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+            let src = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("QKERNEL: invalid src register '{}'", ops[1]),
-            })?;
-            let kernel = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
-                line: line_num,
-                message: format!("QKERNEL: invalid kernel ID '{}'", ops[2]),
+                message: format!("QKERNEL: invalid src register '{}'", ops[2]),
             })?;
             let ctx0 = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
@@ -361,17 +358,14 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("QKERNELF requires 5 operands, got {}", ops.len()),
                 });
             }
-            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+            let kernel = parse_kernel_id(ops[0], "QKERNELF", line_num)?;
+            let dst = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("QKERNELF: invalid dst register '{}'", ops[0]),
+                message: format!("QKERNELF: invalid dst register '{}'", ops[1]),
             })?;
-            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+            let src = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("QKERNELF: invalid src register '{}'", ops[1]),
-            })?;
-            let kernel = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
-                line: line_num,
-                message: format!("QKERNELF: invalid kernel ID '{}'", ops[2]),
+                message: format!("QKERNELF: invalid src register '{}'", ops[2]),
             })?;
             let fctx0 = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
@@ -390,17 +384,14 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("QKERNELZ requires 5 operands, got {}", ops.len()),
                 });
             }
-            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+            let kernel = parse_kernel_id(ops[0], "QKERNELZ", line_num)?;
+            let dst = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("QKERNELZ: invalid dst register '{}'", ops[0]),
+                message: format!("QKERNELZ: invalid dst register '{}'", ops[1]),
             })?;
-            let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+            let src = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
-                message: format!("QKERNELZ: invalid src register '{}'", ops[1]),
-            })?;
-            let kernel = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
-                line: line_num,
-                message: format!("QKERNELZ: invalid kernel ID '{}'", ops[2]),
+                message: format!("QKERNELZ: invalid src register '{}'", ops[2]),
             })?;
             let zctx0 = parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
@@ -1287,6 +1278,23 @@ pub fn parse_u8(token: &str) -> Option<u8> {
         u8::from_str_radix(hex, 16).ok()
     } else {
         token.parse().ok()
+    }
+}
+
+/// Parse a kernel mnemonic or numeric ID.
+fn parse_kernel_id(token: &str, instr: &str, line_num: usize) -> Result<u8, CqamError> {
+    if let Some(id) = crate::instruction::kernel_name_to_id(token) {
+        Ok(id)
+    } else if let Some(id) = parse_u8(token) {
+        Ok(id)
+    } else {
+        Err(CqamError::ParseError {
+            line: line_num,
+            message: format!(
+                "{}: unknown kernel '{}' (expected UNIT, ENTG, QFFT, DIFF, GROV, DROT, PHSH, QIFT, CTLU, DIAG, PERM, or numeric ID)",
+                instr, token
+            ),
+        })
     }
 }
 

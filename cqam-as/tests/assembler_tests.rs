@@ -321,7 +321,7 @@ HALT
 fn test_assemble_source_all_quantum() {
     let source = "\
 QPREP Q0, 0
-QKERNEL Q1, Q0, 2, R0, R1
+QKERNEL QFFT, Q1, Q0, R0, R1
 QOBSERVE H0, Q1
 QLOAD Q2, 10
 QSTORE Q3, 20

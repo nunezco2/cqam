@@ -88,7 +88,7 @@ kern_fmt:
     QPREP Q0, 0
     ILDI R0, @u_x
     ILDI R1, @u_x.len
-    QKERNEL Q0, Q0, 9, R0, R1   # Q0 = |phi(x)>
+    QKERNEL DIAG, Q0, Q0, R0, R1   # Q0 = |phi(x)>
 
     # P(|0>) should be 1/8 since diagonal unitary preserves amplitudes
     ILDI R0, 0
@@ -106,7 +106,7 @@ kern_fmt:
     QPREP Q1, 0
     ILDI R0, @u_xp
     ILDI R1, @u_xp.len
-    QKERNEL Q1, Q1, 9, R0, R1   # Q1 = |phi(x')>
+    QKERNEL DIAG, Q1, Q1, R0, R1   # Q1 = |phi(x')>
 
     ILDI R0, 0
     QSAMPLE H1, Q1, 1, R0, R0
@@ -131,11 +131,11 @@ kern_fmt:
     QPREP Q2, 0          # Q2 = |+> (uniform)
     ILDI R0, @u_diff
     ILDI R1, @u_diff.len
-    QKERNEL Q2, Q2, 9, R0, R1   # Q2 = U_diff|+>
+    QKERNEL DIAG, Q2, Q2, R0, R1   # Q2 = U_diff|+>
 
     # Apply IQFT (kernel 7) to convert back to computational basis
     ILDI R0, 0
-    QKERNEL Q2, Q2, 7, R0, R0   # Q2 = IQFT(U_diff|+>)
+    QKERNEL QIFT, Q2, Q2, R0, R0   # Q2 = IQFT(U_diff|+>)
 
     ILDI R0, 0
     QSAMPLE H2, Q2, 1, R0, R0

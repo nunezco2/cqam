@@ -44,10 +44,10 @@ res_fmt:
 
 # --- Stage 1: Prepare zero state and entangle ---
     QPREP Q0, 1          # Q0 = |0...0> (zero state)
-    QKERNEL Q0, Q0, 1, R0, R2   # Apply entangle kernel
+    QKERNEL ENTG, Q0, Q0, R0, R2   # Apply entangle kernel
 
 # --- Stage 2: Apply QFT ---
-    QKERNEL Q1, Q0, 2, R0, R2   # Q1 = QFT(Q0)
+    QKERNEL QFFT, Q1, Q0, R0, R2   # Q1 = QFT(Q0)
 
 # --- Stage 3: Non-destructive sampling of QFT output ---
     QSAMPLE H0, Q1, 0, R0, R0   # H0 = full distribution (DIST mode)
@@ -60,10 +60,10 @@ res_fmt:
 # --- Stage 4: Apply phase shift and re-transform ---
     ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
     ZLDI Z1, 0, 0        # Z1 = (0, 0) unused
-    QKERNELZ Q2, Q1, 6, Z0, Z1  # Q2 = phase_shift(QFT(Q0))
+    QKERNELZ PHSH, Q2, Q1, Z0, Z1  # Q2 = phase_shift(QFT(Q0))
 
 # Second QFT (inverse-like behavior with phase)
-    QKERNEL Q3, Q2, 2, R0, R2   # Q3 = QFT(phase_shift(QFT(Q0)))
+    QKERNEL QFFT, Q3, Q2, R0, R2   # Q3 = QFT(phase_shift(QFT(Q0)))
 
 # --- Stage 5: Extract density matrix element (AMP mode) ---
     ILDI R3, 0            # row = 0

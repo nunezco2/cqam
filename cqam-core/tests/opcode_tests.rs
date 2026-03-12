@@ -738,7 +738,7 @@ fn exact_encoding_jmp_256() {
 
 #[test]
 fn exact_encoding_qkernel() {
-    // QKERNEL Q1, Q0, fourier(2), R3, R4 -> 0x31204680
+    // QKERNEL QFFT, Q1, Q0, R3, R4 -> 0x31204680
     let labels = HashMap::new();
     let instr = Instruction::QKernel {
         dst: 1,

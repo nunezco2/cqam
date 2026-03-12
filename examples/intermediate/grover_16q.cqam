@@ -87,7 +87,7 @@ LABEL: grov_pow2_done
 LABEL: grover_loop
 
 # Apply one Grover iteration (oracle + diffusion)
-    QKERNEL Q0, Q0, 4, R0, R1   # kernel=4 (grover_iter), target=R0
+    QKERNEL GROV, Q0, Q0, R0, R1   # kernel=4 (grover_iter), target=R0
 
 # Increment counter, decrement remaining
     IADD R4, R4, R3      # R4 += 1

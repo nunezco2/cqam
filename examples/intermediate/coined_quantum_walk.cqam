@@ -116,7 +116,7 @@ LABEL: walk_step
     QHADM Q0, Q0, R4     # H on qubit 0 (coin flip)
 
 # Step 2: Shift operation — apply permutation from CMEM
-    QKERNEL Q0, Q0, 10, R5, R3  # Shift conditioned on coin
+    QKERNEL PERM, Q0, Q0, R5, R3  # Shift conditioned on coin
 
 # Track distribution at each step
     QSAMPLE H1, Q0, 0, R3, R3

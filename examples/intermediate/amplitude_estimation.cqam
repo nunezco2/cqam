@@ -67,7 +67,7 @@ LABEL: shift_done
 
 # --- Apply 2^k Grover iterations ---
 LABEL: grover_inner
-    QKERNEL Q0, Q0, 4, R0, R1   # One Grover iteration targeting R0
+    QKERNEL GROV, Q0, Q0, R0, R1   # One Grover iteration targeting R0
     ISUB R5, R5, R3              # iterations--
     JIF R5, grover_inner
 
@@ -90,7 +90,7 @@ LABEL: grover_inner
     FSTR F1, 110         # Store at fixed address
 
 # --- Apply QFT to extract phase information ---
-    QKERNEL Q1, Q0, 2, R1, R1   # QFT of Grover-amplified state
+    QKERNEL QFFT, Q1, Q0, R1, R1   # QFT of Grover-amplified state
 
 # Extract density matrix element for phase analysis
     ILDI R9, 0
@@ -114,7 +114,7 @@ LABEL: grover_inner
 
 # Reload last state from QMEM
     QLOAD Q2, 0
-    QKERNEL Q3, Q2, 2, R1, R1   # Final QFT
+    QKERNEL QFFT, Q3, Q2, R1, R1   # Final QFT
     QOBSERVE H3, Q3              # Full distribution
     HREDUCE H3, R11, 12          # R11 = argmax (phase index)
     HREDUCE H3, F4, 10           # F4 = mean phase index

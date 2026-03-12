@@ -151,10 +151,10 @@ done_msg:
     ILDI R6, 4                     # mask=4 -> flip qubit 2 (LSB) -> state |001>=1
     QFLIP Q0, Q0, R6
 
-    # Apply C-PERM: QKERNEL Q0, Q0, 8, R_ctrl, R_param_base
+    # Apply C-PERM: QKERNEL CTLU, Q0, Q0, R_ctrl, R_param_base
     ILDI R8, 0                     # R8 = control qubit index = 0
     ILDI R9, 200                   # R9 = CMEM base of param block
-    QKERNEL Q0, Q0, 8, R8, R9
+    QKERNEL CTLU, Q0, Q0, R8, R9
 
     # Sample P(1) -- expect 1.0
     ILDI R9, 1
@@ -195,7 +195,7 @@ LABEL: ta1_end
 
     ILDI R8, 0                     # control qubit = 0
     ILDI R9, 200                   # param block at CMEM[200]
-    QKERNEL Q0, Q0, 8, R8, R9
+    QKERNEL CTLU, Q0, Q0, R8, R9
 
     # Sample P(5) and P(6)
     ILDI R9, 5
@@ -246,7 +246,7 @@ LABEL: ta2_end
 
     ILDI R8, 0                     # control qubit = 0
     ILDI R9, 210                   # param block at CMEM[210]
-    QKERNEL Q0, Q0, 8, R8, R9
+    QKERNEL CTLU, Q0, Q0, R8, R9
 
     # Sample P(1) -- expect 1.0
     ILDI R9, 1
@@ -286,7 +286,7 @@ LABEL: tb1_end
 
     ILDI R8, 0                     # control qubit = 0
     ILDI R9, 210                   # param block at CMEM[210]
-    QKERNEL Q0, Q0, 8, R8, R9
+    QKERNEL CTLU, Q0, Q0, R8, R9
 
     # Sample P(5) -- expect 1.0 (phase flip doesn't change probability)
     ILDI R9, 5

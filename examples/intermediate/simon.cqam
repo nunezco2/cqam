@@ -85,7 +85,7 @@ LABEL: simon_round
     CVTIF F0, R0         # F0 = s as float
     CVTFZ Z0, F0         # Z0 = (s, 0) as complex
     ZLDI Z1, 0, 0        # Z1 = unused
-    QKERNELZ Q0, Q0, 6, Z0, Z1  # Phase shift encodes period (register-level)
+    QKERNELZ PHSH, Q0, Q0, Z0, Z1  # Phase shift encodes period (register-level)
 
 # Step 4: Superpose query register again (partial mask).
     QHADM Q0, Q0, R6

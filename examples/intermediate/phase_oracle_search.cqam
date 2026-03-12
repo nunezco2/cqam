@@ -66,12 +66,12 @@ res_fmt:
     # Apply multi-target oracle via DIAGONAL_UNITARY
     ILDI R0, @oracle
     ILDI R1, @oracle.len
-    QKERNEL Q0, Q0, 9, R0, R1
+    QKERNEL DIAG, Q0, Q0, R0, R1
 
     # Apply Grover diffusion (kernel 3)
     ILDI R0, 0
     ILDI R1, 0
-    QKERNEL Q0, Q0, 3, R0, R1
+    QKERNEL DIFF, Q0, Q0, R0, R1
 
 # ===========================================================================
 # Measure P(solutions) = P(3) + P(5) + P(6) after 1 iteration

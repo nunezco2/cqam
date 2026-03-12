@@ -83,7 +83,7 @@ LABEL: iter_loop
 
 # --- Apply C-U^{2^k} ---
     ISTR R2, 101         # CMEM[101] = power = k
-    QKERNEL Q2, Q2, 8, R0, R1   # Controlled-U, ctrl=qubit 0, target=qubit 1
+    QKERNEL CTLU, Q2, Q2, R0, R1   # Controlled-U, ctrl=qubit 0, target=qubit 1
 
 # --- Hadamard the ancilla ---
     QHADM Q2, Q2, R3     # Hadamard on qubit 0 (mask = 1)
@@ -107,7 +107,7 @@ LABEL: iter_loop
 
 # --- One more iteration for k=0 ---
     ISTR R2, 101
-    QKERNEL Q2, Q2, 8, R0, R1
+    QKERNEL CTLU, Q2, Q2, R0, R1
     QHADM Q2, Q2, R3
     QMEAS R8, Q2, R0
     IADD R4, R4, R4

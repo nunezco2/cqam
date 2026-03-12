@@ -174,13 +174,13 @@ fn format_instruction(instr: &Instruction) -> String {
         // Quantum
         Instruction::QPrep { dst, dist } => format!("QPREP Q{}, {}", dst, dist),
         Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
-            format!("QKERNEL Q{}, Q{}, {}, R{}, R{}", dst, src, kernel, ctx0, ctx1)
+            format!("QKERNEL {}, Q{}, Q{}, R{}, R{}", cqam_core::instruction::kernel_mnemonic(*kernel), dst, src, ctx0, ctx1)
         }
         Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
-            format!("QKERNELF Q{}, Q{}, {}, F{}, F{}", dst, src, kernel, fctx0, fctx1)
+            format!("QKERNELF {}, Q{}, Q{}, F{}, F{}", cqam_core::instruction::kernel_mnemonic(*kernel), dst, src, fctx0, fctx1)
         }
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
-            format!("QKERNELZ Q{}, Q{}, {}, Z{}, Z{}", dst, src, kernel, zctx0, zctx1)
+            format!("QKERNELZ {}, Q{}, Q{}, Z{}, Z{}", cqam_core::instruction::kernel_mnemonic(*kernel), dst, src, zctx0, zctx1)
         }
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
             if *mode == 0 && *ctx0 == 0 && *ctx1 == 0 {
@@ -311,7 +311,7 @@ mod tests {
         let instr = Instruction::QKernel {
             dst: 1, src: 0, kernel: 2, ctx0: 3, ctx1: 4,
         };
-        assert_eq!(format_instruction(&instr), "QKERNEL Q1, Q0, 2, R3, R4");
+        assert_eq!(format_instruction(&instr), "QKERNEL QFFT, Q1, Q0, R3, R4");
     }
 
     #[test]

@@ -97,7 +97,7 @@ LABEL: qc_pow2_done
 
 LABEL: qc_loop
     ISTR R2, 101         # CMEM[101] = power = k
-    QKERNEL Q2, Q2, 8, R2, R1   # C-Grover^{2^k}
+    QKERNEL CTLU, Q2, Q2, R2, R1   # C-Grover^{2^k}
 
     IADD R2, R2, R3
     ISUB R4, R4, R3
@@ -108,7 +108,7 @@ LABEL: qc_loop
 
 # --- Inverse QFT ---
     ILDI R6, 0
-    QKERNEL Q3, Q3, 7, R6, R6
+    QKERNEL QIFT, Q3, Q3, R6, R6
 
 # --- Measure ---
     QOBSERVE H0, Q3

@@ -96,7 +96,7 @@ res_fmt:
 # ===========================================================================
     ILDI R0, @hamiltonian
     ILDI R1, @hamiltonian.len
-    QKERNEL Q0, Q0, 9, R0, R1   # Q0 = U(t)|+>
+    QKERNEL DIAG, Q0, Q0, R0, R1   # Q0 = U(t)|+>
 
 # ===========================================================================
 # Measure P(ground state) AFTER time evolution
@@ -128,7 +128,7 @@ res_fmt:
 # Peaks in the resulting distribution correspond to the energy structure.
 # ===========================================================================
     ILDI R0, 0
-    QKERNEL Q0, Q0, 7, R0, R0   # IQFT (kernel 7)
+    QKERNEL QIFT, Q0, Q0, R0, R0   # IQFT (kernel 7)
 
     # Measure peaks in the frequency domain
     ILDI R0, 0

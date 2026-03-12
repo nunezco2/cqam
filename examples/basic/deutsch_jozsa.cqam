@@ -59,7 +59,7 @@ res_fmt:
     NOP
 
 # Step 3: QFT to decode (register-level)
-    QKERNEL Q0, Q0, 2, R0, R0   # Fourier transform decodes phase info
+    QKERNEL QFFT, Q0, Q0, R0, R0   # Fourier transform decodes phase info
 
 # Step 4: Check P(|0>)
     QSAMPLE H0, Q0, 1, R1, R1   # H0 = P(|0>) — should be ~1.0 for constant
@@ -82,7 +82,7 @@ res_fmt:
     QPHASE Q1, Q1, R2   # Z on qubit 0 -> balanced oracle
 
 # Step 3: QFT to decode (register-level)
-    QKERNEL Q1, Q1, 2, R0, R0   # Fourier transform
+    QKERNEL QFFT, Q1, Q1, R0, R0   # Fourier transform
 
 # Step 4: Check P(|0>)
     QSAMPLE H2, Q1, 1, R1, R1   # H2 = P(|0>) — should be ~0.0 for balanced

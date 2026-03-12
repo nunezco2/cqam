@@ -602,7 +602,7 @@ pub fn dist_name(id: u8) -> &'static str {
     }
 }
 
-/// Helper: name string for a kernel ID (for display/debug).
+/// Helper: long name string for a kernel ID (for display/debug).
 pub fn kernel_name(id: u8) -> &'static str {
     match id {
         kernel_id::INIT => "init",
@@ -617,6 +617,45 @@ pub fn kernel_name(id: u8) -> &'static str {
         kernel_id::DIAGONAL_UNITARY => "diagonal_unitary",
         kernel_id::PERMUTATION => "permutation",
         _ => "unknown",
+    }
+}
+
+/// Four-letter assembly mnemonic for a kernel ID.
+pub fn kernel_mnemonic(id: u8) -> &'static str {
+    match id {
+        kernel_id::INIT => "UNIT",
+        kernel_id::ENTANGLE => "ENTG",
+        kernel_id::FOURIER => "QFFT",
+        kernel_id::DIFFUSE => "DIFF",
+        kernel_id::GROVER_ITER => "GROV",
+        kernel_id::ROTATE => "DROT",
+        kernel_id::PHASE_SHIFT => "PHSH",
+        kernel_id::FOURIER_INV => "QIFT",
+        kernel_id::CONTROLLED_U => "CTLU",
+        kernel_id::DIAGONAL_UNITARY => "DIAG",
+        kernel_id::PERMUTATION => "PERM",
+        _ => "????",
+    }
+}
+
+/// Parse a kernel mnemonic to its numeric ID.
+///
+/// Accepts four-letter mnemonics (UNIT, ENTG, QFFT, DIFF, GROV, DROT,
+/// PHSH, QIFT, CTLU, DIAG, PERM). Returns `None` for unrecognized names.
+pub fn kernel_name_to_id(name: &str) -> Option<u8> {
+    match name {
+        "UNIT" => Some(kernel_id::INIT),
+        "ENTG" => Some(kernel_id::ENTANGLE),
+        "QFFT" => Some(kernel_id::FOURIER),
+        "DIFF" => Some(kernel_id::DIFFUSE),
+        "GROV" => Some(kernel_id::GROVER_ITER),
+        "DROT" => Some(kernel_id::ROTATE),
+        "PHSH" => Some(kernel_id::PHASE_SHIFT),
+        "QIFT" => Some(kernel_id::FOURIER_INV),
+        "CTLU" => Some(kernel_id::CONTROLLED_U),
+        "DIAG" => Some(kernel_id::DIAGONAL_UNITARY),
+        "PERM" => Some(kernel_id::PERMUTATION),
+        _ => None,
     }
 }
 

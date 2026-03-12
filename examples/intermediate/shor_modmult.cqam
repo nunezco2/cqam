@@ -201,7 +201,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- U^1: |1> -> |2> ---
-    QKERNEL Q0, Q0, 10, R8, R9
+    QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
     HREDUCE H0, F1, 8
@@ -222,7 +222,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- U^2: |2> -> |4> ---
-    QKERNEL Q0, Q0, 10, R8, R9
+    QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
     HREDUCE H0, F1, 8
@@ -243,7 +243,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- U^3: |4> -> |8> ---
-    QKERNEL Q0, Q0, 10, R8, R9
+    QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
     HREDUCE H0, F1, 8
@@ -264,7 +264,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- U^4: |8> -> |1> (period!) ---
-    QKERNEL Q0, Q0, 10, R8, R9
+    QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
     QSAMPLE H0, Q0, 1, R10, R10
     HREDUCE H0, F1, 8
@@ -338,7 +338,7 @@ LABEL: t1_end
     ECALL PRINT_STR
 
 # --- (U^2)^1: |1> -> |4> ---
-    QKERNEL Q1, Q1, 10, R7, R9
+    QKERNEL PERM, Q1, Q1, R7, R9
     ILDI R10, 1
     QSAMPLE H0, Q1, 1, R10, R10
     HREDUCE H0, F1, 8
@@ -353,7 +353,7 @@ LABEL: t1_end
     ECALL PRINT_STR
 
 # --- (U^2)^2: |4> -> |1> (identity!) ---
-    QKERNEL Q1, Q1, 10, R7, R9
+    QKERNEL PERM, Q1, Q1, R7, R9
     ILDI R10, 1
     QSAMPLE H0, Q1, 1, R10, R10
     HREDUCE H0, F1, 8

@@ -75,7 +75,7 @@ LABEL: walk_loop
     QHADM Q0, Q0, R4
 
 # Step 2: Shift operation — diffusion mixes position states (register-level)
-    QKERNEL Q0, Q0, 3, R3, R3   # Diffuse kernel acts as shift analog
+    QKERNEL DIFF, Q0, Q0, R3, R3   # Diffuse kernel acts as shift analog
 
 # Track variance at each step (non-destructive)
     QSAMPLE H1, Q0, 0, R3, R3

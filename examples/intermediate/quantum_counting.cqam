@@ -63,7 +63,7 @@ LABEL: count_loop
 # --- Apply R5 Grover iterations ---
     ILDI R7, 0           # R7 = inner iteration counter
 LABEL: grover_count_inner
-    QKERNEL Q0, Q0, 4, R0, R1   # Grover iteration
+    QKERNEL GROV, Q0, Q0, R0, R1   # Grover iteration
     IADD R7, R7, R3
     ILT R8, R7, R5      # R8 = (R7 < R5)
     JIF R8, grover_count_inner
@@ -72,7 +72,7 @@ LABEL: grover_count_inner
     QSTORE Q0, 0
 
 # --- Apply QFT to extract phase ---
-    QKERNEL Q1, Q0, 2, R1, R1   # Q1 = QFT(Grover^k state)
+    QKERNEL QFFT, Q1, Q0, R1, R1   # Q1 = QFT(Grover^k state)
 
 # --- Measure the QFT output ---
     QOBSERVE H0, Q1      # Full distribution

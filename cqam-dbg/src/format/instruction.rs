@@ -112,20 +112,20 @@ pub fn format_instruction(instr: &Instruction) -> String {
         }
         Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
             format!(
-                "QKERNEL Q{}, Q{}, {}, R{}, R{}",
-                dst, src, instruction::kernel_name(*kernel), ctx0, ctx1
+                "QKERNEL {}, Q{}, Q{}, R{}, R{}",
+                instruction::kernel_mnemonic(*kernel), dst, src, ctx0, ctx1
             )
         }
         Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
             format!(
-                "QKERNELF Q{}, Q{}, {}, F{}, F{}",
-                dst, src, instruction::kernel_name(*kernel), fctx0, fctx1
+                "QKERNELF {}, Q{}, Q{}, F{}, F{}",
+                instruction::kernel_mnemonic(*kernel), dst, src, fctx0, fctx1
             )
         }
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
             format!(
-                "QKERNELZ Q{}, Q{}, {}, Z{}, Z{}",
-                dst, src, instruction::kernel_name(*kernel), zctx0, zctx1
+                "QKERNELZ {}, Q{}, Q{}, Z{}, Z{}",
+                instruction::kernel_mnemonic(*kernel), dst, src, zctx0, zctx1
             )
         }
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {

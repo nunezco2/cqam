@@ -92,7 +92,7 @@ LABEL: hhl_pow2_done
 
 LABEL: hhl_qpe_fwd
     ISTR R2, 101          # power = k
-    QKERNEL Q2, Q2, 8, R2, R1   # C-U^{2^k}
+    QKERNEL CTLU, Q2, Q2, R2, R1   # C-U^{2^k}
     IADD R2, R2, R3
     ISUB R4, R4, R3
     JIF R4, hhl_qpe_fwd
@@ -102,12 +102,12 @@ LABEL: hhl_qpe_fwd
 
 # --- Inverse QFT on counting register ---
     ILDI R6, 0
-    QKERNEL Q3, Q3, 7, R6, R6
+    QKERNEL QIFT, Q3, Q3, R6, R6
 
 # === Phase 2: Apply rotation (encode eigenvalue info) ===
     FLDI F5, 1
     FLDI F6, 0
-    QKERNELF Q3, Q3, 5, F5, F6   # ROTATE(theta=1.0) on counting register
+    QKERNELF DROT, Q3, Q3, F5, F6   # ROTATE(theta=1.0) on counting register
 
 # --- Measure ---
     QOBSERVE H0, Q3

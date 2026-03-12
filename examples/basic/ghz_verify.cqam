@@ -92,7 +92,7 @@ LABEL: ghz_pow2_done
 # Method 2: Build GHZ via entangle kernel
 # ===============================================
     QPREP Q1, 1          # Q1 = |0...0>
-    QKERNEL Q1, Q1, 1, R2, R2   # Entangle kernel
+    QKERNEL ENTG, Q1, Q1, R2, R2   # Entangle kernel
 
 # Sample to compare with direct GHZ
     QSAMPLE H4, Q1, 0, R2, R2   # H4 = distribution from entangle kernel
@@ -118,7 +118,7 @@ LABEL: ghz_pow2_done
     HFORK
 # Check if entanglement flag (EF) is set
     QPREP Q3, 3          # GHZ should set EF
-    QKERNEL Q3, Q3, 1, R2, R2   # Entangle (should set SF and EF)
+    QKERNEL ENTG, Q3, Q3, R2, R2   # Entangle (should set SF and EF)
     JMPF EF, entangled_branch   # Jump if EF set
 
 # Not entangled path

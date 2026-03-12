@@ -152,7 +152,7 @@ LABEL: simon_round
     QHADM Q0, Q0, R11
 
 # Step 3: Apply oracle U_f via PERMUTATION
-    QKERNEL Q0, Q0, 10, R8, R9
+    QKERNEL PERM, Q0, Q0, R8, R9
 
 # Step 4: Hadamard on query register again
     QHADM Q0, Q0, R11

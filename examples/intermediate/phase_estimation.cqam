@@ -61,7 +61,7 @@ res:
 LABEL: qpe_loop
 
 # Apply rotation with current angle
-    QKERNELF Q0, Q0, 5, F2, F3  # Q0 = Rotate(Q0, angle=F2)
+    QKERNELF DROT, Q0, Q0, F2, F3  # Q0 = Rotate(Q0, angle=F2)
 
 # Double the angle for next iteration: F2 = F2 * 2
     FMUL F2, F2, F1
@@ -74,7 +74,7 @@ LABEL: qpe_loop
     JIF R1, qpe_loop
 
 # --- Apply QFT to extract phase information ---
-    QKERNEL Q1, Q0, 2, R3, R3   # Q1 = QFT(rotated state)
+    QKERNEL QFFT, Q1, Q0, R3, R3   # Q1 = QFT(rotated state)
 
 # --- Non-destructive probe: check probability of |0> ---
     ILDI R4, 0
