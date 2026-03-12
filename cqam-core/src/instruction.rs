@@ -620,6 +620,29 @@ pub fn kernel_name(id: u8) -> &'static str {
     }
 }
 
+/// Parse a flag name string to its numeric ID.
+///
+/// Accepts the canonical two-letter names (ZF, NF, OF, PF, QF, SF, EF, HF,
+/// DF, CF, FK, MG, IF). Returns `None` for unrecognized names.
+pub fn flag_name_to_id(name: &str) -> Option<u8> {
+    match name {
+        "ZF" => Some(flag_id::ZF),
+        "NF" => Some(flag_id::NF),
+        "OF" => Some(flag_id::OF),
+        "PF" => Some(flag_id::PF),
+        "QF" => Some(flag_id::QF),
+        "SF" => Some(flag_id::SF),
+        "EF" => Some(flag_id::EF),
+        "HF" => Some(flag_id::HF),
+        "DF" => Some(flag_id::DF),
+        "CF" => Some(flag_id::CF),
+        "FK" => Some(flag_id::FK),
+        "MG" => Some(flag_id::MG),
+        "IF" => Some(flag_id::IF),
+        _ => None,
+    }
+}
+
 /// Helper: name string for a flag ID (for display/debug).
 pub fn flag_name(id: u8) -> &'static str {
     match id {

@@ -660,7 +660,24 @@ fn test_parse_hmerge() {
 }
 
 #[test]
-fn test_parse_jmpf() {
+fn test_parse_jmpf_by_name() {
+    assert_eq!(
+        parse_instruction("JMPF QF, THEN").unwrap(),
+        Instruction::JmpF { flag: 4, target: "THEN".into() }
+    );
+    assert_eq!(
+        parse_instruction("JMPF EF, LABEL").unwrap(),
+        Instruction::JmpF { flag: 6, target: "LABEL".into() }
+    );
+    assert_eq!(
+        parse_instruction("JMPF IF, DONE").unwrap(),
+        Instruction::JmpF { flag: 12, target: "DONE".into() }
+    );
+}
+
+#[test]
+fn test_parse_jmpf_by_number() {
+    // Numeric IDs still accepted for backward compatibility
     assert_eq!(
         parse_instruction("JMPF 4, THEN").unwrap(),
         Instruction::JmpF { flag: 4, target: "THEN".into() }

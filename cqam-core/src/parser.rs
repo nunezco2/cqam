@@ -745,10 +745,14 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("JMPF requires 2 operands, got {}", ops.len()),
                 });
             }
-            let flag = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
-                line: line_num,
-                message: format!("JMPF: invalid flag ID '{}'", ops[0]),
-            })?;
+            let flag = if let Some(id) = crate::instruction::flag_name_to_id(ops[0]) {
+                id
+            } else {
+                parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("JMPF: unknown flag '{}' (expected ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG, IF, or numeric ID)", ops[0]),
+                })?
+            };
             let target = ops[1].to_string();
             if target.is_empty() {
                 return Err(CqamError::ParseError {

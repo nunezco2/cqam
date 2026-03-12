@@ -267,7 +267,7 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::HFork => "HFORK".to_string(),
         Instruction::HMerge => "HMERGE".to_string(),
         Instruction::JmpF { flag, target } => {
-            format!("JMPF {}, {}", flag, target)
+            format!("JMPF {}, {}", cqam_core::instruction::flag_name(*flag), target)
         }
         Instruction::HReduce { src, dst, func } => {
             format!("HREDUCE H{}, R{}, {}", src, dst, func)
