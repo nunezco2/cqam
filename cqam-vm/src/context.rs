@@ -78,6 +78,18 @@ pub struct ExecutionContext {
     /// Seedable random number generator for reproducible measurements.
     /// Use `set_rng_seed` to make measurement sequences deterministic.
     pub rng: ChaCha8Rng,
+
+    /// Thread identity (0 = primary/single-threaded, 1..N-1 = workers).
+    pub thread_id: u16,
+
+    /// Configured thread count (from pragma/CLI, default 1).
+    pub thread_count: u16,
+
+    /// Whether this thread is inside a HATMS/HATME atomic section.
+    pub in_atomic_section: bool,
+
+    /// Shared memory region bounds (base, size). None if no .shared section.
+    pub shared_region: Option<(u16, u16)>,
 }
 
 impl ExecutionContext {
@@ -102,6 +114,10 @@ impl ExecutionContext {
             resource_tracker: ResourceTracker::new(),
             labels: HashMap::new(),
             rng: ChaCha8Rng::from_entropy(),
+            thread_id: 0,
+            thread_count: 1,
+            in_atomic_section: false,
+            shared_region: None,
             program,
         };
         ctx.resolve_labels();

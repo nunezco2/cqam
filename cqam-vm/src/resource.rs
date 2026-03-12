@@ -188,6 +188,14 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Thread configuration: 1 cycle
+        Instruction::ICCfg { .. }
+        | Instruction::ITid { .. } => ResourceDelta {
+            time: 1,
+            space: 0,
+            ..Default::default()
+        },
+
         // Configuration query: 1 cycle (reads config, no memory access)
         Instruction::IQCfg { .. } => ResourceDelta {
             time: 1,
@@ -397,6 +405,14 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         | Instruction::QStore { .. } => ResourceDelta {
             time: 1,
             space: 1,
+            ..Default::default()
+        },
+
+        // Atomic section barriers: 2 cycles (barrier synchronization)
+        Instruction::HAtmS
+        | Instruction::HAtmE => ResourceDelta {
+            time: 2,
+            space: 0,
             ..Default::default()
         },
 

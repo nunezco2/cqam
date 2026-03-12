@@ -202,6 +202,16 @@ pub enum Instruction {
     /// maximum for the active backend.
     IQCfg { dst: u8 },
 
+    /// Load the configured thread count into an integer register.
+    /// R[dst] = ctx.thread_count as i64
+    /// Mirrors IQCFG for qubits.
+    ICCfg { dst: u8 },
+
+    /// Load the current thread index into an integer register.
+    /// R[dst] = ctx.thread_id as i64
+    /// Returns 0 when not inside an HFORK/HMERGE block.
+    ITid { dst: u8 },
+
     /// Environment call: invoke a built-in host procedure.
     /// Does not push the call stack (executes synchronously, falls through to PC+1).
     /// Arguments are passed via registers per the calling convention.
@@ -413,6 +423,14 @@ pub enum Instruction {
     /// Merge hybrid execution branches by joining all forked threads.
     HMerge,
 
+    /// Hybrid Atomic Section Start. Full barrier: all threads must arrive.
+    /// One thread is elected to execute the atomic section.
+    /// No quantum operations are allowed until HATME.
+    HAtmS,
+
+    /// Hybrid Atomic Section End. Commits shared memory, resumes all threads.
+    HAtmE,
+
     /// Conditional execution based on PSW flag.
     /// if PSW.flag[flag] then PC = address_of(target)
     /// flag: flag ID (see flag_id module)
@@ -528,6 +546,8 @@ pub mod flag_id {
     pub const MG: u8 = 11;
     /// Interference flag.
     pub const IF: u8 = 12;
+    /// Atomic section flag.
+    pub const AF: u8 = 13;
 }
 
 /// Observation mode IDs for QObserve/QSample.
@@ -678,6 +698,7 @@ pub fn flag_name_to_id(name: &str) -> Option<u8> {
         "FK" => Some(flag_id::FK),
         "MG" => Some(flag_id::MG),
         "IF" => Some(flag_id::IF),
+        "AF" => Some(flag_id::AF),
         _ => None,
     }
 }
@@ -698,6 +719,7 @@ pub fn flag_name(id: u8) -> &'static str {
         flag_id::FK => "FK",
         flag_id::MG => "MG",
         flag_id::IF => "IF",
+        flag_id::AF => "AF",
         _ => "unknown",
     }
 }

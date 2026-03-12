@@ -49,6 +49,8 @@ pub struct ProgramStateWord {
     pub forked: bool,
     /// Merged: a HMERGE has completed since the last HFORK.
     pub merged: bool,
+    /// Atomic section: inside HATMS/HATME block.
+    pub af: bool,
 
     // --- Trap and interrupt flags ---
 
@@ -194,6 +196,7 @@ impl ProgramStateWord {
             10 => self.forked,
             11 => self.merged,
             12 => self.inf,
+            13 => self.af,
             _ => false,
         }
     }

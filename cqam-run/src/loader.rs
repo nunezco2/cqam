@@ -76,6 +76,8 @@ fn load_binary(path: &str) -> Result<ParsedProgram, CqamError> {
         instructions,
         metadata: ProgramMetadata::default(),
         data_section: Default::default(),
+        shared_section: Default::default(),
+        private_section: Default::default(),
     })
 }
 

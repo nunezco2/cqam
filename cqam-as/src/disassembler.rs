@@ -155,6 +155,8 @@ fn format_instruction(instr: &Instruction) -> String {
 
         // Configuration query
         Instruction::IQCfg { dst } => format!("IQCFG R{}", dst),
+        Instruction::ICCfg { dst } => format!("ICCFG R{}", dst),
+        Instruction::ITid { dst } => format!("ITID R{}", dst),
         Instruction::Ecall { proc_id } => {
             let name = cqam_core::instruction::proc_id_name(*proc_id);
             if name != "unknown" {
@@ -266,6 +268,8 @@ fn format_instruction(instr: &Instruction) -> String {
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
         Instruction::HMerge => "HMERGE".to_string(),
+        Instruction::HAtmS => "HATMS".to_string(),
+        Instruction::HAtmE => "HATME".to_string(),
         Instruction::JmpF { flag, target } => {
             format!("JMPF {}, {}", cqam_core::instruction::flag_name(*flag), target)
         }

@@ -590,6 +590,21 @@ impl QasmFormat for Instruction {
             Instruction::SetIV { trap_id, target } => {
                 vec![format!("// @cqam.setiv trap={}, target={}", trap_id, target)]
             }
+
+            // -- Thread configuration (no QASM equivalent) --------------------
+
+            Instruction::ICCfg { dst } => {
+                vec![format!("// @cqam.iccfg R{}", dst)]
+            }
+            Instruction::ITid { dst } => {
+                vec![format!("// @cqam.itid R{}", dst)]
+            }
+            Instruction::HAtmS => {
+                vec!["// @cqam.hatms".to_string()]
+            }
+            Instruction::HAtmE => {
+                vec!["// @cqam.hatme".to_string()]
+            }
         }
     }
 }
@@ -968,6 +983,16 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         // -- Interrupt handling --
         Instruction::Reti => {}
         Instruction::SetIV { .. } => {}
+
+        // -- Thread configuration --
+        Instruction::ICCfg { dst } => {
+            used.int_regs.insert(*dst);
+        }
+        Instruction::ITid { dst } => {
+            used.int_regs.insert(*dst);
+        }
+        Instruction::HAtmS => {}
+        Instruction::HAtmE => {}
     }
 }
 

@@ -23,6 +23,8 @@ pub struct ProgramMetadata {
     ///
     /// `None` means no pragma was found; use the default or CLI value.
     pub qubits: Option<u8>,
+    /// Number of threads requested by the program via `#! threads N`.
+    pub threads: Option<u16>,
 }
 
 /// Pre-loaded data from a `.data` section.
@@ -39,6 +41,24 @@ pub struct DataSection {
     pub labels: HashMap<String, (u16, u16)>,
 }
 
+/// Pre-loaded data from a `.shared` section.
+#[derive(Debug, Clone, Default)]
+pub struct SharedSection {
+    /// Base address in CMEM (from `.org`).
+    pub base: u16,
+    /// Flat vector of i64 values for shared memory initialization.
+    pub cells: Vec<i64>,
+    /// label -> (base_address, length_in_cells).
+    pub labels: HashMap<String, (u16, u16)>,
+}
+
+/// Configuration from a `.private` section.
+#[derive(Debug, Clone, Default)]
+pub struct PrivateSection {
+    /// Per-thread private memory size in cells. 0 means no private section.
+    pub size: u16,
+}
+
 /// Result of parsing a complete CQAM program.
 ///
 /// Contains both the instruction stream and any pragma metadata.
@@ -52,6 +72,10 @@ pub struct ParsedProgram {
 
     /// Pre-loaded data from the `.data` section (empty if none).
     pub data_section: DataSection,
+    /// Pre-loaded data from `.shared` section (empty if none).
+    pub shared_section: SharedSection,
+    /// Per-thread private memory configuration (zero size if none).
+    pub private_section: PrivateSection,
 }
 
 // =============================================================================
@@ -202,6 +226,32 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                 message: format!("IQCFG: invalid register '{}'", ops[0]),
             })?;
             Ok(Instruction::IQCfg { dst })
+        }
+        "ICCFG" => {
+            if ops.len() != 1 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "ICCFG requires 1 operand".to_string(),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("ICCFG: invalid register '{}'", ops[0]),
+            })?;
+            Ok(Instruction::ICCfg { dst })
+        }
+        "ITID" => {
+            if ops.len() != 1 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "ITID requires 1 operand".to_string(),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("ITID: invalid register '{}'", ops[0]),
+            })?;
+            Ok(Instruction::ITid { dst })
         }
 
         // -- Environment call -------------------------------------------------
@@ -729,6 +779,8 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
         // -- Hybrid -----------------------------------------------------------
         "HFORK" => Ok(Instruction::HFork),
         "HMERGE" => Ok(Instruction::HMerge),
+        "HATMS" => Ok(Instruction::HAtmS),
+        "HATME" => Ok(Instruction::HAtmE),
         "JMPF" => {
             if ops.len() != 2 {
                 return Err(CqamError::ParseError {
@@ -824,9 +876,11 @@ pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
 
     // --- Pass 1: Split lines into sections, extract pragmas ----------------
     #[derive(PartialEq)]
-    enum Section { Code, Data }
+    enum Section { Code, Data, Shared, Private }
     let mut current_section = Section::Code;
     let mut data_lines: Vec<(usize, &str)> = Vec::new();   // (1-based line num, line)
+    let mut shared_lines: Vec<(usize, &str)> = Vec::new();
+    let mut private_lines: Vec<(usize, &str)> = Vec::new();
     let mut code_lines: Vec<(usize, &str)> = Vec::new();
 
     for (idx, line) in source.lines().enumerate() {
@@ -844,6 +898,14 @@ pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
             current_section = Section::Data;
             continue;
         }
+        if trimmed.eq_ignore_ascii_case(".shared") {
+            current_section = Section::Shared;
+            continue;
+        }
+        if trimmed.eq_ignore_ascii_case(".private") {
+            current_section = Section::Private;
+            continue;
+        }
         if trimmed.eq_ignore_ascii_case(".code") {
             current_section = Section::Code;
             continue;
@@ -851,6 +913,8 @@ pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
 
         match current_section {
             Section::Data => data_lines.push((line_num, line)),
+            Section::Shared => shared_lines.push((line_num, line)),
+            Section::Private => private_lines.push((line_num, line)),
             Section::Code => code_lines.push((line_num, line)),
         }
     }
@@ -858,17 +922,24 @@ pub fn parse_program(source: &str) -> Result<ParsedProgram, CqamError> {
     // --- Pass 2: Parse data directives, build label table ------------------
     let data_section = parse_data_section(&data_lines)?;
 
+    // --- Pass 2b: Parse .shared section (reuses data directive parser) -----
+    let shared_section = parse_shared_section(&shared_lines)?;
+
+    // --- Pass 2c: Parse .private section ----------------------------------
+    let private_section = parse_private_section(&private_lines)?;
+
     // --- Pass 3: Substitute @label tokens, parse instructions --------------
     let mut instructions = Vec::new();
     for (line_num, line) in code_lines {
-        let substituted = substitute_data_refs(line, &data_section);
+        let mut substituted = substitute_data_refs(line, &data_section);
+        substituted = substitute_shared_refs(&substituted, &shared_section);
         let instr = parse_instruction_at(&substituted, line_num)?;
         if !matches!(instr, Instruction::Nop) {
             instructions.push(instr);
         }
     }
 
-    Ok(ParsedProgram { instructions, metadata, data_section })
+    Ok(ParsedProgram { instructions, metadata, data_section, shared_section, private_section })
 }
 
 /// Parse `.data` section lines into a [`DataSection`].
@@ -1147,6 +1218,76 @@ fn substitute_data_refs(line: &str, ds: &DataSection) -> String {
     result
 }
 
+/// Replace `@label` with the CMEM base address and `@label.len` with the
+/// cell count for all shared labels found in the line.
+fn substitute_shared_refs(line: &str, ss: &SharedSection) -> String {
+    if ss.labels.is_empty() || !line.contains('@') {
+        return line.to_string();
+    }
+
+    let mut result = line.to_string();
+
+    // Process longest labels first to avoid partial substitution
+    let mut labels: Vec<_> = ss.labels.iter().collect();
+    labels.sort_by(|a, b| b.0.len().cmp(&a.0.len()));
+
+    for (name, (base, len)) in &labels {
+        // @label.len must be replaced before @label to avoid partial match
+        let len_token = format!("@{}.len", name);
+        result = result.replace(&len_token, &len.to_string());
+        let addr_token = format!("@{}", name);
+        result = result.replace(&addr_token, &base.to_string());
+    }
+
+    result
+}
+
+/// Parse `.shared` section lines into a [`SharedSection`].
+///
+/// Reuses the same directive syntax as `.data` (labels, `.org`, `.i64`, etc.).
+fn parse_shared_section(lines: &[(usize, &str)]) -> Result<SharedSection, CqamError> {
+    if lines.is_empty() {
+        return Ok(SharedSection::default());
+    }
+    let ds = parse_data_section(lines)?;
+    Ok(SharedSection {
+        base: 0,
+        cells: ds.cells,
+        labels: ds.labels,
+    })
+}
+
+/// Parse `.private` section lines into a [`PrivateSection`].
+///
+/// Supported directives:
+///   - `.size N` — per-thread private memory size in cells
+fn parse_private_section(lines: &[(usize, &str)]) -> Result<PrivateSection, CqamError> {
+    let mut ps = PrivateSection::default();
+
+    for &(line_num, raw_line) in lines {
+        let line = strip_comments(raw_line).trim();
+        if line.is_empty() {
+            continue;
+        }
+
+        if let Some(rest) = line.strip_prefix(".size") {
+            let rest = rest.trim();
+            let n: u16 = rest.parse().map_err(|_| CqamError::ParseError {
+                line: line_num,
+                message: format!(".size: invalid value '{}'", rest),
+            })?;
+            ps.size = n;
+        } else {
+            return Err(CqamError::ParseError {
+                line: line_num,
+                message: format!("unknown .private directive: {}", line),
+            });
+        }
+    }
+
+    Ok(ps)
+}
+
 /// Parse a single pragma line (without the `#!` prefix).
 ///
 /// Returns Ok(()) and updates metadata, or Err on malformed pragma.
@@ -1180,6 +1321,25 @@ fn parse_pragma(
                 });
             }
             metadata.qubits = Some(n);
+        }
+        "threads" => {
+            if tokens.len() < 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "#! threads requires a number".to_string(),
+                });
+            }
+            let n: u16 = tokens[1].parse().map_err(|_| CqamError::ParseError {
+                line: line_num,
+                message: format!("#! threads value must be a number, got '{}'", tokens[1]),
+            })?;
+            if n == 0 || n > 256 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("#! threads must be 1..256, got {}", n),
+                });
+            }
+            metadata.threads = Some(n);
         }
         _ => {
             // Unknown pragma -- ignore for forward compatibility

@@ -192,7 +192,7 @@ fn build_psw_lines(app: &AppState, lines: &mut Vec<ListItem<'static>>) {
     let groups: &[FlagGroup] = &[
         ("Classical", theme::BG_FLAG_CLASSICAL, &["ZF", "NF", "OF", "PF"], &[psw.zf, psw.nf, psw.of, psw.pf], &[0, 1, 2, 3]),
         ("Quantum", theme::BG_FLAG_QUANTUM, &["QF", "SF", "EF", "IF"], &[psw.qf, psw.sf, psw.ef, psw.inf], &[4, 5, 6, 12]),
-        ("Hybrid", theme::BG_FLAG_HYBRID, &["HF", "DF", "CF", "FK", "MG"], &[psw.hf, psw.df, psw.cf, psw.forked, psw.merged], &[7, 8, 9, 10, 11]),
+        ("Hybrid", theme::BG_FLAG_HYBRID, &["HF", "DF", "CF", "FK", "MG", "AF"], &[psw.hf, psw.df, psw.cf, psw.forked, psw.merged, psw.af], &[7, 8, 9, 10, 11, 13]),
     ];
 
     let mut spans = vec![Span::styled("PSW  ", theme::style_dimmed())];

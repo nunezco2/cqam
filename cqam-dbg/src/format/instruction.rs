@@ -89,6 +89,8 @@ pub fn format_instruction(instr: &Instruction) -> String {
 
         // Configuration query
         Instruction::IQCfg { dst } => format!("IQCFG R{}", dst),
+        Instruction::ICCfg { dst } => format!("ICCFG R{}", dst),
+        Instruction::ITid { dst } => format!("ITID R{}", dst),
 
         // ECALL
         Instruction::Ecall { proc_id } => {
@@ -194,6 +196,8 @@ pub fn format_instruction(instr: &Instruction) -> String {
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
         Instruction::HMerge => "HMERGE".to_string(),
+        Instruction::HAtmS => "HATMS".to_string(),
+        Instruction::HAtmE => "HATME".to_string(),
         Instruction::JmpF { flag, target } => {
             format!("JMPF {}, {}", instruction::flag_name(*flag), target)
         }
@@ -241,6 +245,8 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         // Hybrid class
         Instruction::HFork
         | Instruction::HMerge
+        | Instruction::HAtmS
+        | Instruction::HAtmE
         | Instruction::JmpF { .. }
         | Instruction::HReduce { .. } => Some("hybrid"),
 

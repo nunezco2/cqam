@@ -299,6 +299,18 @@ pub fn execute_hybrid(
             Ok(false)
         }
 
+        Instruction::HAtmS => {
+            ctx.in_atomic_section = true;
+            ctx.psw.af = true;
+            Ok(false)
+        }
+
+        Instruction::HAtmE => {
+            ctx.in_atomic_section = false;
+            ctx.psw.af = false;
+            Ok(false)
+        }
+
         _ => {
             Err(CqamError::TypeMismatch {
                 instruction: format!("{:?}", instr),

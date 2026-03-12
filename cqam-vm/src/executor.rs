@@ -404,6 +404,20 @@ pub fn execute_instruction(
         // Configuration query
         // =====================================================================
 
+        Instruction::ICCfg { dst } => {
+            let n = ctx.thread_count;
+            ctx.iregs.set(*dst, n as i64)?;
+            ctx.psw.zf = n == 0;
+            ctx.psw.nf = false;
+        }
+
+        Instruction::ITid { dst } => {
+            let tid = ctx.thread_id;
+            ctx.iregs.set(*dst, tid as i64)?;
+            ctx.psw.zf = tid == 0;
+            ctx.psw.nf = false;
+        }
+
         Instruction::IQCfg { dst } => {
             let n = ctx.config.default_qubits;
             let max_allowed = if ctx.config.force_density_matrix {
@@ -632,7 +646,9 @@ pub fn execute_instruction(
         Instruction::HFork
         | Instruction::HMerge
         | Instruction::JmpF { .. }
-        | Instruction::HReduce { .. } => {
+        | Instruction::HReduce { .. }
+        | Instruction::HAtmS
+        | Instruction::HAtmE => {
             let jumped = execute_hybrid(ctx, instr, fork_mgr)?;
             if jumped {
                 return Ok(()); // JmpF took a jump: do NOT advance PC

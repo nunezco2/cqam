@@ -134,6 +134,12 @@ pub mod op {
     // -- Configuration query (0x58) -------------------------------------------
     pub const IQCFG: u8 = 0x58;
 
+    // -- Thread configuration (0x59-0x5C) -------------------------------------
+    pub const ICCFG: u8 = 0x59;
+    pub const ITID: u8 = 0x5A;
+    pub const HATMS: u8 = 0x5B;
+    pub const HATME: u8 = 0x5C;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;
@@ -228,6 +234,8 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::Halt => Ok(encode_n(op::HALT)),
         Instruction::HFork => Ok(encode_n(op::HFORK)),
         Instruction::HMerge => Ok(encode_n(op::HMERGE)),
+        Instruction::HAtmS => Ok(encode_n(op::HATMS)),
+        Instruction::HAtmE => Ok(encode_n(op::HATME)),
         Instruction::Reti => Ok(encode_n(op::RETI)),
         Instruction::Ecall { proc_id } => encode_rr(op::ECALL, *proc_id, 0),
 
@@ -264,6 +272,8 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         // -- Configuration query (R1-format, encoded as RR with src=0) --------
         Instruction::IQCfg { dst } => encode_rr(op::IQCFG, *dst, 0),
+        Instruction::ICCfg { dst } => encode_rr(op::ICCFG, *dst, 0),
+        Instruction::ITid { dst } => encode_rr(op::ITID, *dst, 0),
 
         // -- RRS-format (2-register + shift) ----------------------------------
         Instruction::IShl { dst, src, amt } => encode_rrs(op::ISHL, *dst, *src, *amt),
@@ -488,6 +498,8 @@ pub fn decode_with_debug(
         op::HALT => Ok(Instruction::Halt),
         op::HFORK => Ok(Instruction::HFork),
         op::HMERGE => Ok(Instruction::HMerge),
+        op::HATMS => Ok(Instruction::HAtmS),
+        op::HATME => Ok(Instruction::HAtmE),
         op::RETI => Ok(Instruction::Reti),
         op::ECALL => {
             let proc_id = extract_reg4(word, 20);
@@ -549,6 +561,14 @@ pub fn decode_with_debug(
         op::IQCFG => {
             let dst = extract_reg4(word, 20);
             Ok(Instruction::IQCfg { dst })
+        }
+        op::ICCFG => {
+            let dst = extract_reg4(word, 20);
+            Ok(Instruction::ICCfg { dst })
+        }
+        op::ITID => {
+            let dst = extract_reg4(word, 20);
+            Ok(Instruction::ITid { dst })
         }
 
         // -- RR-format (register-indirect memory) -----------------------------
@@ -999,6 +1019,10 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::CVTFZ => Some("CVTFZ"),
         op::CVTZF => Some("CVTZF"),
         op::IQCFG => Some("IQCFG"),
+        op::ICCFG => Some("ICCFG"),
+        op::ITID => Some("ITID"),
+        op::HATMS => Some("HATMS"),
+        op::HATME => Some("HATME"),
         op::JMP => Some("JMP"),
         op::JIF => Some("JIF"),
         op::CALL => Some("CALL"),

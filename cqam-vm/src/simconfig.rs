@@ -29,6 +29,10 @@ pub struct QuantumFidelityThreshold {
     /// When `true`, `QPREP` always allocates a full density matrix even when
     /// a statevector would suffice. Default: `false`.
     pub force_density_matrix: bool,
+
+    /// Default number of threads for HFORK parallelism.
+    /// Default: 1 (single-threaded). Overridden by --threads CLI flag.
+    pub default_threads: u16,
 }
 
 impl Default for QuantumFidelityThreshold {
@@ -37,6 +41,7 @@ impl Default for QuantumFidelityThreshold {
             min_purity: 0.0,
             default_qubits: 2, // backward compatible with current 4-state tests
             force_density_matrix: false,
+            default_threads: 1,
         }
     }
 }

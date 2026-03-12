@@ -85,6 +85,15 @@ pub enum CqamError {
 
     /// Invalid built-in procedure ID for ECALL.
     InvalidProcedure(u8),
+
+    /// Write to .shared memory outside HATMS/HATME atomic section.
+    SharedMemoryViolation { address: u16, thread_id: u16 },
+
+    /// Quantum operation attempted inside HATMS/HATME atomic section.
+    QuantumInAtomicSection { instruction: String },
+
+    /// Thread synchronization error (thread failed to reach barrier/merge).
+    ThreadSyncError { thread_id: u16, detail: String },
 }
 
 impl fmt::Display for CqamError {
@@ -189,6 +198,15 @@ impl fmt::Display for CqamError {
             }
             CqamError::InvalidProcedure(id) => {
                 write!(f, "Invalid ECALL procedure ID: {}", id)
+            }
+            CqamError::SharedMemoryViolation { address, thread_id } => {
+                write!(f, "Shared memory violation at address {} from thread {}: writes to .shared only allowed inside HATMS/HATME", address, thread_id)
+            }
+            CqamError::QuantumInAtomicSection { instruction } => {
+                write!(f, "Quantum operation {} not allowed inside HATMS/HATME atomic section", instruction)
+            }
+            CqamError::ThreadSyncError { thread_id, detail } => {
+                write!(f, "Thread synchronization error (thread {}): {}", thread_id, detail)
             }
         }
     }

@@ -95,6 +95,7 @@ impl CondLhs {
                 "FK" => 10,
                 "MG" => 11,
                 "IF" => 12,
+                "AF" => 13,
                 _ => return None,
             };
             return Some(Self::PswFlag(flag_id));
@@ -164,6 +165,7 @@ impl CondLhs {
                     10 => "FK",
                     11 => "MG",
                     12 => "IF",
+                    13 => "AF",
                     _ => "??",
                 };
                 format!("PSW.{}", name)
