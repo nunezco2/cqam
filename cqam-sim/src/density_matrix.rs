@@ -16,6 +16,10 @@ const PAR_THRESHOLD: usize = 256;
 /// Tolerance for entanglement detection via single-qubit reduced purity.
 const EF_EPSILON: f64 = 1e-10;
 
+/// Tolerance for superposition detection: diagonal elements with probability
+/// below this are treated as zero.
+const SF_EPSILON: f64 = 1e-12;
+
 /// Maximum number of qubits supported by the full density matrix.
 pub const MAX_QUBITS: u8 = 16;
 
@@ -537,6 +541,28 @@ impl DensityMatrix {
 
     /// Returns true if any qubit's single-qubit reduced state has purity < 1 - epsilon.
     ///
+    /// Returns true if the state is in superposition in the computational basis.
+    ///
+    /// For a density matrix, checks whether more than one diagonal element
+    /// (measurement probability) is nonzero. Returns false when the state is
+    /// a single basis state or a mixture that collapses to a single outcome.
+    ///
+    /// Cost: O(2^n) worst case.
+    pub fn is_in_superposition(&self) -> bool {
+        let dim = self.dimension();
+        let mut nonzero_count = 0usize;
+        for k in 0..dim {
+            let (re, _im) = self.data[k * dim + k]; // diagonal: ρ[k][k] is real
+            if re > SF_EPSILON {
+                nonzero_count += 1;
+                if nonzero_count > 1 {
+                    return true;
+                }
+            }
+        }
+        false
+    }
+
     /// For each qubit k, computes the 2x2 reduced density matrix by tracing out
     /// all other qubits. If any qubit has reduced purity < 1 - EF_EPSILON, the
     /// state is entangled (or mixed in a way that appears entangled at the

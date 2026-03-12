@@ -199,11 +199,9 @@ fn test_qkernel_updates_psw_with_real_metrics() {
 
     // After applying init kernel (uniform output), quantum flags should be set
     assert!(ctx.psw.qf, "Quantum active flag should be set");
-    // After C-2: sf indicates mixed state (purity < 1.0), not superposition.
-    // Init kernel produces a pure uniform state (purity=1.0), so sf=false.
-    assert!(!ctx.psw.sf, "sf should be false for pure uniform state");
-    // After C-2: ef is always false (placeholder until M-1/M-2)
-    assert!(!ctx.psw.ef, "ef should be false (placeholder)");
+    // Init kernel produces a uniform superposition over all basis states.
+    assert!(ctx.psw.sf, "sf should be true for uniform superposition state");
+    assert!(!ctx.psw.ef, "ef should be false for single-register init");
 }
 
 // =============================================================================
@@ -1854,9 +1852,8 @@ fn test_qhadm_all_qubits() {
     for (i, &p) in probs.iter().enumerate() {
         assert!((p - 0.25).abs() < 1e-8, "P({}) should be 0.25, got {}", i, p);
     }
-    // After C-2: sf now indicates mixed state (purity < 1.0), not superposition.
-    // A pure superposition state has purity = 1.0, so sf = false.
-    assert!(!ctx.psw.sf, "PSW sf should be false for a pure superposition state");
+    // Hadamard on all qubits produces uniform superposition.
+    assert!(ctx.psw.sf, "PSW sf should be true for a superposition state");
 }
 
 #[test]

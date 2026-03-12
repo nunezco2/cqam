@@ -24,6 +24,10 @@ const PAR_THRESHOLD: usize = 256;
 /// Tolerance for entanglement detection via single-qubit reduced purity.
 const EF_EPSILON: f64 = 1e-10;
 
+/// Tolerance for superposition detection: amplitudes with |ψ|² below this are
+/// treated as zero (not contributing to the computational basis decomposition).
+const SF_EPSILON: f64 = 1e-12;
+
 /// Maximum qubits for statevector backend.
 pub const MAX_SV_QUBITS: u8 = 24;
 
@@ -553,6 +557,26 @@ impl Statevector {
         };
 
         DensityMatrix::from_raw(num_qubits_a, rho_a)
+    }
+
+    /// Returns true if the state is in superposition in the computational basis.
+    ///
+    /// A state is in superposition iff more than one computational basis state
+    /// has nonzero probability (|ψ_k|² > SF_EPSILON). Returns false for single
+    /// basis states (measurement outcome is deterministic).
+    ///
+    /// Cost: O(2^n) worst case, O(1) best case (early exit after second nonzero).
+    pub fn is_in_superposition(&self) -> bool {
+        let mut nonzero_count = 0usize;
+        for &(re, im) in &self.amplitudes {
+            if re * re + im * im > SF_EPSILON {
+                nonzero_count += 1;
+                if nonzero_count > 1 {
+                    return true;
+                }
+            }
+        }
+        false
     }
 
     /// Returns true if any qubit is entangled with the rest of the register.

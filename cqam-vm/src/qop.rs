@@ -140,9 +140,10 @@ fn execute_masked_gate(
 
         let purity = result.purity();
         let entangled = result.is_entangled();
+        let in_sup = result.is_in_superposition();
 
         ctx.qregs[dst as usize] = Some(result);
-        ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+        ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
         Ok(())
     } else {
         Err(CqamError::UninitializedRegister {
@@ -176,8 +177,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             };
             // BELL and GHZ are entangled by construction
             let entangled = matches!(*dist, dist_id::BELL | dist_id::GHZ);
+            // UNIFORM, BELL, GHZ produce superposition; ZERO does not
+            let in_sup = matches!(*dist, dist_id::UNIFORM | dist_id::BELL | dist_id::GHZ);
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.sf = in_sup;
             ctx.psw.ef = entangled;
             ctx.psw.clear_decoherence();
             ctx.psw.cf = false;
@@ -354,9 +358,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -406,9 +411,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 let result = qr.apply_kernel(k.as_ref())?;
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -458,9 +464,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 let result = qr.apply_kernel(k.as_ref())?;
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -643,8 +650,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             };
             let entangled = matches!(dist_id_val, dist_id::BELL | dist_id::GHZ);
+            let in_sup = matches!(dist_id_val, dist_id::UNIFORM | dist_id::BELL | dist_id::GHZ);
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.sf = in_sup;
             ctx.psw.ef = entangled;
             ctx.psw.clear_decoherence();
             ctx.psw.cf = false;
@@ -754,9 +763,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -796,9 +806,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -826,10 +837,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = post_qr.purity();
                 let entangled = post_qr.is_entangled();
+                let in_sup = post_qr.is_in_superposition();
                 ctx.iregs.set(*dst_r, outcome as i64)?;
                 ctx.qregs[*src_q as usize] = Some(post_qr);
 
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 ctx.psw.mark_decohered();
                 ctx.psw.mark_collapsed();
                 ctx.psw.zf = outcome == 0;
@@ -870,9 +882,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
             let purity = result.purity();
             let entangled = result.is_entangled();
+            let in_sup = result.is_in_superposition();
 
             ctx.qregs[*dst as usize] = Some(result);
-            ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+            ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
             Ok(())
         }
 
@@ -930,9 +943,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -967,9 +981,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -1004,9 +1019,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -1050,9 +1066,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             })?;
 
             let entangled = dm.is_any_qubit_entangled();
+            let in_sup = dm.is_in_superposition();
             ctx.qregs[*dst as usize] = Some(QuantumRegister::Mixed(dm));
             ctx.psw.qf = true;
-            ctx.psw.sf = true; // mixed state
+            ctx.psw.sf = in_sup;
             ctx.psw.ef = entangled;
             Ok(())
         }
@@ -1091,8 +1108,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 }
             };
             let entangled = matches!(*dist, dist_id::BELL | dist_id::GHZ);
+            let in_sup = matches!(*dist, dist_id::UNIFORM | dist_id::BELL | dist_id::GHZ);
             ctx.qregs[*dst as usize] = Some(qr);
             ctx.psw.qf = true;
+            ctx.psw.sf = in_sup;
             ctx.psw.ef = entangled;
             ctx.psw.clear_decoherence();
             ctx.psw.cf = false;
@@ -1123,9 +1142,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = result.purity();
                 let entangled = result.is_entangled();
+                let in_sup = result.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -1159,9 +1179,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
 
                 let purity = post_qr.purity();
                 let entangled = post_qr.is_entangled();
+                let in_sup = post_qr.is_in_superposition();
 
                 ctx.qregs[*dst as usize] = Some(post_qr);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled);
+                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity, entangled, in_sup);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {

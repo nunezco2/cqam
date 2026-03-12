@@ -27,7 +27,8 @@ pub struct ProgramStateWord {
 
     /// Quantum active: at least one Q register is currently occupied.
     pub qf: bool,
-    /// Superposition present: the last QKERNEL produced a non-trivial superposition.
+    /// Superposition present: the register is in a computational-basis superposition
+    /// (more than one basis state has nonzero probability).
     pub sf: bool,
     /// Entanglement present: the last QKERNEL produced measurable entanglement.
     pub ef: bool,
@@ -103,15 +104,15 @@ impl ProgramStateWord {
         self.pf = result;
     }
 
-    /// Update quantum state flags from purity metric and entanglement detection.
+    /// Update quantum state flags from purity metric, superposition, and entanglement.
     ///
-    /// Sets qf=true (callers always have a live register), sf based on
-    /// whether purity < 1.0 (mixed state), ef from entanglement scan.
+    /// Sets qf=true (callers always have a live register), sf from
+    /// computational-basis superposition detection, ef from entanglement scan.
     /// QOBSERVE manages qf separately via register occupancy scan.
     /// Raises int_quantum_err when purity drops below the threshold.
-    pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64, entangled: bool) {
+    pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64, entangled: bool, in_superposition: bool) {
         self.qf = true;
-        self.sf = purity < 1.0 - 1e-10; // mixed state indicator
+        self.sf = in_superposition;
         self.ef = entangled;
 
         // DF is sticky: only set (pure->mixed transition), never cleared here.

@@ -84,6 +84,15 @@ impl QuantumRegister {
         self.get_element(row, col)
     }
 
+    /// Returns true if the state is in superposition in the computational basis
+    /// (more than one basis state has nonzero probability).
+    pub fn is_in_superposition(&self) -> bool {
+        match self {
+            QuantumRegister::Pure(sv) => sv.is_in_superposition(),
+            QuantumRegister::Mixed(dm) => dm.is_in_superposition(),
+        }
+    }
+
     /// Returns true if any qubit is entangled with the rest of the register.
     ///
     /// For single-qubit registers, always returns false.
