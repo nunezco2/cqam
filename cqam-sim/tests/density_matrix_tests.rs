@@ -1,7 +1,7 @@
 //! Comprehensive tests for the `DensityMatrix` type: construction, trace,
 //! purity, unitary application, and measurement probabilities.
 
-use cqam_sim::complex::{self, C64};
+use cqam_sim::complex::C64;
 use cqam_sim::density_matrix::DensityMatrix;
 
 // =============================================================================
@@ -78,7 +78,7 @@ fn test_ghz_3q() {
 fn test_from_statevector() {
     // |+> = (|0> + |1>) / sqrt(2)
     let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
-    let psi: Vec<C64> = vec![(inv_sqrt2, 0.0), (inv_sqrt2, 0.0)];
+    let psi: Vec<C64> = vec![C64(inv_sqrt2, 0.0), C64(inv_sqrt2, 0.0)];
     let dm = DensityMatrix::from_statevector(&psi).unwrap();
 
     assert_eq!(dm.num_qubits(), 1);
@@ -93,7 +93,7 @@ fn test_from_statevector() {
 
 #[test]
 fn test_from_statevector_bad_length() {
-    let psi: Vec<C64> = vec![(1.0, 0.0), (0.0, 0.0), (0.0, 0.0)]; // length 3
+    let psi: Vec<C64> = vec![C64(1.0, 0.0), C64(0.0, 0.0), C64(0.0, 0.0)]; // length 3
     assert!(DensityMatrix::from_statevector(&psi).is_err());
 }
 
@@ -106,8 +106,8 @@ fn test_apply_unitary_identity() {
     let mut dm = DensityMatrix::new_zero_state(1);
     // Identity matrix for 1 qubit
     let identity: Vec<C64> = vec![
-        complex::ONE, complex::ZERO,
-        complex::ZERO, complex::ONE,
+        C64::ONE, C64::ZERO,
+        C64::ZERO, C64::ONE,
     ];
     dm.apply_unitary(&identity);
     assert!((dm.get(0, 0).0 - 1.0).abs() < 1e-10);
@@ -119,8 +119,8 @@ fn test_apply_unitary_not_gate() {
     let mut dm = DensityMatrix::new_zero_state(1);
     // X (NOT) gate
     let x_gate: Vec<C64> = vec![
-        complex::ZERO, complex::ONE,
-        complex::ONE, complex::ZERO,
+        C64::ZERO, C64::ONE,
+        C64::ONE, C64::ZERO,
     ];
     dm.apply_unitary(&x_gate);
     // |0> -> |1>, so rho becomes |1><1|
@@ -134,8 +134,8 @@ fn test_apply_unitary_hadamard() {
     // Hadamard gate
     let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
     let h_gate: Vec<C64> = vec![
-        (inv_sqrt2, 0.0), (inv_sqrt2, 0.0),
-        (inv_sqrt2, 0.0), (-inv_sqrt2, 0.0),
+        C64(inv_sqrt2, 0.0), C64(inv_sqrt2, 0.0),
+        C64(inv_sqrt2, 0.0), C64(-inv_sqrt2, 0.0),
     ];
     dm.apply_unitary(&h_gate);
     // H|0> = |+>, so rho = |+><+| = [[0.5, 0.5], [0.5, 0.5]]
@@ -204,8 +204,8 @@ fn test_purity_pure_state() {
 fn test_purity_mixed_state() {
     // Maximally mixed 1-qubit state: (1/2) * I
     let mut dm = DensityMatrix::new_zero_state(1);
-    dm.set(0, 0, (0.5, 0.0));
-    dm.set(1, 1, (0.5, 0.0));
+    dm.set(0, 0, C64(0.5, 0.0));
+    dm.set(1, 1, C64(0.5, 0.0));
     // purity = Tr(rho^2) = 0.25 + 0.25 = 0.5
     assert!((dm.purity() - 0.5).abs() < 1e-10, "Maximally mixed 1q purity should be 0.5, got {}", dm.purity());
 }
@@ -257,7 +257,7 @@ fn test_eigenvalues_maximally_mixed() {
     let mut dm = DensityMatrix::new_zero_state(2);
     for i in 0..4 {
         for j in 0..4 {
-            dm.set(i, j, if i == j { (0.25, 0.0) } else { (0.0, 0.0) });
+            dm.set(i, j, if i == j { C64(0.25, 0.0) } else { C64(0.0, 0.0) });
         }
     }
     let eigs = dm.eigenvalues();
@@ -281,7 +281,7 @@ fn test_vne_maximally_mixed_is_one() {
     let mut dm = DensityMatrix::new_zero_state(2);
     for i in 0..4 {
         for j in 0..4 {
-            dm.set(i, j, if i == j { (0.25, 0.0) } else { (0.0, 0.0) });
+            dm.set(i, j, if i == j { C64(0.25, 0.0) } else { C64(0.0, 0.0) });
         }
     }
     assert!(
@@ -332,16 +332,16 @@ fn test_cnot_on_plus_zero_gives_bell() {
     // |+>|0> = (1/sqrt(2))(|00> + |10>)
     let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
     let psi: Vec<C64> = vec![
-        (inv_sqrt2, 0.0), (0.0, 0.0), (inv_sqrt2, 0.0), (0.0, 0.0),
+        C64(inv_sqrt2, 0.0), C64(0.0, 0.0), C64(inv_sqrt2, 0.0), C64(0.0, 0.0),
     ];
     let mut dm = DensityMatrix::from_statevector(&psi).unwrap();
 
     // CNOT (qubit 0 control, qubit 1 target)
     let cnot: Vec<C64> = vec![
-        complex::ONE,  complex::ZERO, complex::ZERO, complex::ZERO,
-        complex::ZERO, complex::ONE,  complex::ZERO, complex::ZERO,
-        complex::ZERO, complex::ZERO, complex::ZERO, complex::ONE,
-        complex::ZERO, complex::ZERO, complex::ONE,  complex::ZERO,
+        C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ZERO, C64::ONE,
+        C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
     ];
     dm.apply_unitary(&cnot);
 

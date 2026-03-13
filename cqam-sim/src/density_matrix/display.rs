@@ -17,7 +17,9 @@ impl std::fmt::Display for DensityMatrix {
             for i in 0..dim {
                 write!(f, "  [")?;
                 for j in 0..dim {
-                    let (re, im) = self.data[i * dim + j];
+                    let entry = self.data[i * dim + j];
+                    let re = entry.0;
+                    let im = entry.1;
                     if j > 0 { write!(f, ", ")?; }
                     if im.abs() < 1e-10 {
                         write!(f, "{:7.4}", re)?;

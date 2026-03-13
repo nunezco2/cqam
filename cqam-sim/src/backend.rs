@@ -187,7 +187,7 @@ impl SimulationBackend {
                                 for k in 0..sub_dim {
                                     let re = f64::from_bits(extra[2 * k] as u64);
                                     let im = f64::from_bits(extra[2 * k + 1] as u64);
-                                    diagonal.push((re, im));
+                                    diagonal.push(C64(re, im));
                                 }
                                 Some(Box::new(DiagonalUnitary { diagonal }))
                             }
@@ -238,7 +238,7 @@ impl SimulationBackend {
                 for k in 0..dim {
                     let re = f64::from_bits(cmem_data[2 * k] as u64);
                     let im = f64::from_bits(cmem_data[2 * k + 1] as u64);
-                    diagonal.push((re, im));
+                    diagonal.push(C64(re, im));
                 }
                 Ok(Box::new(DiagonalUnitary { diagonal }))
             }
@@ -289,7 +289,7 @@ impl SimulationBackend {
                 Ok(Box::new(GroverIter::single(target)))
             }
             KernelId::Rotate => Ok(Box::new(Rotate { theta: fparam0 })),
-            KernelId::PhaseShift => Ok(Box::new(PhaseShift { amplitude: (fparam0, 0.0) })),
+            KernelId::PhaseShift => Ok(Box::new(PhaseShift { amplitude: C64(fparam0, 0.0) })),
             KernelId::FourierInv => Ok(Box::new(FourierInv)),
             KernelId::ControlledU => {
                 Ok(Box::new(ControlledU {
@@ -314,8 +314,8 @@ impl SimulationBackend {
     fn build_kernel_complex(
         &self,
         kernel: KernelId,
-        zparam0: (f64, f64),
-        zparam1: (f64, f64),
+        zparam0: C64,
+        zparam1: C64,
         _qr: &QuantumRegister,
     ) -> Result<Box<dyn Kernel>, CqamError> {
         match kernel {
@@ -328,7 +328,7 @@ impl SimulationBackend {
                 Ok(Box::new(GroverIter::single(target)))
             }
             KernelId::Rotate => Ok(Box::new(Rotate { theta: zparam0.0 })),
-            KernelId::PhaseShift => Ok(Box::new(PhaseShift { amplitude: zparam0 })),
+            KernelId::PhaseShift => Ok(Box::new(PhaseShift { amplitude: C64(zparam0.0, zparam0.1) })),
             KernelId::FourierInv => Ok(Box::new(FourierInv)),
             KernelId::ControlledU => {
                 Ok(Box::new(ControlledU {
@@ -390,8 +390,8 @@ impl SimulationBackend {
                         limit: dim,
                     });
                 }
-                let (re, im) = qr.get_element(ctx0, ctx1);
-                Ok(ObserveResult::Amp(re, im))
+                let elem = qr.get_element(ctx0, ctx1);
+                Ok(ObserveResult::Amp(elem))
             }
             ObserveMode::Sample => {
                 let probs = qr.diagonal_probabilities();
@@ -452,7 +452,7 @@ impl QuantumBackend for SimulationBackend {
 
     fn prep_from_amplitudes(
         &mut self,
-        amplitudes: &[(f64, f64)],
+        amplitudes: &[C64],
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let qr = QuantumRegister::from_amplitudes(amplitudes.to_vec())?;
         let result = Self::op_result(&qr);
@@ -462,7 +462,7 @@ impl QuantumBackend for SimulationBackend {
 
     fn prep_mixed(
         &mut self,
-        ensemble: &[(f64, &[(f64, f64)])],
+        ensemble: &[(f64, &[C64])],
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let dm = DensityMatrix::from_mixture(ensemble)?;
         let qr = QuantumRegister::Mixed(dm);
@@ -489,7 +489,7 @@ impl QuantumBackend for SimulationBackend {
         &mut self,
         handle: QRegHandle,
         target_qubit: u8,
-        gate: &[(f64, f64); 4],
+        gate: &[C64; 4],
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let mut qr = self.get_state(handle)?.clone();
         qr.apply_single_qubit_gate(target_qubit, gate);
@@ -503,7 +503,7 @@ impl QuantumBackend for SimulationBackend {
         handle: QRegHandle,
         qubit_a: u8,
         qubit_b: u8,
-        gate: &[(f64, f64); 16],
+        gate: &[C64; 16],
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let mut qr = self.get_state(handle)?.clone();
         qr.apply_two_qubit_gate(qubit_a, qubit_b, gate);
@@ -515,7 +515,7 @@ impl QuantumBackend for SimulationBackend {
     fn apply_custom_unitary(
         &mut self,
         handle: QRegHandle,
-        unitary: &[(f64, f64)],
+        unitary: &[C64],
         dim: usize,
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let qr = self.get_state(handle)?;
@@ -534,10 +534,10 @@ impl QuantumBackend for SimulationBackend {
                 let mut re_sum = 0.0_f64;
                 let mut im_sum = 0.0_f64;
                 for k in 0..dim {
-                    let (a_re, a_im) = unitary[k * dim + i];
-                    let (b_re, b_im) = unitary[k * dim + j];
-                    re_sum += a_re * b_re + a_im * b_im;
-                    im_sum += a_re * b_im - a_im * b_re;
+                    let a = unitary[k * dim + i];
+                    let b = unitary[k * dim + j];
+                    re_sum += a.0 * b.0 + a.1 * b.1;
+                    im_sum += a.0 * b.1 - a.1 * b.0;
                 }
                 let expected_re = if i == j { 1.0 } else { 0.0 };
                 if (re_sum - expected_re).abs() > tol || im_sum.abs() > tol {
@@ -673,8 +673,8 @@ impl QuantumBackend for SimulationBackend {
         if outcome == 1 {
             // Pauli-X to flip back to |0>
             let x_gate: [C64; 4] = [
-                (0.0, 0.0), (1.0, 0.0),
-                (1.0, 0.0), (0.0, 0.0),
+                C64(0.0, 0.0), C64(1.0, 0.0),
+                C64(1.0, 0.0), C64(0.0, 0.0),
             ];
             post_qr.apply_single_qubit_gate(target_qubit, &x_gate);
         }
@@ -731,18 +731,20 @@ impl QuantumBackend for SimulationBackend {
         Ok(state.diagonal_probabilities())
     }
 
-    fn get_element(&self, handle: QRegHandle, row: usize, col: usize) -> Result<(f64, f64), CqamError> {
+    fn get_element(&self, handle: QRegHandle, row: usize, col: usize) -> Result<C64, CqamError> {
         let state = self.get_state(handle)?;
         Ok(state.get_element(row, col))
     }
 
-    fn amplitude(&self, handle: QRegHandle, index: usize) -> Result<(f64, f64), CqamError> {
+    fn amplitude(&self, handle: QRegHandle, index: usize) -> Result<C64, CqamError> {
         let state = self.get_state(handle)?;
         match state {
-            QuantumRegister::Pure(sv) => Ok(sv.amplitude(index)),
+            QuantumRegister::Pure(sv) => {
+                Ok(sv.amplitude(index))
+            }
             QuantumRegister::Mixed(_) => {
                 let p = state.diagonal_probabilities()[index];
-                Ok((p.sqrt(), 0.0))
+                Ok(C64(p.sqrt(), 0.0))
             }
         }
     }

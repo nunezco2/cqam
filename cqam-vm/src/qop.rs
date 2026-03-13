@@ -9,6 +9,7 @@ use cqam_core::quantum_backend::{
     KernelParams, ObserveResult, QuantumBackend,
 };
 use cqam_core::register::HybridValue;
+use cqam_sim::complex::C64;
 use crate::context::ExecutionContext;
 
 // =============================================================================
@@ -47,53 +48,49 @@ fn dist_intent(dist: DistId) -> (bool, bool) {
 // Gate matrices for masked register-level operations
 // =============================================================================
 
-type C64 = (f64, f64);
-const ZERO: C64 = (0.0, 0.0);
-const ONE: C64 = (1.0, 0.0);
-
 /// Hadamard gate: (1/sqrt(2)) * [[1,1],[1,-1]]
 fn hadamard() -> [C64; 4] {
     let h = std::f64::consts::FRAC_1_SQRT_2;
-    [(h, 0.0), (h, 0.0), (h, 0.0), (-h, 0.0)]
+    [C64(h, 0.0), C64(h, 0.0), C64(h, 0.0), C64(-h, 0.0)]
 }
 
 /// Pauli-X (bit flip): [[0,1],[1,0]]
 fn pauli_x() -> [C64; 4] {
-    [ZERO, ONE, ONE, ZERO]
+    [C64::ZERO, C64::ONE, C64::ONE, C64::ZERO]
 }
 
 /// Pauli-Z (phase flip): [[1,0],[0,-1]]
 fn pauli_z() -> [C64; 4] {
-    [ONE, ZERO, ZERO, (-1.0, 0.0)]
+    [C64::ONE, C64::ZERO, C64::ZERO, C64(-1.0, 0.0)]
 }
 
 /// CZ gate (4x4): diag(1, 1, 1, -1)
 fn cz_gate() -> [C64; 16] {
     [
-        ONE,  ZERO, ZERO, ZERO,
-        ZERO, ONE,  ZERO, ZERO,
-        ZERO, ZERO, ONE,  ZERO,
-        ZERO, ZERO, ZERO, (-1.0, 0.0),
+        C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ZERO, C64(-1.0, 0.0),
     ]
 }
 
 /// SWAP gate (4x4): swaps |01> <-> |10>
 fn swap_gate() -> [C64; 16] {
     [
-        ONE,  ZERO, ZERO, ZERO,
-        ZERO, ZERO, ONE,  ZERO,
-        ZERO, ONE,  ZERO, ZERO,
-        ZERO, ZERO, ZERO, ONE,
+        C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
+        C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ZERO, C64::ONE,
     ]
 }
 
 /// CNOT gate (4x4)
 fn cnot_gate() -> [C64; 16] {
     [
-        ONE,  ZERO, ZERO, ZERO,
-        ZERO, ONE,  ZERO, ZERO,
-        ZERO, ZERO, ZERO, ONE,
-        ZERO, ZERO, ONE,  ZERO,
+        C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ZERO, C64::ONE,
+        C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
     ]
 }
 
@@ -103,8 +100,8 @@ fn rotation_x(theta: f64) -> [C64; 4] {
     let c = half.cos();
     let s = half.sin();
     [
-        (c, 0.0), (0.0, -s),
-        (0.0, -s), (c, 0.0),
+        C64(c, 0.0), C64(0.0, -s),
+        C64(0.0, -s), C64(c, 0.0),
     ]
 }
 
@@ -114,8 +111,8 @@ fn rotation_y(theta: f64) -> [C64; 4] {
     let c = half.cos();
     let s = half.sin();
     [
-        (c, 0.0), (-s, 0.0),
-        (s, 0.0), (c, 0.0),
+        C64(c, 0.0), C64(-s, 0.0),
+        C64(s, 0.0), C64(c, 0.0),
     ]
 }
 
@@ -123,8 +120,8 @@ fn rotation_y(theta: f64) -> [C64; 4] {
 fn rotation_z(theta: f64) -> [C64; 4] {
     let half = theta / 2.0;
     [
-        (half.cos(), -half.sin()), ZERO,
-        ZERO, (half.cos(), half.sin()),
+        C64(half.cos(), -half.sin()), C64::ZERO,
+        C64::ZERO, C64(half.cos(), half.sin()),
     ]
 }
 
@@ -247,7 +244,7 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
             let zparam1 = ctx.zregs.get(*zctx1)?;
 
             if let Some(handle) = ctx.qregs[*src as usize] {
-                let params = KernelParams::Complex { param0: zparam0, param1: zparam1 };
+                let params = KernelParams::Complex { param0: C64(zparam0.0, zparam0.1), param1: C64(zparam1.0, zparam1.1) };
                 let (new_handle, result) = backend.apply_kernel(handle, *kernel, &params)?;
 
                 ctx.set_qreg(*dst, new_handle, backend);
@@ -275,7 +272,7 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                 let hval = match obs_result {
                     ObserveResult::Dist(pairs) => HybridValue::Dist(pairs),
                     ObserveResult::Prob(p) => HybridValue::Complex(p, 0.0),
-                    ObserveResult::Amp(re, im) => HybridValue::Complex(re, im),
+                    ObserveResult::Amp(c) => HybridValue::Complex(c.0, c.1),
                     ObserveResult::Sample(k) => {
                         ctx.psw.zf = k == 0;
                         HybridValue::Int(k)
@@ -306,7 +303,7 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                 let hval = match obs_result {
                     ObserveResult::Dist(pairs) => HybridValue::Dist(pairs),
                     ObserveResult::Prob(p) => HybridValue::Complex(p, 0.0),
-                    ObserveResult::Amp(re, im) => HybridValue::Complex(re, im),
+                    ObserveResult::Amp(c) => HybridValue::Complex(c.0, c.1),
                     ObserveResult::Sample(k) => HybridValue::Int(k),
                 };
                 ctx.hregs.set(*dst_h, hval)?;
@@ -378,27 +375,28 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                 });
             }
 
-            let mut psi: Vec<(f64, f64)> = Vec::with_capacity(count_val);
+            let mut psi: Vec<C64> = Vec::with_capacity(count_val);
             for i in 0..count_val {
                 let reg_idx = src_base + i as u8;
-                let amplitude: (f64, f64) = match *fs {
+                let amplitude: C64 = match *fs {
                     FileSel::RFile => {
                         let val = ctx.iregs.get(reg_idx)?;
-                        (val as f64, 0.0)
+                        C64(val as f64, 0.0)
                     }
                     FileSel::FFile => {
                         let val = ctx.fregs.get(reg_idx)?;
-                        (val, 0.0)
+                        C64(val, 0.0)
                     }
                     FileSel::ZFile => {
-                        ctx.zregs.get(reg_idx)?
+                        let z = ctx.zregs.get(reg_idx)?;
+                        C64(z.0, z.1)
                     }
                 };
                 psi.push(amplitude);
             }
 
             let norm_sq: f64 = psi.iter()
-                .map(|(re, im)| re * re + im * im)
+                .map(|c| c.0 * c.0 + c.1 * c.1)
                 .sum();
             if norm_sq < 1e-30 {
                 return Err(CqamError::TypeMismatch {
@@ -564,7 +562,7 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                     let addr = base_addr.wrapping_add((2 * idx) as u16);
                     let re = f64::from_bits(ctx.cmem.load(addr) as u64);
                     let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
-                    unitary.push((re, im));
+                    unitary.push(C64(re, im));
                 }
 
                 let (new_handle, result) = backend.apply_custom_unitary(handle, &unitary, dim_val)?;
@@ -661,7 +659,7 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
             let base = ctx.iregs.get(*base_addr_reg)? as u16;
             let count = ctx.iregs.get(*count_reg)? as usize;
 
-            let mut states: Vec<(f64, Vec<(f64, f64)>)> = Vec::with_capacity(count);
+            let mut states: Vec<(f64, Vec<C64>)> = Vec::with_capacity(count);
             let mut addr = base;
             for _ in 0..count {
                 let weight = f64::from_bits(ctx.cmem.load(addr) as u64);
@@ -672,13 +670,13 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                 for _ in 0..dim {
                     let re = f64::from_bits(ctx.cmem.load(addr) as u64);
                     let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
-                    psi.push((re, im));
+                    psi.push(C64(re, im));
                     addr = addr.wrapping_add(2);
                 }
                 states.push((weight, psi));
             }
 
-            let refs: Vec<(f64, &[(f64, f64)])> = states.iter()
+            let refs: Vec<(f64, &[C64])> = states.iter()
                 .map(|(w, psi)| (*w, psi.as_slice()))
                 .collect();
 

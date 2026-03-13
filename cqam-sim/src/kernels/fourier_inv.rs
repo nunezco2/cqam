@@ -2,7 +2,7 @@
 
 use std::f64::consts::PI;
 use cqam_core::error::CqamError;
-use crate::complex::{C64, cx_exp_i, cx_mul, ZERO, ONE};
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -19,17 +19,17 @@ pub struct FourierInv;
 /// Build a controlled-phase 4x4 gate matrix for a given angle.
 fn controlled_phase_gate(angle: f64) -> [C64; 16] {
     [
-        ONE,  ZERO, ZERO, ZERO,
-        ZERO, ONE,  ZERO, ZERO,
-        ZERO, ZERO, ONE,  ZERO,
-        ZERO, ZERO, ZERO, cx_exp_i(angle),
+        C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
+        C64::ZERO, C64::ZERO, C64::ZERO, C64::exp_i(angle),
     ]
 }
 
 /// Hadamard gate as [C64; 4].
 fn hadamard_gate() -> [C64; 4] {
     let h = std::f64::consts::FRAC_1_SQRT_2;
-    [(h, 0.0), (h, 0.0), (h, 0.0), (-h, 0.0)]
+    [C64(h, 0.0), C64(h, 0.0), C64(h, 0.0), C64(-h, 0.0)]
 }
 
 impl Kernel for FourierInv {
@@ -45,10 +45,10 @@ impl Kernel for FourierInv {
             let j = n - 1 - i;
             if i != j {
                 let swap: [C64; 16] = [
-                    ONE,  ZERO, ZERO, ZERO,
-                    ZERO, ZERO, ONE,  ZERO,
-                    ZERO, ONE,  ZERO, ZERO,
-                    ZERO, ZERO, ZERO, ONE,
+                    C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+                    C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
+                    C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+                    C64::ZERO, C64::ZERO, C64::ZERO, C64::ONE,
                 ];
                 result.apply_two_qubit_gate(i as u8, j as u8, &swap);
             }
@@ -102,18 +102,18 @@ impl Kernel for FourierInv {
                 let m = k - j;
                 let angle = -2.0 * PI / (1u64 << m) as f64;
                 let bit_k = 1 << (n - 1 - k);
-                let phase = cx_exp_i(angle);
+                let phase = C64::exp_i(angle);
                 let mask = bit_j | bit_k;
                 if dim >= PAR_THRESHOLD {
                     amps.par_iter_mut().enumerate().for_each(|(state, amp)| {
                         if (state & mask) == mask {
-                            *amp = cx_mul(phase, *amp);
+                            *amp = phase * *amp;
                         }
                     });
                 } else {
                     for (state, amp) in amps.iter_mut().enumerate() {
                         if (state & mask) == mask {
-                            *amp = cx_mul(phase, *amp);
+                            *amp = phase * *amp;
                         }
                     }
                 }
@@ -129,8 +129,8 @@ impl Kernel for FourierInv {
                         let partner = state | bit_j;
                         let a = amps[state];
                         let b = amps[partner];
-                        let new_s = (h_inv_sqrt2 * (a.0 + b.0), h_inv_sqrt2 * (a.1 + b.1));
-                        let new_p = (h_inv_sqrt2 * (a.0 - b.0), h_inv_sqrt2 * (a.1 - b.1));
+                        let new_s = C64(h_inv_sqrt2 * (a.0 + b.0), h_inv_sqrt2 * (a.1 + b.1));
+                        let new_p = C64(h_inv_sqrt2 * (a.0 - b.0), h_inv_sqrt2 * (a.1 - b.1));
                         (state, new_s, partner, new_p)
                     })
                     .collect();
@@ -144,8 +144,8 @@ impl Kernel for FourierInv {
                         let partner = state | bit_j;
                         let a = amps[state];
                         let b = amps[partner];
-                        amps[state] = (h_inv_sqrt2 * (a.0 + b.0), h_inv_sqrt2 * (a.1 + b.1));
-                        amps[partner] = (h_inv_sqrt2 * (a.0 - b.0), h_inv_sqrt2 * (a.1 - b.1));
+                        amps[state] = C64(h_inv_sqrt2 * (a.0 + b.0), h_inv_sqrt2 * (a.1 + b.1));
+                        amps[partner] = C64(h_inv_sqrt2 * (a.0 - b.0), h_inv_sqrt2 * (a.1 - b.1));
                     }
                 }
             }

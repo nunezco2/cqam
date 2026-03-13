@@ -1,7 +1,7 @@
 //! Construction methods for `DensityMatrix`.
 
 use super::DensityMatrix;
-use crate::complex::{self, C64, cx_add, cx_mul, cx_conj, cx_scale, cx_norm_sq};
+use crate::complex::C64;
 use crate::constants::MAX_QUBITS;
 use cqam_core::error::CqamError;
 
@@ -43,8 +43,8 @@ impl DensityMatrix {
         assert!((1..=MAX_QUBITS).contains(&num_qubits),
             "num_qubits must be 1..={}, got {}", MAX_QUBITS, num_qubits);
         let dim = 1usize << num_qubits;
-        let mut data = vec![complex::ZERO; dim * dim];
-        data[0] = complex::ONE; // rho[0][0] = 1
+        let mut data = vec![C64::ZERO; dim * dim];
+        data[0] = C64::ONE; // rho[0][0] = 1
         Self { num_qubits, data }
     }
 
@@ -82,7 +82,7 @@ impl DensityMatrix {
             "num_qubits must be 1..={}, got {}", MAX_QUBITS, num_qubits);
         let dim = 1usize << num_qubits;
         let val = 1.0 / dim as f64;
-        let data = vec![(val, 0.0); dim * dim];
+        let data = vec![C64(val, 0.0); dim * dim];
         Self { num_qubits, data }
     }
 
@@ -92,14 +92,12 @@ impl DensityMatrix {
     pub fn new_bell() -> Self {
         let num_qubits = 2u8;
         let dim = 4usize;
-        let mut data = vec![complex::ZERO; dim * dim];
+        let mut data = vec![C64::ZERO; dim * dim];
         // rho[0][0] = rho[0][3] = rho[3][0] = rho[3][3] = 0.5
-        //   row 0, col 0        row 0, col 3
-        data[0]     = (0.5, 0.0);
-        data[3]     = (0.5, 0.0);
-        //   row 3, col 0        row 3, col 3
-        data[3 * dim]     = (0.5, 0.0);
-        data[3 * dim + 3] = (0.5, 0.0);
+        data[0]     = C64(0.5, 0.0);
+        data[3]     = C64(0.5, 0.0);
+        data[3 * dim]     = C64(0.5, 0.0);
+        data[3 * dim + 3] = C64(0.5, 0.0);
         Self { num_qubits, data }
     }
 
@@ -111,13 +109,11 @@ impl DensityMatrix {
         assert!((2..=MAX_QUBITS).contains(&num_qubits),
             "num_qubits must be 2..={}, got {}", MAX_QUBITS, num_qubits);
         let dim = 1usize << num_qubits;
-        let mut data = vec![complex::ZERO; dim * dim];
-        //   row 0, col 0                row 0, col dim-1
-        data[0]                     = (0.5, 0.0);
-        data[dim - 1]               = (0.5, 0.0);
-        //   row dim-1, col 0            row dim-1, col dim-1
-        data[(dim - 1) * dim]       = (0.5, 0.0);
-        data[(dim - 1) * dim + (dim - 1)] = (0.5, 0.0);
+        let mut data = vec![C64::ZERO; dim * dim];
+        data[0]                     = C64(0.5, 0.0);
+        data[dim - 1]               = C64(0.5, 0.0);
+        data[(dim - 1) * dim]       = C64(0.5, 0.0);
+        data[(dim - 1) * dim + (dim - 1)] = C64(0.5, 0.0);
         Self { num_qubits, data }
     }
 
@@ -176,16 +172,16 @@ impl DensityMatrix {
             });
         }
 
-        let mut data = vec![complex::ZERO; dim * dim];
+        let mut data = vec![C64::ZERO; dim * dim];
 
         for (weight, psi) in states {
             let normalized_weight = weight / total_weight;
 
             // Normalize this statevector
-            let norm_sq: f64 = psi.iter().map(|z| cx_norm_sq(*z)).sum();
+            let norm_sq: f64 = psi.iter().map(|z| z.norm_sq()).sum();
             let norm = norm_sq.sqrt();
             let psi_norm: Vec<C64> = if (norm - 1.0).abs() > 1e-12 && norm > 1e-30 {
-                psi.iter().map(|z| cx_scale(1.0 / norm, *z)).collect()
+                psi.iter().map(|z| z.scale(1.0 / norm)).collect()
             } else {
                 psi.to_vec()
             };
@@ -193,9 +189,8 @@ impl DensityMatrix {
             // Accumulate: rho += w * |psi><psi|
             for i in 0..dim {
                 for j in 0..dim {
-                    let outer = cx_mul(psi_norm[i], cx_conj(psi_norm[j]));
-                    let scaled = cx_scale(normalized_weight, outer);
-                    data[i * dim + j] = cx_add(data[i * dim + j], scaled);
+                    let outer = psi_norm[i] * psi_norm[j].conj();
+                    data[i * dim + j] += outer.scale(normalized_weight);
                 }
             }
         }
@@ -224,20 +219,20 @@ impl DensityMatrix {
         }
 
         // Normalize the statevector
-        let norm_sq: f64 = psi.iter().map(|z| cx_norm_sq(*z)).sum();
+        let norm_sq: f64 = psi.iter().map(|z| z.norm_sq()).sum();
         let norm = norm_sq.sqrt();
         let psi_norm: Vec<C64> = if (norm - 1.0).abs() > 1e-12 {
-            psi.iter().map(|z| cx_scale(1.0 / norm, *z)).collect()
+            psi.iter().map(|z| z.scale(1.0 / norm)).collect()
         } else {
             psi.to_vec()
         };
 
         // rho[i][j] = psi[i] * conj(psi[j])
         let dim = len;
-        let mut data = vec![complex::ZERO; dim * dim];
+        let mut data = vec![C64::ZERO; dim * dim];
         for i in 0..dim {
             for j in 0..dim {
-                data[i * dim + j] = cx_mul(psi_norm[i], cx_conj(psi_norm[j]));
+                data[i * dim + j] = psi_norm[i] * psi_norm[j].conj();
             }
         }
 

@@ -1,7 +1,7 @@
 //! Grover iteration kernel: one oracle phase-flip followed by diffusion.
 
 use cqam_core::error::CqamError;
-use crate::complex::{self, C64, cx_add, cx_scale};
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -66,12 +66,12 @@ impl Kernel for GroverIter {
         let target_set = &self.target_set;
 
         // Compose G = D * O
-        let mut g = vec![complex::ZERO; dim * dim];
+        let mut g = vec![C64::ZERO; dim * dim];
         for j in 0..dim {
             for k in 0..dim {
                 let d_jk = 2.0 / n_f64 - if j == k { 1.0 } else { 0.0 };
                 let o_kk = if target_set.contains(&k) { -1.0 } else { 1.0 };
-                g[j * dim + k] = (d_jk * o_kk, 0.0);
+                g[j * dim + k] = C64(d_jk * o_kk, 0.0);
             }
         }
 
@@ -100,35 +100,35 @@ impl Kernel for GroverIter {
         if dim >= PAR_THRESHOLD {
             amps.par_iter_mut().enumerate().for_each(|(k, amp)| {
                 if target_set.contains(&k) {
-                    *amp = (-amp.0, -amp.1);
+                    *amp = -*amp;
                 }
             });
         } else {
             for &t in target_set {
-                amps[t] = (-amps[t].0, -amps[t].1);
+                amps[t] = -amps[t];
             }
         }
 
         // Step 2: Diffusion - D|psi> = 2*mean - psi_k (O(dim))
         let mean = if dim >= PAR_THRESHOLD {
-            let sum = amps.par_iter().copied().reduce(|| complex::ZERO, cx_add);
-            cx_scale(1.0 / n_f64, sum)
+            let sum = amps.par_iter().copied().reduce(|| C64::ZERO, |a, b| a + b);
+            sum.scale(1.0 / n_f64)
         } else {
-            let mut m = complex::ZERO;
+            let mut m = C64::ZERO;
             for amp in amps.iter().take(dim) {
-                m = cx_add(m, *amp);
+                m += *amp;
             }
-            cx_scale(1.0 / n_f64, m)
+            m.scale(1.0 / n_f64)
         };
 
-        let two_mean = cx_scale(2.0, mean);
+        let two_mean = mean.scale(2.0);
         if dim >= PAR_THRESHOLD {
             amps = amps.par_iter().map(|amp| {
-                (two_mean.0 - amp.0, two_mean.1 - amp.1)
+                two_mean - *amp
             }).collect();
         } else {
             for amp in amps.iter_mut().take(dim) {
-                *amp = (two_mean.0 - amp.0, two_mean.1 - amp.1);
+                *amp = two_mean - *amp;
             }
         }
 

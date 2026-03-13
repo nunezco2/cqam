@@ -1,6 +1,6 @@
 //! Tests for the Statevector pure-state backend.
 
-use cqam_sim::complex::{self, C64};
+use cqam_sim::complex::C64;
 use cqam_sim::statevector::Statevector;
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernel::Kernel;
@@ -56,7 +56,7 @@ fn test_sv_ghz() {
 
 #[test]
 fn test_sv_from_amplitudes() {
-    let amps = vec![(1.0, 0.0), (0.0, 0.0)];
+    let amps = vec![C64(1.0, 0.0), C64(0.0, 0.0)];
     let sv = Statevector::from_amplitudes(amps).unwrap();
     assert_eq!(sv.num_qubits(), 1);
     assert!((sv.amplitude(0).0 - 1.0).abs() < 1e-12);
@@ -64,14 +64,14 @@ fn test_sv_from_amplitudes() {
 
 #[test]
 fn test_sv_from_amplitudes_normalizes() {
-    let amps = vec![(2.0, 0.0), (0.0, 0.0)];
+    let amps = vec![C64(2.0, 0.0), C64(0.0, 0.0)];
     let sv = Statevector::from_amplitudes(amps).unwrap();
     assert!((sv.amplitude(0).0 - 1.0).abs() < 1e-12);
 }
 
 #[test]
 fn test_sv_from_amplitudes_bad_length() {
-    let amps = vec![(1.0, 0.0), (0.0, 0.0), (0.0, 0.0)]; // length 3
+    let amps = vec![C64(1.0, 0.0), C64(0.0, 0.0), C64(0.0, 0.0)]; // length 3
     assert!(Statevector::from_amplitudes(amps).is_err());
 }
 
@@ -84,8 +84,8 @@ fn test_sv_hadamard() {
     let mut sv = Statevector::new_zero_state(1);
     let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
     let h_gate: [C64; 4] = [
-        (inv_sqrt2, 0.0), (inv_sqrt2, 0.0),
-        (inv_sqrt2, 0.0), (-inv_sqrt2, 0.0),
+        C64(inv_sqrt2, 0.0), C64(inv_sqrt2, 0.0),
+        C64(inv_sqrt2, 0.0), C64(-inv_sqrt2, 0.0),
     ];
     sv.apply_single_qubit_gate(0, &h_gate);
 
@@ -98,8 +98,8 @@ fn test_sv_hadamard() {
 fn test_sv_not_gate() {
     let mut sv = Statevector::new_zero_state(1);
     let x_gate: Vec<C64> = vec![
-        complex::ZERO, complex::ONE,
-        complex::ONE, complex::ZERO,
+        C64::ZERO, C64::ONE,
+        C64::ONE, C64::ZERO,
     ];
     sv.apply_unitary(&x_gate);
     assert!(sv.amplitude(0).0.abs() < 1e-12);

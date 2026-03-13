@@ -1,6 +1,7 @@
 //! Tests for quantum operation handlers: QPREP, QKERNEL, QOBSERVE,
 //! QLOAD, and QSTORE using the `DensityMatrix` simulation backend.
 
+use cqam_core::complex::C64;
 use cqam_core::instruction::*;
 use cqam_core::quantum_backend::QuantumBackend;
 use cqam_core::register::HybridValue;
@@ -1560,8 +1561,8 @@ fn test_qprepr_matches_qprep_uniform() {
     assert_eq!(backend.dimension(*dm_lit).unwrap(), backend.dimension(*dm_reg).unwrap());
     for i in 0..backend.dimension(*dm_lit).unwrap() {
         for j in 0..backend.dimension(*dm_lit).unwrap() {
-            let (r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
-            let (r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
+            let C64(r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
+            let C64(r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
             assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
                 "UNIFORM mismatch at ({},{}): ({},{}) vs ({},{})", i, j, r1, i1, r2, i2);
         }
@@ -1582,8 +1583,8 @@ fn test_qprepr_matches_qprep_zero() {
     let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
     for i in 0..backend.dimension(*dm_lit).unwrap() {
         for j in 0..backend.dimension(*dm_lit).unwrap() {
-            let (r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
-            let (r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
+            let C64(r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
+            let C64(r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
             assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
                 "ZERO mismatch at ({},{})", i, j);
         }
@@ -1604,8 +1605,8 @@ fn test_qprepr_matches_qprep_bell() {
     let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
     for i in 0..backend.dimension(*dm_lit).unwrap() {
         for j in 0..backend.dimension(*dm_lit).unwrap() {
-            let (r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
-            let (r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
+            let C64(r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
+            let C64(r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
             assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
                 "BELL mismatch at ({},{})", i, j);
         }
@@ -1626,8 +1627,8 @@ fn test_qprepr_matches_qprep_ghz() {
     let dm_reg = ctx_reg.qregs[0].as_ref().unwrap();
     for i in 0..backend.dimension(*dm_lit).unwrap() {
         for j in 0..backend.dimension(*dm_lit).unwrap() {
-            let (r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
-            let (r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
+            let C64(r1, i1) = backend.get_element(*dm_lit, i, j).unwrap();
+            let C64(r2, i2) = backend.get_element(*dm_reg, i, j).unwrap();
             assert!((r1 - r2).abs() < 1e-15 && (i1 - i2).abs() < 1e-15,
                 "GHZ mismatch at ({},{})", i, j);
         }

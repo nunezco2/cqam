@@ -10,7 +10,7 @@
 //! diagonal unitaries.
 
 use cqam_core::error::CqamError;
-use crate::complex::{C64, cx_mul};
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -67,11 +67,11 @@ impl Kernel for DiagonalUnitary {
         let diag = &self.diagonal;
         let result_amps: Vec<C64> = if dim >= PAR_THRESHOLD {
             amps.par_iter().zip(diag.par_iter()).map(|(&a, &d)| {
-                cx_mul(d, a)
+                d * a
             }).collect()
         } else {
             amps.iter().zip(diag.iter()).map(|(&a, &d)| {
-                cx_mul(d, a)
+                d * a
             }).collect()
         };
         Ok(Statevector::from_amplitudes(result_amps)

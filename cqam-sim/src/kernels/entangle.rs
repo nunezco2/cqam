@@ -1,7 +1,7 @@
 //! Entanglement kernel: applies a CNOT gate between qubit 0 and qubit 1.
 
 use cqam_core::error::CqamError;
-use crate::complex::{C64, ZERO, ONE};
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -28,10 +28,10 @@ impl Kernel for Entangle {
 
         // CNOT 4x4 matrix: |00>->|00>, |01>->|01>, |10>->|11>, |11>->|10>
         let cnot: [C64; 16] = [
-            ONE,  ZERO, ZERO, ZERO,
-            ZERO, ONE,  ZERO, ZERO,
-            ZERO, ZERO, ZERO, ONE,
-            ZERO, ZERO, ONE,  ZERO,
+            C64::ONE,  C64::ZERO, C64::ZERO, C64::ZERO,
+            C64::ZERO, C64::ONE,  C64::ZERO, C64::ZERO,
+            C64::ZERO, C64::ZERO, C64::ZERO, C64::ONE,
+            C64::ZERO, C64::ZERO, C64::ONE,  C64::ZERO,
         ];
 
         let mut result = input.clone();

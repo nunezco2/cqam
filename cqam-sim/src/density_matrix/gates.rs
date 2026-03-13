@@ -1,7 +1,7 @@
 //! Unitary gate application methods for `DensityMatrix`.
 
 use super::DensityMatrix;
-use crate::complex::{self, C64, cx_add, cx_mul, cx_conj};
+use crate::complex::C64;
 use crate::constants::{PAR_THRESHOLD, MAX_QUBITS};
 use rayon::prelude::*;
 
@@ -25,23 +25,23 @@ impl DensityMatrix {
         let rho = &self.data;
         let temp: Vec<C64> = if dim >= PAR_THRESHOLD {
             (0..dim).into_par_iter().flat_map(|i| {
-                let mut row = vec![complex::ZERO; dim];
+                let mut row = vec![C64::ZERO; dim];
                 for j in 0..dim {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim {
-                        sum = cx_add(sum, cx_mul(unitary[i * dim + k], rho[k * dim + j]));
+                        sum += unitary[i * dim + k] * rho[k * dim + j];
                     }
                     row[j] = sum;
                 }
                 row
             }).collect()
         } else {
-            let mut temp = vec![complex::ZERO; dim * dim];
+            let mut temp = vec![C64::ZERO; dim * dim];
             for i in 0..dim {
                 for j in 0..dim {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim {
-                        sum = cx_add(sum, cx_mul(unitary[i * dim + k], rho[k * dim + j]));
+                        sum += unitary[i * dim + k] * rho[k * dim + j];
                     }
                     temp[i * dim + j] = sum;
                 }
@@ -52,23 +52,23 @@ impl DensityMatrix {
         // Step 2: result = temp * U^dagger (parallelize outer row loop)
         self.data = if dim >= PAR_THRESHOLD {
             (0..dim).into_par_iter().flat_map(|i| {
-                let mut row = vec![complex::ZERO; dim];
+                let mut row = vec![C64::ZERO; dim];
                 for j in 0..dim {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim {
-                        sum = cx_add(sum, cx_mul(temp[i * dim + k], cx_conj(unitary[j * dim + k])));
+                        sum += temp[i * dim + k] * unitary[j * dim + k].conj();
                     }
                     row[j] = sum;
                 }
                 row
             }).collect()
         } else {
-            let mut result = vec![complex::ZERO; dim * dim];
+            let mut result = vec![C64::ZERO; dim * dim];
             for i in 0..dim {
                 for j in 0..dim {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim {
-                        sum = cx_add(sum, cx_mul(temp[i * dim + k], cx_conj(unitary[j * dim + k])));
+                        sum += temp[i * dim + k] * unitary[j * dim + k].conj();
                     }
                     result[i * dim + j] = sum;
                 }
@@ -97,15 +97,15 @@ impl DensityMatrix {
                 let pi = phases[i];
                 for (j, entry) in row.iter_mut().enumerate() {
                     // rho'[i][j] = phases[i] * conj(phases[j]) * rho[i][j]
-                    let pj_conj = cx_conj(phases[j]);
-                    *entry = cx_mul(pi, cx_mul(pj_conj, *entry));
+                    let pj_conj = phases[j].conj();
+                    *entry = pi * (pj_conj * *entry);
                 }
             });
         } else {
             for (i, &pi) in phases.iter().enumerate() {
                 for (j, &pj) in phases.iter().enumerate() {
-                    let pj_conj = cx_conj(pj);
-                    self.data[i * dim + j] = cx_mul(pi, cx_mul(pj_conj, self.data[i * dim + j]));
+                    let pj_conj = pj.conj();
+                    self.data[i * dim + j] = pi * (pj_conj * self.data[i * dim + j]);
                 }
             }
         }
@@ -167,9 +167,9 @@ impl DensityMatrix {
                         self.data[i11 * dim + j],
                     ];
                     for (a, &row_idx) in idxs.iter().enumerate() {
-                        let mut sum = complex::ZERO;
+                        let mut sum = C64::ZERO;
                         for b in 0..4 {
-                            sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                            sum += gate[a * 4 + b] * orig[b];
                         }
                         local.push((row_idx * dim + j, sum));
                     }
@@ -194,9 +194,9 @@ impl DensityMatrix {
                         self.data[i11 * dim + j],
                     ];
                     for (a, &row_idx) in idxs.iter().enumerate() {
-                        let mut sum = complex::ZERO;
+                        let mut sum = C64::ZERO;
                         for b in 0..4 {
-                            sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                            sum += gate[a * 4 + b] * orig[b];
                         }
                         temp[row_idx * dim + j] = sum;
                     }
@@ -221,9 +221,9 @@ impl DensityMatrix {
                         temp[i * dim + j11],
                     ];
                     for (a, &col_idx) in jdxs.iter().enumerate() {
-                        let mut sum = complex::ZERO;
+                        let mut sum = C64::ZERO;
                         for b in 0..4 {
-                            sum = cx_add(sum, cx_mul(orig[b], cx_conj(gate[a * 4 + b])));
+                            sum += orig[b] * gate[a * 4 + b].conj();
                         }
                         local.push((i * dim + col_idx, sum));
                     }
@@ -248,9 +248,9 @@ impl DensityMatrix {
                         temp[i * dim + j11],
                     ];
                     for (a, &col_idx) in jdxs.iter().enumerate() {
-                        let mut sum = complex::ZERO;
+                        let mut sum = C64::ZERO;
                         for b in 0..4 {
-                            sum = cx_add(sum, cx_mul(orig[b], cx_conj(gate[a * 4 + b])));
+                            sum += orig[b] * gate[a * 4 + b].conj();
                         }
                         self.data[i * dim + col_idx] = sum;
                     }
@@ -295,8 +295,8 @@ impl DensityMatrix {
                     let r0 = data[i0 * dim + j];
                     let r1 = data[i1 * dim + j];
                     (i0, j,
-                     cx_add(cx_mul(g00, r0), cx_mul(g01, r1)),
-                     cx_add(cx_mul(g10, r0), cx_mul(g11, r1)))
+                     g00 * r0 + g01 * r1,
+                     g10 * r0 + g11 * r1)
                 }).collect::<Vec<_>>()
             }).collect();
             for (i0, j, v0, v1) in updates {
@@ -312,8 +312,8 @@ impl DensityMatrix {
                 for j in 0..dim {
                     let r0 = self.data[i0 * dim + j];
                     let r1 = self.data[i1 * dim + j];
-                    temp[i0 * dim + j] = cx_add(cx_mul(g00, r0), cx_mul(g01, r1));
-                    temp[i1 * dim + j] = cx_add(cx_mul(g10, r0), cx_mul(g11, r1));
+                    temp[i0 * dim + j] = g00 * r0 + g01 * r1;
+                    temp[i1 * dim + j] = g10 * r0 + g11 * r1;
                 }
             }
             temp
@@ -328,8 +328,8 @@ impl DensityMatrix {
                     let c0 = temp_ref[i * dim + j0];
                     let c1 = temp_ref[i * dim + j1];
                     (i, j0,
-                     cx_add(cx_mul(c0, cx_conj(g00)), cx_mul(c1, cx_conj(g01))),
-                     cx_add(cx_mul(c0, cx_conj(g10)), cx_mul(c1, cx_conj(g11))))
+                     c0 * g00.conj() + c1 * g01.conj(),
+                     c0 * g10.conj() + c1 * g11.conj())
                 }).collect::<Vec<_>>()
             }).collect();
             for (i, j0, v0, v1) in updates {
@@ -344,9 +344,9 @@ impl DensityMatrix {
                     let c0 = temp[i * dim + j0];
                     let c1 = temp[i * dim + j1];
                     self.data[i * dim + j0] =
-                        cx_add(cx_mul(c0, cx_conj(g00)), cx_mul(c1, cx_conj(g01)));
+                        c0 * g00.conj() + c1 * g01.conj();
                     self.data[i * dim + j1] =
-                        cx_add(cx_mul(c0, cx_conj(g10)), cx_mul(c1, cx_conj(g11)));
+                        c0 * g10.conj() + c1 * g11.conj();
                 }
             }
         }
@@ -380,7 +380,7 @@ impl DensityMatrix {
             let self_data = &self.data;
             let other_data = &other.data;
             (0..dim_a).into_par_iter().flat_map(|i| {
-                let mut block = vec![complex::ZERO; dim_b * dim_ab];
+                let mut block = vec![C64::ZERO; dim_b * dim_ab];
                 for j in 0..dim_b {
                     let row = i * dim_b + j;
                     for k in 0..dim_a {
@@ -388,7 +388,7 @@ impl DensityMatrix {
                         for l in 0..dim_b {
                             let col = k * dim_b + l;
                             let b_jl = other_data[j * dim_b + l];
-                            block[j * dim_ab + col] = cx_mul(a_ik, b_jl);
+                            block[j * dim_ab + col] = a_ik * b_jl;
                         }
                     }
                     let _ = row; // used for clarity
@@ -396,7 +396,7 @@ impl DensityMatrix {
                 block
             }).collect()
         } else {
-            let mut data = vec![complex::ZERO; dim_ab * dim_ab];
+            let mut data = vec![C64::ZERO; dim_ab * dim_ab];
             for i in 0..dim_a {
                 for j in 0..dim_b {
                     let row = i * dim_b + j;
@@ -405,7 +405,7 @@ impl DensityMatrix {
                         for l in 0..dim_b {
                             let col = k * dim_b + l;
                             let b_jl = other.data[j * dim_b + l];
-                            data[row * dim_ab + col] = cx_mul(a_ik, b_jl);
+                            data[row * dim_ab + col] = a_ik * b_jl;
                         }
                     }
                 }

@@ -2,6 +2,7 @@
 //! coherence summary formatting for the QUANTUM pane.
 #![allow(dead_code)]
 
+use cqam_core::complex::C64;
 use cqam_core::quantum_backend::{QRegHandle, QuantumBackend};
 
 // =============================================================================
@@ -34,7 +35,7 @@ pub struct TopKEntry {
     pub probability: f64,
     /// Complex amplitude. For Pure states, the actual amplitude from the
     /// statevector. For Mixed states, (sqrt(p), 0.0) as a placeholder.
-    pub amplitude: (f64, f64),
+    pub amplitude: C64,
     /// Phase in radians. For Mixed states, `None` (not meaningful).
     pub phase: Option<f64>,
 }
@@ -97,13 +98,13 @@ pub fn extract_top_k(backend: &dyn QuantumBackend, handle: QRegHandle, topk: usi
         .map(|(k, p)| {
             let (amplitude, phase) = if is_pure {
                 // For Pure states, extract the actual amplitude from the backend.
-                let amp = backend.amplitude(handle, k).unwrap_or((p.sqrt(), 0.0));
+                let amp = backend.amplitude(handle, k).unwrap_or(C64(p.sqrt(), 0.0));
                 let ph = amp.1.atan2(amp.0);
                 (amp, Some(ph))
             } else {
                 // For Mixed states, amplitude is not directly available.
                 // Show sqrt(p) + 0i as a placeholder; phase is not meaningful.
-                ((p.sqrt(), 0.0), None)
+                (C64(p.sqrt(), 0.0), None)
             };
 
             TopKEntry {
@@ -219,7 +220,7 @@ fn max_off_diagonal_exact(backend: &dyn QuantumBackend, handle: QRegHandle, dim:
     for i in 0..dim {
         for j in 0..dim {
             if i != j {
-                let (re, im) = backend.get_element(handle, i, j).unwrap_or((0.0, 0.0));
+                let C64(re, im) = backend.get_element(handle, i, j).unwrap_or(C64::ZERO);
                 let mag = (re * re + im * im).sqrt();
                 if mag > max_val {
                     max_val = mag;
@@ -248,7 +249,7 @@ fn max_off_diagonal_sampled(backend: &dyn QuantumBackend, handle: QRegHandle, di
             if i == j {
                 continue;
             }
-            let (re, im) = backend.get_element(handle, i, j).unwrap_or((0.0, 0.0));
+            let C64(re, im) = backend.get_element(handle, i, j).unwrap_or(C64::ZERO);
             let mag = (re * re + im * im).sqrt();
             if mag > max_val {
                 max_val = mag;
@@ -267,8 +268,8 @@ fn max_off_diagonal_sampled(backend: &dyn QuantumBackend, handle: QRegHandle, di
 // =============================================================================
 
 /// Format an amplitude as a string: "re+imi" or "re-imi".
-pub fn format_amplitude(amp: (f64, f64)) -> String {
-    let (re, im) = amp;
+pub fn format_amplitude(amp: C64) -> String {
+    let C64(re, im) = amp;
     if im >= 0.0 {
         format!("{:.3}+{:.3}i", re, im)
     } else {
@@ -364,13 +365,13 @@ mod tests {
 
     #[test]
     fn test_format_amplitude_positive() {
-        let s = format_amplitude((0.707, 0.707));
+        let s = format_amplitude(C64(0.707, 0.707));
         assert!(s.contains("+"));
     }
 
     #[test]
     fn test_format_amplitude_negative() {
-        let s = format_amplitude((0.707, -0.707));
+        let s = format_amplitude(C64(0.707, -0.707));
         assert!(s.contains("-"));
     }
 

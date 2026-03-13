@@ -12,7 +12,7 @@
 //! - Measurement produces a new Statevector (projective)
 //! - Partial trace requires conversion to DensityMatrix
 
-use crate::complex::{self, C64, cx_add, cx_mul, cx_scale, cx_norm_sq};
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use cqam_core::error::CqamError;
 use cqam_core::quantum_state::QuantumState;
@@ -41,8 +41,8 @@ impl Statevector {
             MAX_SV_QUBITS, num_qubits
         );
         let dim = 1usize << num_qubits;
-        let mut amplitudes = vec![complex::ZERO; dim];
-        amplitudes[0] = complex::ONE;
+        let mut amplitudes = vec![C64::ZERO; dim];
+        amplitudes[0] = C64::ONE;
         Self { num_qubits, amplitudes }
     }
 
@@ -55,7 +55,7 @@ impl Statevector {
         );
         let dim = 1usize << num_qubits;
         let amp = 1.0 / (dim as f64).sqrt();
-        let amplitudes = vec![(amp, 0.0); dim];
+        let amplitudes = vec![C64(amp, 0.0); dim];
         Self { num_qubits, amplitudes }
     }
 
@@ -63,10 +63,10 @@ impl Statevector {
     pub fn new_bell() -> Self {
         let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
         let amplitudes = vec![
-            (inv_sqrt2, 0.0),
-            complex::ZERO,
-            complex::ZERO,
-            (inv_sqrt2, 0.0),
+            C64(inv_sqrt2, 0.0),
+            C64::ZERO,
+            C64::ZERO,
+            C64(inv_sqrt2, 0.0),
         ];
         Self { num_qubits: 2, amplitudes }
     }
@@ -84,9 +84,9 @@ impl Statevector {
         }
         let dim = 1usize << num_qubits;
         let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
-        let mut amplitudes = vec![complex::ZERO; dim];
-        amplitudes[0] = (inv_sqrt2, 0.0);
-        amplitudes[dim - 1] = (inv_sqrt2, 0.0);
+        let mut amplitudes = vec![C64::ZERO; dim];
+        amplitudes[0] = C64(inv_sqrt2, 0.0);
+        amplitudes[dim - 1] = C64(inv_sqrt2, 0.0);
         Ok(Self { num_qubits, amplitudes })
     }
 
@@ -111,10 +111,10 @@ impl Statevector {
         }
 
         // Normalize
-        let norm_sq: f64 = amplitudes.iter().map(|z| cx_norm_sq(*z)).sum();
+        let norm_sq: f64 = amplitudes.iter().map(|z| z.norm_sq()).sum();
         let norm = norm_sq.sqrt();
         let amplitudes = if (norm - 1.0).abs() > 1e-12 && norm > 1e-30 {
-            amplitudes.iter().map(|z| cx_scale(1.0 / norm, *z)).collect()
+            amplitudes.iter().map(|z| z.scale(1.0 / norm)).collect()
         } else {
             amplitudes
         };
@@ -170,18 +170,18 @@ impl Statevector {
         let amps = &self.amplitudes;
         let result: Vec<C64> = if dim >= PAR_THRESHOLD {
             (0..dim).into_par_iter().map(|i| {
-                let mut sum = complex::ZERO;
+                let mut sum = C64::ZERO;
                 for k in 0..dim {
-                    sum = cx_add(sum, cx_mul(unitary[i * dim + k], amps[k]));
+                    sum += unitary[i * dim + k] * amps[k];
                 }
                 sum
             }).collect()
         } else {
-            let mut result = vec![complex::ZERO; dim];
+            let mut result = vec![C64::ZERO; dim];
             for i in 0..dim {
-                let mut sum = complex::ZERO;
+                let mut sum = C64::ZERO;
                 for k in 0..dim {
-                    sum = cx_add(sum, cx_mul(unitary[i * dim + k], amps[k]));
+                    sum += unitary[i * dim + k] * amps[k];
                 }
                 result[i] = sum;
             }
@@ -213,8 +213,8 @@ impl Statevector {
                 let a0 = self.amplitudes[i0];
                 let a1 = self.amplitudes[i1];
                 (i0,
-                 cx_add(cx_mul(g00, a0), cx_mul(g01, a1)),
-                 cx_add(cx_mul(g10, a0), cx_mul(g11, a1)))
+                 g00 * a0 + g01 * a1,
+                 g10 * a0 + g11 * a1)
             }).collect();
             for (i0, v0, v1) in updates {
                 let i1 = i0 | mask;
@@ -229,8 +229,8 @@ impl Statevector {
                 let i1 = i0 | mask;
                 let a0 = self.amplitudes[i0];
                 let a1 = self.amplitudes[i1];
-                self.amplitudes[i0] = cx_add(cx_mul(g00, a0), cx_mul(g01, a1));
-                self.amplitudes[i1] = cx_add(cx_mul(g10, a0), cx_mul(g11, a1));
+                self.amplitudes[i0] = g00 * a0 + g01 * a1;
+                self.amplitudes[i1] = g10 * a0 + g11 * a1;
             }
         }
     }
@@ -269,11 +269,11 @@ impl Statevector {
                     self.amplitudes[i10],
                     self.amplitudes[i11],
                 ];
-                let mut results = [complex::ZERO; 4];
+                let mut results = [C64::ZERO; 4];
                 for a in 0..4 {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for b in 0..4 {
-                        sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                        sum += gate[a * 4 + b] * orig[b];
                     }
                     results[a] = sum;
                 }
@@ -298,9 +298,9 @@ impl Statevector {
                     self.amplitudes[i11],
                 ];
                 for (a, &idx) in idxs.iter().enumerate() {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for b in 0..4 {
-                        sum = cx_add(sum, cx_mul(gate[a * 4 + b], orig[b]));
+                        sum += gate[a * 4 + b] * orig[b];
                     }
                     self.amplitudes[idx] = sum;
                 }
@@ -330,13 +330,13 @@ impl Statevector {
         let mut p0: f64 = if dim >= PAR_THRESHOLD {
             (0..dim).into_par_iter()
                 .filter(|&k| k & mask == 0)
-                .map(|k| cx_norm_sq(self.amplitudes[k]))
+                .map(|k| self.amplitudes[k].norm_sq())
                 .sum()
         } else {
             let mut p0 = 0.0;
             for k in 0..dim {
                 if k & mask == 0 {
-                    p0 += cx_norm_sq(self.amplitudes[k]);
+                    p0 += self.amplitudes[k].norm_sq();
                 }
             }
             p0
@@ -354,7 +354,7 @@ impl Statevector {
         let mut result = if dim >= PAR_THRESHOLD {
             self.amplitudes.par_iter().enumerate().map(|(k, &val)| {
                 if (k & mask) != outcome_bit {
-                    complex::ZERO
+                    C64::ZERO
                 } else {
                     val
                 }
@@ -363,7 +363,7 @@ impl Statevector {
             let mut result = self.amplitudes.clone();
             for (k, val) in result.iter_mut().enumerate().take(dim) {
                 if (k & mask) != outcome_bit {
-                    *val = complex::ZERO;
+                    *val = C64::ZERO;
                 }
             }
             result
@@ -374,11 +374,11 @@ impl Statevector {
             let inv_norm = 1.0 / p_outcome.sqrt();
             if dim >= PAR_THRESHOLD {
                 result.par_iter_mut().for_each(|amp| {
-                    *amp = cx_scale(inv_norm, *amp);
+                    *amp = amp.scale(inv_norm);
                 });
             } else {
                 for amp in result.iter_mut() {
-                    *amp = cx_scale(inv_norm, *amp);
+                    *amp = amp.scale(inv_norm);
                 }
             }
         }
@@ -410,8 +410,8 @@ impl Statevector {
         }
 
         // Collapsed state
-        let mut amplitudes = vec![complex::ZERO; dim];
-        amplitudes[outcome] = complex::ONE;
+        let mut amplitudes = vec![C64::ZERO; dim];
+        amplitudes[outcome] = C64::ONE;
 
         (outcome as u16, Statevector { num_qubits: self.num_qubits, amplitudes })
     }
@@ -421,7 +421,7 @@ impl Statevector {
         let mut max_idx = 0;
         let mut max_prob = f64::NEG_INFINITY;
         for (k, amp) in self.amplitudes.iter().enumerate() {
-            let p = cx_norm_sq(*amp);
+            let p = amp.norm_sq();
             if p > max_prob {
                 max_prob = p;
                 max_idx = k;
@@ -434,9 +434,9 @@ impl Statevector {
     pub fn diagonal_probabilities(&self) -> Vec<f64> {
         let dim = self.dimension();
         if dim >= PAR_THRESHOLD {
-            self.amplitudes.par_iter().map(|z| cx_norm_sq(*z)).collect()
+            self.amplitudes.par_iter().map(|z| z.norm_sq()).collect()
         } else {
-            self.amplitudes.iter().map(|z| cx_norm_sq(*z)).collect()
+            self.amplitudes.iter().map(|z| z.norm_sq()).collect()
         }
     }
 }
@@ -481,13 +481,13 @@ impl Statevector {
             let other_amps = &other.amplitudes;
             (0..dim_a).into_par_iter().flat_map(|i| {
                 let a_i = self_amps[i];
-                (0..dim_b).map(|j| cx_mul(a_i, other_amps[j])).collect::<Vec<_>>()
+                (0..dim_b).map(|j| a_i * other_amps[j]).collect::<Vec<_>>()
             }).collect()
         } else {
             let mut amplitudes = Vec::with_capacity(total_dim);
             for i in 0..dim_a {
                 for j in 0..dim_b {
-                    amplitudes.push(cx_mul(self.amplitudes[i], other.amplitudes[j]));
+                    amplitudes.push(self.amplitudes[i] * other.amplitudes[j]);
                 }
             }
             amplitudes
@@ -499,14 +499,14 @@ impl Statevector {
         })
     }
 
-    /// Partial trace over subsystem B, returning the reduced density matrix ρ_A.
+    /// Partial trace over subsystem B, returning the reduced density matrix rho_A.
     ///
-    /// For a pure state |ψ⟩ of n qubits, subsystem A = first `num_qubits_a` qubits,
+    /// For a pure state |psi> of n qubits, subsystem A = first `num_qubits_a` qubits,
     /// subsystem B = remaining (n - num_qubits_a) qubits.
     ///
-    /// ρ_A[i,j] = Σ_k ψ[i·dim_b + k] · conj(ψ[j·dim_b + k])
+    /// rho_A[i,j] = sum_k psi[i*dim_b + k] * conj(psi[j*dim_b + k])
     ///
-    /// This is O(dim_a² × dim_b) and does NOT require building the full density matrix.
+    /// This is O(dim_a^2 * dim_b) and does NOT require building the full density matrix.
     pub fn partial_trace_b(&self, num_qubits_a: u8) -> Result<DensityMatrix, CqamError> {
         if num_qubits_a == 0 || num_qubits_a >= self.num_qubits {
             return Err(CqamError::TypeMismatch {
@@ -525,27 +525,24 @@ impl Statevector {
             let amps = &self.amplitudes;
             (0..dim_a).into_par_iter().flat_map(|i| {
                 (0..dim_a).map(|j| {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim_b {
                         let psi_ik = amps[i * dim_b + k];
                         let psi_jk = amps[j * dim_b + k];
-                        // conj(psi_jk) * psi_ik  (note: ρ_A[i,j] = Σ_k ψ_ik · ψ_jk*)
-                        let conj_jk = (psi_jk.0, -psi_jk.1);
-                        sum = cx_add(sum, cx_mul(psi_ik, conj_jk));
+                        sum += psi_ik * psi_jk.conj();
                     }
                     sum
                 }).collect::<Vec<_>>()
             }).collect()
         } else {
-            let mut rho_a = vec![complex::ZERO; dim_a * dim_a];
+            let mut rho_a = vec![C64::ZERO; dim_a * dim_a];
             for i in 0..dim_a {
                 for j in 0..dim_a {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim_b {
                         let psi_ik = self.amplitudes[i * dim_b + k];
                         let psi_jk = self.amplitudes[j * dim_b + k];
-                        let conj_jk = (psi_jk.0, -psi_jk.1);
-                        sum = cx_add(sum, cx_mul(psi_ik, conj_jk));
+                        sum += psi_ik * psi_jk.conj();
                     }
                     rho_a[i * dim_a + j] = sum;
                 }
@@ -559,14 +556,14 @@ impl Statevector {
     /// Returns true if the state is in superposition in the computational basis.
     ///
     /// A state is in superposition iff more than one computational basis state
-    /// has nonzero probability (|ψ_k|² > SF_EPSILON). Returns false for single
+    /// has nonzero probability (|psi_k|^2 > SF_EPSILON). Returns false for single
     /// basis states (measurement outcome is deterministic).
     ///
     /// Cost: O(2^n) worst case, O(1) best case (early exit after second nonzero).
     pub fn is_in_superposition(&self) -> bool {
         let mut nonzero_count = 0usize;
-        for &(re, im) in &self.amplitudes {
-            if re * re + im * im > SF_EPSILON {
+        for amp in &self.amplitudes {
+            if amp.0 * amp.0 + amp.1 * amp.1 > SF_EPSILON {
                 nonzero_count += 1;
                 if nonzero_count > 1 {
                     return true;

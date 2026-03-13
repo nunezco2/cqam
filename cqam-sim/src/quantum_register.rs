@@ -8,7 +8,6 @@ use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::kernel::Kernel;
 use crate::statevector::Statevector;
-use crate::complex::{cx_mul, cx_conj};
 use cqam_core::error::CqamError;
 use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
@@ -73,7 +72,7 @@ impl QuantumRegister {
     pub fn get_element(&self, row: usize, col: usize) -> C64 {
         match self {
             QuantumRegister::Pure(sv) => {
-                cx_mul(sv.amplitude(row), cx_conj(sv.amplitude(col)))
+                sv.amplitude(row) * sv.amplitude(col).conj()
             }
             QuantumRegister::Mixed(dm) => dm.get(row, col),
         }

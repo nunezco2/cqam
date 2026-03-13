@@ -2,7 +2,7 @@
 
 use super::DensityMatrix;
 use super::jacobi::jacobi_eigenvalues;
-use crate::complex::{self, C64, cx_add, cx_conj, cx_norm_sq};
+use crate::complex::C64;
 use crate::constants::{PAR_THRESHOLD, EF_EPSILON, SF_EPSILON};
 use rayon::prelude::*;
 
@@ -18,9 +18,9 @@ impl DensityMatrix {
     pub fn purity(&self) -> f64 {
         let dim = self.dimension();
         if dim >= PAR_THRESHOLD {
-            self.data.par_iter().map(|z| cx_norm_sq(*z)).sum()
+            self.data.par_iter().map(|z| z.norm_sq()).sum()
         } else {
-            self.data.iter().map(|z| cx_norm_sq(*z)).sum()
+            self.data.iter().map(|z| z.norm_sq()).sum()
         }
     }
 
@@ -37,8 +37,8 @@ impl DensityMatrix {
         let dim = self.dimension();
         let mut nonzero_count = 0usize;
         for k in 0..dim {
-            let (re, _im) = self.data[k * dim + k]; // diagonal: rho[k][k] is real
-            if re > SF_EPSILON {
+            let diag = self.data[k * dim + k];
+            if diag.0 > SF_EPSILON {
                 nonzero_count += 1;
                 if nonzero_count > 1 {
                     return true;
@@ -64,9 +64,9 @@ impl DensityMatrix {
             let bit = n - 1 - k;
             let mask = 1usize << bit;
 
-            let mut rho_k_00: (f64, f64) = (0.0, 0.0);
-            let mut rho_k_11: (f64, f64) = (0.0, 0.0);
-            let mut rho_k_01: (f64, f64) = (0.0, 0.0);
+            let mut rho_k_00 = C64::ZERO;
+            let mut rho_k_11 = C64::ZERO;
+            let mut rho_k_01 = C64::ZERO;
 
             // Iterate over all 2^(n-1) configurations m of the other qubits.
             // For each m, compute the indices with bit `bit` set to 0 and 1.
@@ -79,18 +79,15 @@ impl DensityMatrix {
 
                 // rho_k[0][0] += rho[idx0][idx0]
                 let v00 = self.data[idx0 * dim + idx0];
-                rho_k_00.0 += v00.0;
-                rho_k_00.1 += v00.1;
+                rho_k_00 += v00;
 
                 // rho_k[1][1] += rho[idx1][idx1]
                 let v11 = self.data[idx1 * dim + idx1];
-                rho_k_11.0 += v11.0;
-                rho_k_11.1 += v11.1;
+                rho_k_11 += v11;
 
                 // rho_k[0][1] += rho[idx0][idx1]
                 let v01 = self.data[idx0 * dim + idx1];
-                rho_k_01.0 += v01.0;
-                rho_k_01.1 += v01.1;
+                rho_k_01 += v01;
             }
 
             // purity = rho_k_00.re^2 + rho_k_11.re^2 + 2*|rho_k_01|^2
@@ -183,9 +180,9 @@ impl DensityMatrix {
     /// Trace of the density matrix: sum of diagonal elements.
     pub fn trace(&self) -> C64 {
         let dim = self.dimension();
-        let mut sum = complex::ZERO;
+        let mut sum = C64::ZERO;
         for k in 0..dim {
-            sum = cx_add(sum, self.data[k * dim + k]);
+            sum += self.data[k * dim + k];
         }
         sum
     }
@@ -211,24 +208,24 @@ impl DensityMatrix {
             let data = &self.data;
             (0..dim_a).into_par_iter().flat_map(|i| {
                 (0..dim_a).map(|j| {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim_b {
                         let r = i * dim_b + k;
                         let c = j * dim_b + k;
-                        sum = cx_add(sum, data[r * dim + c]);
+                        sum += data[r * dim + c];
                     }
                     sum
                 }).collect::<Vec<_>>()
             }).collect()
         } else {
-            let mut rho_a = vec![complex::ZERO; dim_a * dim_a];
+            let mut rho_a = vec![C64::ZERO; dim_a * dim_a];
             for i in 0..dim_a {
                 for j in 0..dim_a {
-                    let mut sum = complex::ZERO;
+                    let mut sum = C64::ZERO;
                     for k in 0..dim_b {
                         let row = i * dim_b + k;
                         let col = j * dim_b + k;
-                        sum = cx_add(sum, self.data[row * dim + col]);
+                        sum += self.data[row * dim + col];
                     }
                     rho_a[i * dim_a + j] = sum;
                 }
@@ -281,7 +278,7 @@ impl DensityMatrix {
             for j in 0..dim {
                 let rij = self.data[i * dim + j];
                 let rji = self.data[j * dim + i];
-                let conj_rji = cx_conj(rji);
+                let conj_rji = rji.conj();
                 if (rij.0 - conj_rji.0).abs() > tolerance || (rij.1 - conj_rji.1).abs() > tolerance {
                     return false;
                 }

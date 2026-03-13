@@ -8,6 +8,7 @@
 //! The concrete `SimulationBackend` lives in `cqam-sim`; future backends
 //! (QPU, cloud, etc.) will also implement this trait.
 
+use crate::complex::C64;
 use crate::error::CqamError;
 use crate::instruction::{DistId, KernelId, ObserveMode};
 
@@ -56,7 +57,7 @@ pub enum ObserveResult {
     /// Single probability value (for PROB mode).
     Prob(f64),
     /// Complex amplitude (for AMP mode).
-    Amp(f64, f64),
+    Amp(C64),
     /// Sampled measurement outcome (for SAMPLE mode).
     Sample(i64),
 }
@@ -98,8 +99,8 @@ pub enum KernelParams {
     },
     /// Complex context from Z-file (QKERNELZ).
     Complex {
-        param0: (f64, f64),
-        param1: (f64, f64),
+        param0: C64,
+        param1: C64,
     },
 }
 
@@ -144,7 +145,7 @@ pub trait QuantumBackend: Send {
     /// The amplitudes are (re, im) pairs. The backend must normalize.
     fn prep_from_amplitudes(
         &mut self,
-        amplitudes: &[(f64, f64)],
+        amplitudes: &[C64],
     ) -> Result<(QRegHandle, QOpResult), CqamError>;
 
     /// Prepare a mixed state from a weighted ensemble of statevectors.
@@ -154,7 +155,7 @@ pub trait QuantumBackend: Send {
     /// rho = sum_i w_i |psi_i><psi_i|.
     fn prep_mixed(
         &mut self,
-        ensemble: &[(f64, &[(f64, f64)])],
+        ensemble: &[(f64, &[C64])],
     ) -> Result<(QRegHandle, QOpResult), CqamError>;
 
     // =========================================================================
@@ -185,7 +186,7 @@ pub trait QuantumBackend: Send {
         &mut self,
         handle: QRegHandle,
         target_qubit: u8,
-        gate: &[(f64, f64); 4],
+        gate: &[C64; 4],
     ) -> Result<(QRegHandle, QOpResult), CqamError>;
 
     /// Apply a two-qubit gate (4x4 unitary) to specific qubit pair.
@@ -196,7 +197,7 @@ pub trait QuantumBackend: Send {
         handle: QRegHandle,
         qubit_a: u8,
         qubit_b: u8,
-        gate: &[(f64, f64); 16],
+        gate: &[C64; 16],
     ) -> Result<(QRegHandle, QOpResult), CqamError>;
 
     /// Apply a full-register custom unitary matrix.
@@ -207,7 +208,7 @@ pub trait QuantumBackend: Send {
     fn apply_custom_unitary(
         &mut self,
         handle: QRegHandle,
-        unitary: &[(f64, f64)],
+        unitary: &[C64],
         dim: usize,
     ) -> Result<(QRegHandle, QOpResult), CqamError>;
 
@@ -341,9 +342,9 @@ pub trait QuantumBackend: Send {
     fn diagonal_probabilities(&self, handle: QRegHandle) -> Result<Vec<f64>, CqamError>;
 
     /// Get a single matrix element rho[i][j] as (re, im).
-    fn get_element(&self, handle: QRegHandle, row: usize, col: usize) -> Result<(f64, f64), CqamError>;
+    fn get_element(&self, handle: QRegHandle, row: usize, col: usize) -> Result<C64, CqamError>;
 
     /// Get the amplitude of basis state `index` (only meaningful for pure states).
     /// For mixed states, returns (sqrt(p), 0.0).
-    fn amplitude(&self, handle: QRegHandle, index: usize) -> Result<(f64, f64), CqamError>;
+    fn amplitude(&self, handle: QRegHandle, index: usize) -> Result<C64, CqamError>;
 }

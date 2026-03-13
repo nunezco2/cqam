@@ -1,7 +1,7 @@
 //! Measurement methods for `DensityMatrix`.
 
 use super::DensityMatrix;
-use crate::complex::{self, cx_scale};
+use crate::complex::C64;
 use crate::constants::PAR_THRESHOLD;
 use rand::Rng;
 use rayon::prelude::*;
@@ -62,7 +62,7 @@ impl DensityMatrix {
         for i in 0..dim {
             for j in 0..dim {
                 if (i & mask) != outcome_bit || (j & mask) != outcome_bit {
-                    result.data[i * dim + j] = complex::ZERO;
+                    result.data[i * dim + j] = C64::ZERO;
                 }
             }
         }
@@ -71,7 +71,7 @@ impl DensityMatrix {
         if p_outcome > 1e-30 {
             let inv_p = 1.0 / p_outcome;
             for entry in result.data.iter_mut() {
-                *entry = cx_scale(inv_p, *entry);
+                *entry = entry.scale(inv_p);
             }
         }
 
@@ -105,9 +105,9 @@ impl DensityMatrix {
         let mut collapsed = DensityMatrix::new_zero_state(self.num_qubits);
         // Clear the default zero state and set the outcome
         for entry in collapsed.data.iter_mut() {
-            *entry = complex::ZERO;
+            *entry = C64::ZERO;
         }
-        collapsed.data[outcome * dim + outcome] = complex::ONE;
+        collapsed.data[outcome * dim + outcome] = C64::ONE;
 
         (outcome as u16, collapsed)
     }

@@ -34,6 +34,7 @@
 //! assert_eq!(word, 0x2B000000);
 //! ```
 
+pub mod complex;
 pub mod config;
 pub mod constants;
 pub mod error;

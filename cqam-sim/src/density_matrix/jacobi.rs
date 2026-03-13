@@ -1,6 +1,6 @@
 //! Jacobi eigenvalue decomposition for complex Hermitian matrices.
 
-use crate::complex::{C64, cx_add, cx_conj, cx_norm_sq, cx_scale, cx_mul};
+use crate::complex::C64;
 use crate::constants::PAR_THRESHOLD;
 use rayon::prelude::*;
 
@@ -33,7 +33,7 @@ pub(super) fn jacobi_eigenvalues(
                 let mut local_p = i;
                 let mut local_q = if i + 1 < dim { i + 1 } else { i };
                 for j in (i + 1)..dim {
-                    let mag = cx_norm_sq(matrix[i * dim + j]);
+                    let mag = matrix[i * dim + j].norm_sq();
                     if mag > local_max {
                         local_max = mag;
                         local_p = i;
@@ -48,7 +48,7 @@ pub(super) fn jacobi_eigenvalues(
             let mut q = 1;
             for i in 0..dim {
                 for j in (i + 1)..dim {
-                    let mag = cx_norm_sq(matrix[i * dim + j]);
+                    let mag = matrix[i * dim + j].norm_sq();
                     if mag > max_val {
                         max_val = mag;
                         p = i;
@@ -70,14 +70,14 @@ pub(super) fn jacobi_eigenvalues(
         let aqq = matrix[q * dim + q].0; // real (diagonal)
         let apq = matrix[p * dim + q];   // complex off-diagonal
 
-        let apq_mag = cx_norm_sq(apq).sqrt();
+        let apq_mag = apq.norm_sq().sqrt();
         if apq_mag < 1e-30 {
             continue;
         }
 
         // Phase factor: apq = |apq| * e^{i*phi}
-        let phase = (apq.0 / apq_mag, apq.1 / apq_mag); // e^{i*phi}
-        let phase_conj = cx_conj(phase);                  // e^{-i*phi}
+        let phase = C64(apq.0 / apq_mag, apq.1 / apq_mag); // e^{i*phi}
+        let phase_conj = phase.conj();                        // e^{-i*phi}
 
         // Now compute the 2x2 real Jacobi rotation for the matrix
         // [[app, |apq|], [|apq|, aqq]]
@@ -97,11 +97,11 @@ pub(super) fn jacobi_eigenvalues(
         // After rotation: A' = G^H A G
 
         // Update diagonal elements
-        matrix[p * dim + p] = (app - t * apq_mag, 0.0);
-        matrix[q * dim + q] = (aqq + t * apq_mag, 0.0);
+        matrix[p * dim + p] = C64(app - t * apq_mag, 0.0);
+        matrix[q * dim + q] = C64(aqq + t * apq_mag, 0.0);
         // Zero out (p,q) and (q,p)
-        matrix[p * dim + q] = (0.0, 0.0);
-        matrix[q * dim + p] = (0.0, 0.0);
+        matrix[p * dim + q] = C64::ZERO;
+        matrix[q * dim + p] = C64::ZERO;
 
         // Update the rest of rows/columns p and q
         if dim >= PAR_THRESHOLD {
@@ -110,21 +110,15 @@ pub(super) fn jacobi_eigenvalues(
                 .map(|r| {
                     let arp = matrix[r * dim + p];
                     let arq = matrix[r * dim + q];
-                    let new_rp = cx_add(
-                        cx_scale(c, arp),
-                        cx_scale(-s, cx_mul(phase_conj, arq)),
-                    );
-                    let new_rq = cx_add(
-                        cx_scale(s, cx_mul(phase, arp)),
-                        cx_scale(c, arq),
-                    );
+                    let new_rp = arp.scale(c) + (phase_conj * arq).scale(-s);
+                    let new_rq = (phase * arp).scale(s) + arq.scale(c);
                     (r, new_rp, new_rq)
                 }).collect();
             for (r, new_rp, new_rq) in updates {
                 matrix[r * dim + p] = new_rp;
                 matrix[r * dim + q] = new_rq;
-                matrix[p * dim + r] = cx_conj(new_rp);
-                matrix[q * dim + r] = cx_conj(new_rq);
+                matrix[p * dim + r] = new_rp.conj();
+                matrix[q * dim + r] = new_rq.conj();
             }
         } else {
             for r in 0..dim {
@@ -133,18 +127,12 @@ pub(super) fn jacobi_eigenvalues(
                 }
                 let arp = matrix[r * dim + p];
                 let arq = matrix[r * dim + q];
-                let new_rp = cx_add(
-                    cx_scale(c, arp),
-                    cx_scale(-s, cx_mul(phase_conj, arq)),
-                );
-                let new_rq = cx_add(
-                    cx_scale(s, cx_mul(phase, arp)),
-                    cx_scale(c, arq),
-                );
+                let new_rp = arp.scale(c) + (phase_conj * arq).scale(-s);
+                let new_rq = (phase * arp).scale(s) + arq.scale(c);
                 matrix[r * dim + p] = new_rp;
                 matrix[r * dim + q] = new_rq;
-                matrix[p * dim + r] = cx_conj(new_rp);
-                matrix[q * dim + r] = cx_conj(new_rq);
+                matrix[p * dim + r] = new_rp.conj();
+                matrix[q * dim + r] = new_rq.conj();
             }
         }
     }

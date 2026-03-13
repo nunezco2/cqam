@@ -1,6 +1,7 @@
 //! Tests for all quantum kernel implementations (Init, Entangle, Fourier,
 //! Diffuse, GroverIter) operating on `DensityMatrix`.
 
+use cqam_sim::complex::C64;
 use cqam_sim::density_matrix::DensityMatrix;
 use cqam_sim::kernels::init::Init;
 use cqam_sim::kernels::entangle::Entangle;
@@ -204,10 +205,10 @@ fn test_entangle_creates_bell() {
     let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
     // |+>|0> = (1/sqrt(2))(|00> + |10>)
     let psi = vec![
-        (inv_sqrt2, 0.0), // |00>
-        (0.0, 0.0),       // |01>
-        (inv_sqrt2, 0.0), // |10>
-        (0.0, 0.0),       // |11>
+        C64(inv_sqrt2, 0.0), // |00>
+        C64(0.0, 0.0),       // |01>
+        C64(inv_sqrt2, 0.0), // |10>
+        C64(0.0, 0.0),       // |11>
     ];
     let input = DensityMatrix::from_statevector(&psi).unwrap();
 
@@ -307,7 +308,7 @@ fn test_rotate_kernel_preserves_trace() {
 fn test_phase_shift_kernel_zero() {
     // amplitude=(0,0) -> |z|=0 -> U=I
     let input = DensityMatrix::new_uniform(2);
-    let ps = PhaseShift { amplitude: (0.0, 0.0) };
+    let ps = PhaseShift { amplitude: C64(0.0, 0.0) };
     let output = ps.apply(&input).unwrap();
 
     let probs_in = input.diagonal_probabilities();
@@ -325,7 +326,7 @@ fn test_phase_shift_kernel_zero() {
 fn test_phase_shift_kernel_real() {
     // amplitude=(1.0, 0.0) -> |z|=1.0 -> same as Rotate(1.0)
     let input = DensityMatrix::new_uniform(2);
-    let ps = PhaseShift { amplitude: (1.0, 0.0) };
+    let ps = PhaseShift { amplitude: C64(1.0, 0.0) };
     let rotate = Rotate { theta: 1.0 };
 
     let output_ps = ps.apply(&input).unwrap();
@@ -334,8 +335,8 @@ fn test_phase_shift_kernel_real() {
     let dim = input.dimension();
     for i in 0..dim {
         for j in 0..dim {
-            let (re_ps, im_ps) = output_ps.get(i, j);
-            let (re_rot, im_rot) = output_rot.get(i, j);
+            let C64(re_ps, im_ps) = output_ps.get(i, j);
+            let C64(re_rot, im_rot) = output_rot.get(i, j);
             assert!(
                 (re_ps - re_rot).abs() < 1e-10 && (im_ps - im_rot).abs() < 1e-10,
                 "PhaseShift(1.0, 0.0) should equal Rotate(1.0) at [{},{}]: ({},{}) vs ({},{})",
@@ -349,7 +350,7 @@ fn test_phase_shift_kernel_real() {
 fn test_phase_shift_kernel_preserves_unitarity() {
     // Purity should be preserved for any amplitude
     let input = DensityMatrix::new_uniform(2);
-    let ps = PhaseShift { amplitude: (0.7, 0.3) };
+    let ps = PhaseShift { amplitude: C64(0.7, 0.3) };
     let output = ps.apply(&input).unwrap();
 
     assert!(
@@ -447,8 +448,8 @@ fn test_rotate_large_theta_wraps() {
     let dim = input.dimension();
     for i in 0..dim {
         for j in 0..dim {
-            let (re_s, im_s) = out_small.get(i, j);
-            let (re_l, im_l) = out_large.get(i, j);
+            let C64(re_s, im_s) = out_small.get(i, j);
+            let C64(re_l, im_l) = out_large.get(i, j);
             assert!(
                 (re_s - re_l).abs() < 1e-6 && (im_s - im_l).abs() < 1e-6,
                 "Rotate({}) and Rotate({}) should agree at [{},{}]: ({},{}) vs ({},{})",
@@ -467,7 +468,7 @@ fn test_rotate_large_theta_wraps() {
 fn test_phase_shift_purely_imaginary() {
     // amplitude = (0, 3.0) -> |z| = 3.0 -> same as Rotate(3.0)
     let input = DensityMatrix::new_uniform(2);
-    let ps = PhaseShift { amplitude: (0.0, 3.0) };
+    let ps = PhaseShift { amplitude: C64(0.0, 3.0) };
     let rotate = Rotate { theta: 3.0 };
 
     let out_ps = ps.apply(&input).unwrap();
@@ -476,8 +477,8 @@ fn test_phase_shift_purely_imaginary() {
     let dim = input.dimension();
     for i in 0..dim {
         for j in 0..dim {
-            let (re_ps, im_ps) = out_ps.get(i, j);
-            let (re_rot, im_rot) = out_rot.get(i, j);
+            let C64(re_ps, im_ps) = out_ps.get(i, j);
+            let C64(re_rot, im_rot) = out_rot.get(i, j);
             assert!(
                 (re_ps - re_rot).abs() < 1e-10 && (im_ps - im_rot).abs() < 1e-10,
                 "PhaseShift(0, 3.0) should equal Rotate(3.0) at [{},{}]: ({},{}) vs ({},{})",
@@ -500,7 +501,7 @@ fn test_phase_shift_purely_imaginary() {
 #[test]
 fn test_phase_shift_preserves_trace() {
     let input = DensityMatrix::new_zero_state(2);
-    let ps = PhaseShift { amplitude: (2.0, -1.5) };
+    let ps = PhaseShift { amplitude: C64(2.0, -1.5) };
     let output = ps.apply(&input).unwrap();
 
     let tr = output.trace();
@@ -527,8 +528,8 @@ fn test_fourier_inv_is_inverse_of_fourier() {
     let dim = input.dimension();
     for i in 0..dim {
         for j in 0..dim {
-            let (re_in, im_in) = input.get(i, j);
-            let (re_rt, im_rt) = roundtrip.get(i, j);
+            let C64(re_in, im_in) = input.get(i, j);
+            let C64(re_rt, im_rt) = roundtrip.get(i, j);
             assert!(
                 (re_in - re_rt).abs() < 1e-9 && (im_in - im_rt).abs() < 1e-9,
                 "QFT then IQFT should recover input at [{},{}]: ({},{}) vs ({},{})",
@@ -638,8 +639,8 @@ fn test_grover_multi_target_backward_compat() {
     let dim = input.dimension();
     for i in 0..dim {
         for j in 0..dim {
-            let (re1, im1) = out1.get(i, j);
-            let (re2, im2) = out2.get(i, j);
+            let C64(re1, im1) = out1.get(i, j);
+            let C64(re2, im2) = out2.get(i, j);
             assert!(
                 (re1 - re2).abs() < 1e-12 && (im1 - im2).abs() < 1e-12,
                 "single() should match struct literal at [{},{}]",

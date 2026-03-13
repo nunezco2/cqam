@@ -12,7 +12,7 @@
 //! - theta = 2*pi/dim => primitive dim-th root of unity ramp.
 
 use cqam_core::error::CqamError;
-use crate::complex::{cx_exp_i, cx_mul};
+use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
 use crate::kernel::Kernel;
@@ -33,11 +33,11 @@ impl Kernel for Rotate {
     /// Apply the diagonal rotation: rho' = U rho U^dagger.
     ///
     /// Constructs U as a dim x dim diagonal matrix with
-    /// U[k][k] = cx_exp_i(self.theta * k), then delegates to
-    /// DensityMatrix::apply_unitary.
+    /// U[k][k] = C64::exp_i(self.theta * k), then delegates to
+    /// DensityMatrix::apply_diagonal_unitary.
     fn apply(&self, input: &DensityMatrix) -> Result<DensityMatrix, CqamError> {
         let dim = input.dimension();
-        let phases: Vec<_> = (0..dim).map(|k| cx_exp_i(self.theta * (k as f64))).collect();
+        let phases: Vec<_> = (0..dim).map(|k| C64::exp_i(self.theta * (k as f64))).collect();
         let mut result = input.clone();
         result.apply_diagonal_unitary(&phases);
         Ok(result)
@@ -49,13 +49,13 @@ impl Kernel for Rotate {
         let theta = self.theta;
         let result_amps: Vec<_> = if dim >= PAR_THRESHOLD {
             amps.par_iter().enumerate().map(|(k, &amp)| {
-                let phase = cx_exp_i(theta * (k as f64));
-                cx_mul(phase, amp)
+                let phase = C64::exp_i(theta * (k as f64));
+                phase * amp
             }).collect()
         } else {
             amps.iter().enumerate().map(|(k, &amp)| {
-                let phase = cx_exp_i(theta * (k as f64));
-                cx_mul(phase, amp)
+                let phase = C64::exp_i(theta * (k as f64));
+                phase * amp
             }).collect()
         };
         Ok(Statevector::from_amplitudes(result_amps)
