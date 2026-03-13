@@ -34,8 +34,11 @@
 //! assert_eq!(word, 0x2B000000);
 //! ```
 
+pub mod config;
+pub mod constants;
 pub mod error;
 pub mod instruction;
+pub mod quantum_backend;
 pub mod quantum_state;
 pub mod register;
 pub mod memory;

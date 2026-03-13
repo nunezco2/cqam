@@ -9,7 +9,6 @@ license = "MIT"
 [dependencies]
 cqam-core = { path = "../cqam-core" }
 cqam-codegen = { path = "../cqam-codegen" }
-cqam-vm = { path = "../cqam-vm" }
 
 [[bin]]
 name = "cqam2qasm"

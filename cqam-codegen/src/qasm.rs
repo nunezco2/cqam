@@ -8,7 +8,7 @@
 use std::collections::BTreeSet;
 use std::fs;
 use std::path::Path;
-use cqam_core::instruction::{Instruction, dist_name, file_sel_name, kernel_name, flag_name, reduce_fn_name, rot_axis_name};
+use cqam_core::instruction::{Instruction, FileSel, KernelId, ReduceFn, RotAxis, ObserveMode, ProcId};
 
 // ---------------------------------------------------------------------------
 // Types
@@ -89,7 +89,7 @@ pub struct UsedRegisters {
     /// Whether any instruction accesses QMEM (QLoad, QStore).
     pub uses_qmem: bool,
     /// Set of kernel IDs referenced by QKernel instructions.
-    pub kernel_ids: BTreeSet<u8>,
+    pub kernel_ids: BTreeSet<KernelId>,
     /// Label names in program order (from Label instructions).
     pub labels: Vec<String>,
 }
@@ -337,8 +337,7 @@ impl QasmFormat for Instruction {
             }
 
             Instruction::Ecall { proc_id } => {
-                let name = cqam_core::instruction::proc_id_name(*proc_id);
-                vec![format!("// ECALL {} (host I/O)", name)]
+                vec![format!("// ECALL {} (host I/O)", proc_id.name())]
             }
 
             // -- Control flow ------------------------------------------------
@@ -364,11 +363,11 @@ impl QasmFormat for Instruction {
             Instruction::QPrep { dst, dist } => {
                 vec![
                     format!("reset q{};", dst),
-                    format!("// QPrep: initialize q{} with distribution '{}'", dst, dist_name(*dist)),
+                    format!("// QPrep: initialize q{} with distribution '{}'", dst, dist.name()),
                 ]
             }
             Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
-                let kname = kernel_name(*kernel);
+                let kname = kernel.name();
                 let header = format!(
                     "// QKernel: q{} = {}(q{}, ctx=[R{}, R{}])",
                     dst, kname, src, ctx0, ctx1
@@ -398,14 +397,14 @@ impl QasmFormat for Instruction {
                 }
             }
             Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
-                let kname = kernel_name(*kernel);
+                let kname = kernel.name();
                 vec![format!(
                     "// QKernelF: q{} = {}(q{}, ctx=[F{}, F{}])",
                     dst, kname, src, fctx0, fctx1
                 )]
             }
             Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
-                let kname = kernel_name(*kernel);
+                let kname = kernel.name();
                 vec![format!(
                     "// QKernelZ: q{} = {}(q{}, ctx=[Z{}, Z{}])",
                     dst, kname, src, zctx0, zctx1
@@ -413,18 +412,18 @@ impl QasmFormat for Instruction {
             }
             Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
                 match *mode {
-                    0 => vec![format!("H{} = measure q{};", dst_h, src_q)],
-                    1 => vec![format!("// @cqam.observe_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
-                    2 => vec![format!("// @cqam.observe_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
-                    _ => vec![format!("// @cqam.observe H{} = observe(q{}, mode={});", dst_h, src_q, mode)],
+                    ObserveMode::Dist => vec![format!("H{} = measure q{};", dst_h, src_q)],
+                    ObserveMode::Prob => vec![format!("// @cqam.observe_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
+                    ObserveMode::Amp => vec![format!("// @cqam.observe_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
+                    ObserveMode::Sample => vec![format!("// @cqam.observe H{} = observe(q{}, mode={});", dst_h, src_q, mode)],
                 }
             }
             Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
                 match *mode {
-                    0 => vec![format!("// @cqam.qsample H{} = sample(q{});", dst_h, src_q)],
-                    1 => vec![format!("// @cqam.qsample_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
-                    2 => vec![format!("// @cqam.qsample_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
-                    _ => vec![format!("// @cqam.qsample H{} = sample(q{}, mode={});", dst_h, src_q, mode)],
+                    ObserveMode::Dist => vec![format!("// @cqam.qsample H{} = sample(q{});", dst_h, src_q)],
+                    ObserveMode::Prob => vec![format!("// @cqam.qsample_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
+                    ObserveMode::Amp => vec![format!("// @cqam.qsample_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
+                    ObserveMode::Sample => vec![format!("// @cqam.qsample H{} = sample(q{}, mode={});", dst_h, src_q, mode)],
                 }
             }
             Instruction::QLoad { dst_q, addr } => {
@@ -459,15 +458,14 @@ impl QasmFormat for Instruction {
             }
             Instruction::QRot { dst, src: _, qubit_reg, axis, angle_freg } => {
                 let gate_name = match *axis {
-                    0 => "rx",
-                    1 => "ry",
-                    2 => "rz",
-                    _ => "r_unknown",
+                    RotAxis::X => "rx",
+                    RotAxis::Y => "ry",
+                    RotAxis::Z => "rz",
                 };
                 vec![format!(
                     "{}(F{}) q{}[R{}]; // QROT axis={} angle=F{}",
                     gate_name, angle_freg, dst, qubit_reg,
-                    rot_axis_name(*axis), angle_freg
+                    axis.name(), angle_freg
                 )]
             }
             Instruction::QMeas { dst_r, src_q, qubit_reg } => {
@@ -504,7 +502,7 @@ impl QasmFormat for Instruction {
                 vec![format!("// @cqam.qprepr Q{} = prep(R[{}]);", dst, dist_reg)]
             }
             Instruction::QEncode { dst, src_base, count, file_sel } => {
-                let file = file_sel_name(*file_sel);
+                let file = file_sel.name();
                 vec![format!(
                     "// @cqam.qencode Q{} = encode({}, base={}, count={});",
                     dst, file, src_base, count
@@ -522,7 +520,7 @@ impl QasmFormat for Instruction {
             Instruction::QPrepN { dst, dist, qubit_count_reg } => {
                 vec![format!(
                     "// @cqam.qprepn Q{} = prep(dist={}, qubits=R{})",
-                    dst, dist_name(*dist), qubit_count_reg
+                    dst, dist.name(), qubit_count_reg
                 )]
             }
             Instruction::FSin { dst, src } => {
@@ -561,12 +559,12 @@ impl QasmFormat for Instruction {
             Instruction::JmpF { flag, target } => {
                 vec![format!(
                     "// @cqam.jmpf: if PSW.{} goto {}",
-                    flag_name(*flag), target
+                    flag.mnemonic(), target
                 )]
             }
             Instruction::HReduce { src, dst, func } => {
                 let dst_file = hreduce_dst_file(*func);
-                let fname = reduce_fn_name(*func);
+                let fname = func.name();
                 vec![format!(
                     "// @cqam.hreduce: {}{} = {}(H{})",
                     dst_file, dst, fname, src
@@ -795,12 +793,11 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
 
         // -- Environment call: reads registers per calling convention --
         Instruction::Ecall { proc_id } => {
-            use cqam_core::instruction::proc_id as pid;
             match *proc_id {
-                pid::PRINT_INT | pid::PRINT_CHAR => { used.int_regs.insert(0); }
-                pid::PRINT_FLOAT => { used.float_regs.insert(0); }
-                pid::PRINT_STR => { used.int_regs.insert(0); used.int_regs.insert(1); }
-                _ => {}
+                ProcId::PrintInt | ProcId::PrintChar => { used.int_regs.insert(0); }
+                ProcId::PrintFloat => { used.float_regs.insert(0); }
+                ProcId::PrintStr => { used.int_regs.insert(0); used.int_regs.insert(1); }
+                ProcId::DumpRegs => {}
             }
         }
 
@@ -839,14 +836,14 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
             used.quantum_regs.insert(*src_q);
             used.hybrid_regs.insert(*dst_h);
-            if *mode >= 1 { used.int_regs.insert(*ctx0); }
-            if *mode >= 2 { used.int_regs.insert(*ctx1); }
+            if matches!(mode, ObserveMode::Prob | ObserveMode::Amp | ObserveMode::Sample) { used.int_regs.insert(*ctx0); }
+            if matches!(mode, ObserveMode::Amp) { used.int_regs.insert(*ctx1); }
         }
         Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
             used.quantum_regs.insert(*src_q);
             used.hybrid_regs.insert(*dst_h);
-            if *mode >= 1 { used.int_regs.insert(*ctx0); }
-            if *mode >= 2 { used.int_regs.insert(*ctx1); }
+            if matches!(mode, ObserveMode::Prob | ObserveMode::Amp | ObserveMode::Sample) { used.int_regs.insert(*ctx0); }
+            if matches!(mode, ObserveMode::Amp) { used.int_regs.insert(*ctx1); }
         }
         Instruction::QLoad { dst_q, .. } => {
             used.quantum_regs.insert(*dst_q);
@@ -911,16 +908,15 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.quantum_regs.insert(*dst);
             let n = *count;
             match *file_sel {
-                0 => {
+                FileSel::RFile => {
                     for i in 0..n { used.int_regs.insert(*src_base + i); }
                 }
-                1 => {
+                FileSel::FFile => {
                     for i in 0..n { used.float_regs.insert(*src_base + i); }
                 }
-                2 => {
+                FileSel::ZFile => {
                     for i in 0..n { used.complex_regs.insert(*src_base + i); }
                 }
-                _ => {}
             }
         }
 
@@ -962,15 +958,21 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         Instruction::JmpF { .. } => {}
         Instruction::HReduce { src, dst, func } => {
             used.hybrid_regs.insert(*src);
-            match *func {
-                0..=5 => { used.int_regs.insert(*dst); }
-                14..=15 => { used.complex_regs.insert(*dst); }
-                16 => {
+            match func.output_file() {
+                cqam_core::instruction::ReduceOutput::IntReg => {
                     used.int_regs.insert(*dst);
-                    used.float_regs.insert(*dst);
-                    used.uses_cmem = true;
                 }
-                _ => { used.float_regs.insert(*dst); }
+                cqam_core::instruction::ReduceOutput::FloatReg => {
+                    used.float_regs.insert(*dst);
+                }
+                cqam_core::instruction::ReduceOutput::ComplexReg => {
+                    used.complex_regs.insert(*dst);
+                }
+            }
+            if *func == ReduceFn::Expect {
+                // EXPECT also reads int reg for base_addr and writes float reg
+                used.int_regs.insert(*dst);
+                used.uses_cmem = true;
             }
         }
 
@@ -1070,7 +1072,7 @@ pub fn emit_kernel_stubs(
 
     let mut lines: Vec<String> = Vec::new();
     for &kid in &used.kernel_ids {
-        let kname = kernel_name(kid);
+        let kname = kid.name();
         lines.push(format!("gate {} q {{", kname));
         match load_gate_template(&config.template_dir, kname) {
             Some(body) => {
@@ -1199,11 +1201,11 @@ pub fn emit_qasm_program(
 /// Returns "R" for int-producing reduction functions (func 0-5),
 /// "Z" for complex-to-Z reductions (func 14-15),
 /// "F" for float-producing reduction functions (func 6-13).
-fn hreduce_dst_file(func: u8) -> &'static str {
-    match func {
-        0..=5 => "R",
-        14..=15 => "Z",
-        _ => "F",
+fn hreduce_dst_file(func: ReduceFn) -> &'static str {
+    match func.output_file() {
+        cqam_core::instruction::ReduceOutput::IntReg => "R",
+        cqam_core::instruction::ReduceOutput::FloatReg => "F",
+        cqam_core::instruction::ReduceOutput::ComplexReg => "Z",
     }
 }
 

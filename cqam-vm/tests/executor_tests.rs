@@ -4,6 +4,7 @@ use cqam_core::instruction::Instruction;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
+use cqam_sim::backend::SimulationBackend;
 
 // ===========================================================================
 // Integer arithmetic
@@ -14,14 +15,15 @@ fn test_iadd_and_isub() {
     let program = vec![];
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
-    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 0, imm: 2 }, &mut fm).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 1, imm: 3 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 0, imm: 2 }, &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 1, imm: 3 }, &mut fm, &mut backend).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 5);
 
-    execute_instruction(&mut ctx, &Instruction::ISub { dst: 3, lhs: 1, rhs: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ISub { dst: 3, lhs: 1, rhs: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(3).unwrap(), 1);
 }
 
@@ -29,9 +31,10 @@ fn test_iadd_and_isub() {
 fn test_imul() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 6).unwrap();
     ctx.iregs.set(1, 7).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 42);
 }
 
@@ -39,13 +42,14 @@ fn test_imul() {
 fn test_idiv_and_imod() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 17).unwrap();
     ctx.iregs.set(1, 5).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 3);
 
-    execute_instruction(&mut ctx, &Instruction::IMod { dst: 3, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMod { dst: 3, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(3).unwrap(), 2);
 }
 
@@ -53,9 +57,10 @@ fn test_idiv_and_imod() {
 fn test_idiv_by_zero_sets_trap_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, 0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(2).unwrap(), 0); // safe default
 }
@@ -64,9 +69,10 @@ fn test_idiv_by_zero_sets_trap_flag() {
 fn test_imod_by_zero_sets_trap_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, 0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(2).unwrap(), 0);
 }
@@ -79,16 +85,17 @@ fn test_imod_by_zero_sets_trap_flag() {
 fn test_iand_ior_ixor() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 0b1100).unwrap();
     ctx.iregs.set(1, 0b1010).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::IAnd { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAnd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 0b1000);
 
-    execute_instruction(&mut ctx, &Instruction::IOr { dst: 3, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IOr { dst: 3, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(3).unwrap(), 0b1110);
 
-    execute_instruction(&mut ctx, &Instruction::IXor { dst: 4, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IXor { dst: 4, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(4).unwrap(), 0b0110);
 }
 
@@ -96,8 +103,9 @@ fn test_iand_ior_ixor() {
 fn test_inot() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::INot { dst: 1, src: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::INot { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), -1);
 }
 
@@ -105,12 +113,13 @@ fn test_inot() {
 fn test_ishl_ishr() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 1).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 3 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 3 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), 8);
 
-    execute_instruction(&mut ctx, &Instruction::IShr { dst: 2, src: 1, amt: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShr { dst: 2, src: 1, amt: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 4);
 }
 
@@ -122,7 +131,8 @@ fn test_ishl_ishr() {
 fn test_ildi() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 0, imm: 42 }, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 0, imm: 42 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 42);
 }
 
@@ -130,7 +140,8 @@ fn test_ildi() {
 fn test_ildi_negative() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 0, imm: -32768 }, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    execute_instruction(&mut ctx, &Instruction::ILdi { dst: 0, imm: -32768 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), -32768);
 }
 
@@ -138,9 +149,10 @@ fn test_ildi_negative() {
 fn test_ildm_and_istr() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 99).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IStr { src: 0, addr: 500 }, &mut fm).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ILdm { dst: 1, addr: 500 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStr { src: 0, addr: 500 }, &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdm { dst: 1, addr: 500 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), 99);
 }
 
@@ -152,14 +164,15 @@ fn test_ildm_and_istr() {
 fn test_ieq() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 5).unwrap();
     ctx.iregs.set(1, 5).unwrap();
     ctx.iregs.set(2, 3).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::IEq { dst: 3, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IEq { dst: 3, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(3).unwrap(), 1);
 
-    execute_instruction(&mut ctx, &Instruction::IEq { dst: 3, lhs: 0, rhs: 2 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IEq { dst: 3, lhs: 0, rhs: 2 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(3).unwrap(), 0);
 }
 
@@ -167,13 +180,14 @@ fn test_ieq() {
 fn test_ilt_igt() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 3).unwrap();
     ctx.iregs.set(1, 5).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::ILt { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILt { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 1);
 
-    execute_instruction(&mut ctx, &Instruction::IGt { dst: 3, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IGt { dst: 3, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(3).unwrap(), 0);
 }
 
@@ -185,13 +199,14 @@ fn test_ilt_igt() {
 fn test_fadd_fsub() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 1.5).unwrap();
     ctx.fregs.set(1, 2.5).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::FAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(2).unwrap() - 4.0).abs() < 1e-10);
 
-    execute_instruction(&mut ctx, &Instruction::FSub { dst: 3, lhs: 1, rhs: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSub { dst: 3, lhs: 1, rhs: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(3).unwrap() - 1.0).abs() < 1e-10);
 }
 
@@ -199,13 +214,14 @@ fn test_fadd_fsub() {
 fn test_fmul_fdiv() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 3.0).unwrap();
     ctx.fregs.set(1, 4.0).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::FMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(2).unwrap() - 12.0).abs() < 1e-10);
 
-    execute_instruction(&mut ctx, &Instruction::FDiv { dst: 3, lhs: 1, rhs: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FDiv { dst: 3, lhs: 1, rhs: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(3).unwrap() - (4.0 / 3.0)).abs() < 1e-10);
 }
 
@@ -213,9 +229,10 @@ fn test_fmul_fdiv() {
 fn test_fdiv_by_zero_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 1.0).unwrap();
     ctx.fregs.set(1, 0.0).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::FDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::FDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -227,13 +244,14 @@ fn test_fdiv_by_zero_returns_error() {
 fn test_zadd_zsub() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (1.0, 2.0)).unwrap();
     ctx.zregs.set(1, (3.0, 4.0)).unwrap();
 
-    execute_instruction(&mut ctx, &Instruction::ZAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.zregs.get(2).unwrap(), (4.0, 6.0));
 
-    execute_instruction(&mut ctx, &Instruction::ZSub { dst: 3, lhs: 1, rhs: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZSub { dst: 3, lhs: 1, rhs: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.zregs.get(3).unwrap(), (2.0, 2.0));
 }
 
@@ -241,9 +259,10 @@ fn test_zadd_zsub() {
 fn test_zmul() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (1.0, 2.0)).unwrap();
     ctx.zregs.set(1, (3.0, 4.0)).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     let (re, im) = ctx.zregs.get(2).unwrap();
     assert!((re - (-5.0)).abs() < 1e-10);
     assert!((im - 10.0).abs() < 1e-10);
@@ -253,9 +272,10 @@ fn test_zmul() {
 fn test_zdiv_by_zero_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (1.0, 2.0)).unwrap();
     ctx.zregs.set(1, (0.0, 0.0)).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ZDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ZDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -267,8 +287,9 @@ fn test_zdiv_by_zero_returns_error() {
 fn test_cvtif() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 42).unwrap();
-    execute_instruction(&mut ctx, &Instruction::CvtIF { dst_f: 0, src_i: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::CvtIF { dst_f: 0, src_i: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(0).unwrap() - 42.0).abs() < 1e-10);
 }
 
@@ -276,8 +297,9 @@ fn test_cvtif() {
 fn test_cvtfi() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 3.7).unwrap();
-    execute_instruction(&mut ctx, &Instruction::CvtFI { dst_i: 0, src_f: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::CvtFI { dst_i: 0, src_f: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 3);
 }
 
@@ -285,8 +307,9 @@ fn test_cvtfi() {
 fn test_cvtfz() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 5.0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::CvtFZ { dst_z: 0, src_f: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::CvtFZ { dst_z: 0, src_f: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.zregs.get(0).unwrap(), (5.0, 0.0));
 }
 
@@ -294,8 +317,9 @@ fn test_cvtfz() {
 fn test_cvtzf() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (3.125, 2.625)).unwrap();
-    execute_instruction(&mut ctx, &Instruction::CvtZF { dst_f: 0, src_z: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::CvtZF { dst_f: 0, src_z: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(0).unwrap() - 3.125).abs() < 1e-10);
 }
 
@@ -307,8 +331,9 @@ fn test_cvtzf() {
 fn test_iqcfg_loads_qubit_count() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 4;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 4);
     assert!(!ctx.psw.trap_arith);
     assert!(!ctx.psw.zf);
@@ -319,8 +344,9 @@ fn test_iqcfg_loads_qubit_count() {
 fn test_iqcfg_traps_on_zero() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 0;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(0).unwrap(), 0);
 }
@@ -329,9 +355,11 @@ fn test_iqcfg_traps_on_zero() {
 fn test_iqcfg_traps_on_exceeds_dm_max() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 17;
     ctx.config.force_density_matrix = true;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    backend.set_force_density_matrix(true);
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(0).unwrap(), 0);
 }
@@ -340,9 +368,10 @@ fn test_iqcfg_traps_on_exceeds_dm_max() {
 fn test_iqcfg_allows_sv_above_dm_max() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 20;
     ctx.config.force_density_matrix = false;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm, &mut backend).unwrap();
     assert!(!ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(0).unwrap(), 20);
 }
@@ -351,9 +380,10 @@ fn test_iqcfg_allows_sv_above_dm_max() {
 fn test_iqcfg_traps_on_exceeds_sv_max() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 25; // > MAX_SV_QUBITS (24)
     ctx.config.force_density_matrix = false;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 0 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(0).unwrap(), 0);
 }
@@ -362,9 +392,11 @@ fn test_iqcfg_traps_on_exceeds_sv_max() {
 fn test_iqcfg_boundary_dm_max() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 16; // exactly MAX_QUBITS
     ctx.config.force_density_matrix = true;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 5 }, &mut fm).unwrap();
+    backend.set_force_density_matrix(true);
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 5 }, &mut fm, &mut backend).unwrap();
     assert!(!ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(5).unwrap(), 16);
 }
@@ -373,9 +405,10 @@ fn test_iqcfg_boundary_dm_max() {
 fn test_iqcfg_boundary_sv_max() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.config.default_qubits = 24; // exactly MAX_SV_QUBITS
     ctx.config.force_density_matrix = false;
-    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 3 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IQCfg { dst: 3 }, &mut fm, &mut backend).unwrap();
     assert!(!ctx.psw.trap_arith);
     assert_eq!(ctx.iregs.get(3).unwrap(), 24);
 }
@@ -394,8 +427,9 @@ fn test_jmp() {
     ];
     let mut ctx = ExecutionContext::new(program.clone());
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
-    execute_instruction(&mut ctx, &program[0], &mut fm).unwrap();
+    execute_instruction(&mut ctx, &program[0], &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.pc, 2);
 }
 
@@ -407,10 +441,11 @@ fn test_jif_taken() {
     ];
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 1).unwrap();
     ctx.pc = 0;
 
-    execute_instruction(&mut ctx, &Instruction::Jif { pred: 0, target: "TARGET".into() }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::Jif { pred: 0, target: "TARGET".into() }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.pc, 0);
 }
 
@@ -422,10 +457,11 @@ fn test_jif_not_taken() {
     ];
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 0).unwrap();
     ctx.pc = 0;
 
-    execute_instruction(&mut ctx, &Instruction::Jif { pred: 0, target: "TARGET".into() }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::Jif { pred: 0, target: "TARGET".into() }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.pc, 1);
 }
 
@@ -440,16 +476,17 @@ fn test_call_and_ret() {
     ];
     let mut ctx = ExecutionContext::new(program.clone());
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
-    execute_instruction(&mut ctx, &program[0], &mut fm).unwrap();
+    execute_instruction(&mut ctx, &program[0], &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.pc, 2);
     assert_eq!(ctx.call_stack.len(), 1);
 
     ctx.advance_pc();
-    execute_instruction(&mut ctx, &program[3], &mut fm).unwrap();
+    execute_instruction(&mut ctx, &program[3], &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 42);
 
-    execute_instruction(&mut ctx, &Instruction::Ret, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::Ret, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.pc, 1);
     assert_eq!(ctx.call_stack.len(), 0);
 }
@@ -458,7 +495,8 @@ fn test_call_and_ret() {
 fn test_halt_sets_trap() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    execute_instruction(&mut ctx, &Instruction::Halt, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    execute_instruction(&mut ctx, &Instruction::Halt, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_halt);
 }
 
@@ -466,7 +504,8 @@ fn test_halt_sets_trap() {
 fn test_ret_empty_stack_halts() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    execute_instruction(&mut ctx, &Instruction::Ret, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    execute_instruction(&mut ctx, &Instruction::Ret, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.trap_halt);
 }
 
@@ -478,9 +517,10 @@ fn test_ret_empty_stack_halts() {
 fn test_arithmetic_sets_zero_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 5).unwrap();
     ctx.iregs.set(1, 5).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.zf);
 }
 
@@ -488,9 +528,10 @@ fn test_arithmetic_sets_zero_flag() {
 fn test_arithmetic_sets_negative_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 3).unwrap();
     ctx.iregs.set(1, 5).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.nf);
 }
 
@@ -508,7 +549,8 @@ fn test_run_program_simple() {
     ];
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 30);
     assert!(ctx.psw.trap_halt);
 }
@@ -529,7 +571,8 @@ fn test_run_program_with_loop() {
     ];
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 3);
     assert!(ctx.psw.trap_halt);
 }
@@ -542,9 +585,10 @@ fn test_run_program_with_loop() {
 fn test_ishl_amt_64_does_not_panic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 1).unwrap();
     // amt=64 is clamped to 63; 1 << 63 = i64::MIN
-    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 64 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 64 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), i64::MIN);
 }
 
@@ -554,9 +598,10 @@ fn test_ishl_amt_64_does_not_panic() {
 fn test_ildx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.cmem.store(100, 42);
     ctx.iregs.set(1, 100).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 42);
 }
 
@@ -564,9 +609,10 @@ fn test_ildx_basic() {
 fn test_istrx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, 200).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.cmem.load(200), 42);
 }
 
@@ -574,10 +620,11 @@ fn test_istrx_basic() {
 fn test_fldx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let val: f64 = 3.15;
     ctx.cmem.store(50, val.to_bits() as i64);
     ctx.iregs.set(1, 50).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(0).unwrap() - 3.15).abs() < 1e-10);
 }
 
@@ -585,9 +632,10 @@ fn test_fldx_basic() {
 fn test_fstrx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 3.15).unwrap();
     ctx.iregs.set(1, 60).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     let stored = f64::from_bits(ctx.cmem.load(60) as u64);
     assert!((stored - 3.15).abs() < 1e-10);
 }
@@ -596,12 +644,13 @@ fn test_fstrx_basic() {
 fn test_zldx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let re: f64 = 1.5;
     let im: f64 = 2.5;
     ctx.cmem.store(80, re.to_bits() as i64);
     ctx.cmem.store(81, im.to_bits() as i64);
     ctx.iregs.set(1, 80).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     let (got_re, got_im) = ctx.zregs.get(0).unwrap();
     assert!((got_re - 1.5).abs() < 1e-10);
     assert!((got_im - 2.5).abs() < 1e-10);
@@ -611,9 +660,10 @@ fn test_zldx_basic() {
 fn test_zstrx_basic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (1.0, 2.0)).unwrap();
     ctx.iregs.set(1, 90).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     let re = f64::from_bits(ctx.cmem.load(90) as u64);
     let im = f64::from_bits(ctx.cmem.load(91) as u64);
     assert!((re - 1.0).abs() < 1e-10);
@@ -624,10 +674,11 @@ fn test_zstrx_basic() {
 fn test_ildx_istrx_roundtrip() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 9999).unwrap();
     ctx.iregs.set(1, 300).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 2, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 2, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), 9999);
 }
 
@@ -635,10 +686,11 @@ fn test_ildx_istrx_roundtrip() {
 fn test_fldx_fstrx_roundtrip() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, std::f64::consts::E).unwrap();
     ctx.iregs.set(1, 400).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 2, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 2, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(2).unwrap() - std::f64::consts::E).abs() < 1e-15);
 }
 
@@ -646,10 +698,11 @@ fn test_fldx_fstrx_roundtrip() {
 fn test_zldx_zstrx_roundtrip() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (-3.7, 4.2)).unwrap();
     ctx.iregs.set(1, 500).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 2, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 2, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     let (re, im) = ctx.zregs.get(2).unwrap();
     assert!((re - (-3.7)).abs() < 1e-15);
     assert!((im - 4.2).abs() < 1e-15);
@@ -661,8 +714,9 @@ fn test_zldx_zstrx_roundtrip() {
 fn test_ildx_negative_address_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(1, -1).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
     assert!(msg.contains("Address out of range"), "Error message: {}", msg);
@@ -673,9 +727,10 @@ fn test_ildx_negative_address_returns_error() {
 fn test_istrx_negative_address_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, -5).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -683,8 +738,9 @@ fn test_istrx_negative_address_returns_error() {
 fn test_fldx_negative_address_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(1, -100).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -692,9 +748,10 @@ fn test_fldx_negative_address_returns_error() {
 fn test_fstrx_negative_address_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 1.0).unwrap();
     ctx.iregs.set(1, -1).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -702,8 +759,9 @@ fn test_fstrx_negative_address_returns_error() {
 fn test_zldx_negative_address_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(1, -1).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -711,9 +769,10 @@ fn test_zldx_negative_address_returns_error() {
 fn test_zstrx_negative_address_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (1.0, 2.0)).unwrap();
     ctx.iregs.set(1, -1).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -723,8 +782,9 @@ fn test_zstrx_negative_address_returns_error() {
 fn test_ildx_address_too_large_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(1, 70000).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
     assert!(msg.contains("Address out of range"), "Error message: {}", msg);
@@ -734,9 +794,10 @@ fn test_ildx_address_too_large_returns_error() {
 fn test_istrx_address_too_large_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 42).unwrap();
     ctx.iregs.set(1, 0x10000).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -744,9 +805,10 @@ fn test_istrx_address_too_large_returns_error() {
 fn test_fstrx_address_too_large_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 1.0).unwrap();
     ctx.iregs.set(1, 70000).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::FStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -756,8 +818,9 @@ fn test_fstrx_address_too_large_returns_error() {
 fn test_zldx_address_65535_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(1, 65535).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
     assert!(msg.contains("ZLDX"), "Error message should mention ZLDX: {}", msg);
@@ -767,9 +830,10 @@ fn test_zldx_address_65535_returns_error() {
 fn test_zstrx_address_65535_returns_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (1.0, 2.0)).unwrap();
     ctx.iregs.set(1, 65535).unwrap();
-    let result = execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm);
+    let result = execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -779,9 +843,10 @@ fn test_zstrx_address_65535_returns_error() {
 fn test_ildx_address_65535_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.cmem.store(65535, 77);
     ctx.iregs.set(1, 65535).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 77);
 }
 
@@ -789,9 +854,10 @@ fn test_ildx_address_65535_succeeds() {
 fn test_istrx_address_65535_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 88).unwrap();
     ctx.iregs.set(1, 65535).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.cmem.load(65535), 88);
 }
 
@@ -799,10 +865,11 @@ fn test_istrx_address_65535_succeeds() {
 fn test_fldx_address_65535_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let val: f64 = 2.719;
     ctx.cmem.store(65535, val.to_bits() as i64);
     ctx.iregs.set(1, 65535).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(0).unwrap() - 2.719).abs() < 1e-10);
 }
 
@@ -810,12 +877,13 @@ fn test_fldx_address_65535_succeeds() {
 fn test_zldx_address_65534_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let re: f64 = 5.0;
     let im: f64 = 6.0;
     ctx.cmem.store(65534, re.to_bits() as i64);
     ctx.cmem.store(65535, im.to_bits() as i64);
     ctx.iregs.set(1, 65534).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     let (got_re, got_im) = ctx.zregs.get(0).unwrap();
     assert!((got_re - 5.0).abs() < 1e-10);
     assert!((got_im - 6.0).abs() < 1e-10);
@@ -825,9 +893,10 @@ fn test_zldx_address_65534_succeeds() {
 fn test_zstrx_address_65534_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.zregs.set(0, (7.0, 8.0)).unwrap();
     ctx.iregs.set(1, 65534).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZStrx { src: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     let re = f64::from_bits(ctx.cmem.load(65534) as u64);
     let im = f64::from_bits(ctx.cmem.load(65535) as u64);
     assert!((re - 7.0).abs() < 1e-10);
@@ -840,9 +909,10 @@ fn test_zstrx_address_65534_succeeds() {
 fn test_ildx_address_zero_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.cmem.store(0, 123);
     ctx.iregs.set(1, 0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(0).unwrap(), 123);
 }
 
@@ -850,10 +920,11 @@ fn test_ildx_address_zero_succeeds() {
 fn test_zldx_address_zero_succeeds() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.cmem.store(0, 1.0_f64.to_bits() as i64);
     ctx.cmem.store(1, 2.0_f64.to_bits() as i64);
     ctx.iregs.set(1, 0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ZLdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.zregs.get(0).unwrap(), (1.0, 2.0));
 }
 
@@ -865,9 +936,10 @@ fn test_zldx_address_zero_succeeds() {
 fn test_ishr_amt_64_does_not_panic() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, i64::MIN).unwrap();
     // amt=64 is clamped to 63; i64::MIN >> 63 = -1 (arithmetic shift)
-    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 64 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 64 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), -1);
 }
 
@@ -877,8 +949,9 @@ fn test_ishr_amt_64_does_not_panic() {
 fn test_ishl_amt_zero() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 0xFF).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), 0xFF);
 }
 
@@ -886,8 +959,9 @@ fn test_ishl_amt_zero() {
 fn test_ishr_amt_zero() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 0xFF).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 0 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), 0xFF);
 }
 
@@ -895,8 +969,9 @@ fn test_ishr_amt_zero() {
 fn test_ishl_amt_63() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, 1).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 63 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShl { dst: 1, src: 0, amt: 63 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), i64::MIN);
 }
 
@@ -904,8 +979,9 @@ fn test_ishl_amt_63() {
 fn test_ishr_amt_63() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, i64::MIN).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 63 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IShr { dst: 1, src: 0, amt: 63 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(1).unwrap(), -1);
 }
 
@@ -913,9 +989,10 @@ fn test_ishr_amt_63() {
 fn test_iadd_wrapping_overflow() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, i64::MAX).unwrap();
     ctx.iregs.set(1, 1).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), i64::MIN, "i64::MAX + 1 should wrap to i64::MIN");
 }
 
@@ -923,9 +1000,10 @@ fn test_iadd_wrapping_overflow() {
 fn test_imul_wrapping_overflow() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, i64::MAX).unwrap();
     ctx.iregs.set(1, 2).unwrap();
-    execute_instruction(&mut ctx, &Instruction::IMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), i64::MAX.wrapping_mul(2));
 }
 
@@ -937,9 +1015,10 @@ fn test_imul_wrapping_overflow() {
 fn test_fsin() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let pi_half = std::f64::consts::FRAC_PI_2;
     ctx.fregs.set(0, pi_half).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FSin { dst: 1, src: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSin { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(1).unwrap() - 1.0).abs() < 1e-10, "sin(pi/2) = 1");
 }
 
@@ -947,8 +1026,9 @@ fn test_fsin() {
 fn test_fcos() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 0.0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FCos { dst: 1, src: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FCos { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(1).unwrap() - 1.0).abs() < 1e-10, "cos(0) = 1");
 }
 
@@ -956,9 +1036,10 @@ fn test_fcos() {
 fn test_fatan2() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 1.0).unwrap();
     ctx.fregs.set(1, 1.0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FAtan2 { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FAtan2 { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     let expected = std::f64::consts::FRAC_PI_4;
     assert!((ctx.fregs.get(2).unwrap() - expected).abs() < 1e-10, "atan2(1,1) = pi/4");
 }
@@ -967,8 +1048,9 @@ fn test_fatan2() {
 fn test_fsqrt() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, 9.0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FSqrt { dst: 1, src: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSqrt { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
     assert!((ctx.fregs.get(1).unwrap() - 3.0).abs() < 1e-10, "sqrt(9) = 3");
 }
 
@@ -976,8 +1058,9 @@ fn test_fsqrt() {
 fn test_fsqrt_negative_sets_trap() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.fregs.set(0, -1.0).unwrap();
-    execute_instruction(&mut ctx, &Instruction::FSqrt { dst: 1, src: 0 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::FSqrt { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
     assert!(ctx.fregs.get(1).unwrap().is_nan(), "sqrt(-1) should be NaN");
     assert!(ctx.psw.trap_arith, "sqrt of negative should set trap_arith");
 }
@@ -986,8 +1069,445 @@ fn test_fsqrt_negative_sets_trap() {
 fn test_isub_wrapping_underflow() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     ctx.iregs.set(0, i64::MIN).unwrap();
     ctx.iregs.set(1, 1).unwrap();
-    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
     assert_eq!(ctx.iregs.get(2).unwrap(), i64::MAX, "i64::MIN - 1 should wrap to i64::MAX");
+}
+
+// ===========================================================================
+// Phase 4.2: Executor edge-case tests
+// ===========================================================================
+
+// ---------------------------------------------------------------------------
+// 1. Division by zero flag behavior
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_idiv_by_zero_sets_trap_and_clears_on_next_arith() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Divide by zero: trap_arith must be set, result defaults to 0
+    ctx.iregs.set(0, 100).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
+    assert!(ctx.psw.trap_arith, "trap_arith should be set after IDIV by zero");
+    assert_eq!(ctx.iregs.get(2).unwrap(), 0, "IDIV by zero should write 0 to dst");
+    assert!(!ctx.psw.zf, "ZF should NOT be updated by division-by-zero path");
+}
+
+#[test]
+fn test_imod_by_zero_preserves_lhs_registers() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, 77).unwrap();
+    ctx.iregs.set(1, 0).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
+    assert!(ctx.psw.trap_arith, "trap_arith should be set after IMOD by zero");
+    assert_eq!(ctx.iregs.get(0).unwrap(), 77, "source register R0 should be unchanged");
+    assert_eq!(ctx.iregs.get(2).unwrap(), 0, "IMOD by zero should write 0 to dst");
+}
+
+// ---------------------------------------------------------------------------
+// 2. Overflow flag semantics
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_iadd_overflow_sets_of_flag() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, i64::MAX).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
+    assert!(ctx.psw.of, "OF should be set when i64::MAX + 1 overflows");
+    assert!(ctx.psw.nf, "NF should be set because wrapping result is i64::MIN (negative)");
+    assert_eq!(ctx.iregs.get(2).unwrap(), i64::MIN, "wrapping result should be i64::MIN");
+}
+
+#[test]
+fn test_isub_underflow_sets_of_flag() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, i64::MIN).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ISub { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
+    assert!(ctx.psw.of, "OF should be set when i64::MIN - 1 underflows");
+    assert!(!ctx.psw.nf, "NF should be false because wrapping result is i64::MAX (positive)");
+    assert_eq!(ctx.iregs.get(2).unwrap(), i64::MAX);
+}
+
+#[test]
+fn test_imul_overflow_sets_of_flag() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, i64::MAX).unwrap();
+    ctx.iregs.set(1, 2).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IMul { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
+    assert!(ctx.psw.of, "OF should be set when i64::MAX * 2 overflows");
+}
+
+#[test]
+fn test_iadd_no_overflow_clears_of_flag() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // First cause an overflow to set OF
+    ctx.iregs.set(0, i64::MAX).unwrap();
+    ctx.iregs.set(1, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 2, lhs: 0, rhs: 1 }, &mut fm, &mut backend).unwrap();
+    assert!(ctx.psw.of, "OF should be set after overflow");
+
+    // Now do a non-overflowing add: OF should be cleared
+    ctx.iregs.set(3, 5).unwrap();
+    ctx.iregs.set(4, 10).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IAdd { dst: 5, lhs: 3, rhs: 4 }, &mut fm, &mut backend).unwrap();
+    assert!(!ctx.psw.of, "OF should be cleared after non-overflowing add");
+    assert_eq!(ctx.iregs.get(5).unwrap(), 15);
+}
+
+// ---------------------------------------------------------------------------
+// 3. Shared memory store violations
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_shared_memory_store_outside_atomic_section_returns_violation() {
+    use std::sync::Arc;
+    use cqam_vm::thread_pool::{SharedMemory, SharedRegionConfig};
+
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Set up a shared memory region at addresses 100..104
+    let config = SharedRegionConfig { base: 100, size: 4 };
+    let initial_data = vec![0i64; 4];
+    let sm = Arc::new(SharedMemory::new(config, &initial_data));
+    ctx.shared_memory = Some(sm);
+    ctx.shared_region = Some((100, 4));
+    ctx.in_atomic_section = false; // NOT inside atomic section
+
+    // Attempt to store to shared address 101 via ISTR
+    ctx.iregs.set(0, 42).unwrap();
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::IStr { src: 0, addr: 101 },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_err(), "Store to shared memory outside atomic section should fail");
+    let err = result.unwrap_err();
+    let msg = format!("{}", err);
+    assert!(msg.contains("Shared memory violation"), "Error message: {}", msg);
+}
+
+#[test]
+fn test_shared_memory_store_inside_atomic_section_succeeds() {
+    use std::sync::Arc;
+    use cqam_vm::thread_pool::{SharedMemory, SharedRegionConfig};
+
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    let config = SharedRegionConfig { base: 100, size: 4 };
+    let initial_data = vec![0i64; 4];
+    let sm = Arc::new(SharedMemory::new(config, &initial_data));
+    ctx.shared_memory = Some(sm);
+    ctx.shared_region = Some((100, 4));
+    ctx.in_atomic_section = true; // Inside atomic section
+
+    ctx.iregs.set(0, 42).unwrap();
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::IStr { src: 0, addr: 101 },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "Store to shared memory inside atomic section should succeed");
+}
+
+#[test]
+fn test_shared_memory_store_to_non_shared_addr_succeeds_outside_atomic() {
+    use std::sync::Arc;
+    use cqam_vm::thread_pool::{SharedMemory, SharedRegionConfig};
+
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Shared region is 100..104, store to address 50 (not shared)
+    let config = SharedRegionConfig { base: 100, size: 4 };
+    let initial_data = vec![0i64; 4];
+    let sm = Arc::new(SharedMemory::new(config, &initial_data));
+    ctx.shared_memory = Some(sm);
+    ctx.shared_region = Some((100, 4));
+    ctx.in_atomic_section = false;
+
+    ctx.iregs.set(0, 99).unwrap();
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::IStr { src: 0, addr: 50 },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "Store to non-shared address should succeed even outside atomic section");
+}
+
+// ---------------------------------------------------------------------------
+// 4. Indirect address boundary validation
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_ildm_at_u16_max_boundary() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // ILDM uses a u16 addr directly, so u16::MAX = 65535 should work
+    ctx.cmem.store(65535, 12345);
+    execute_instruction(&mut ctx, &Instruction::ILdm { dst: 0, addr: 65535 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 12345);
+}
+
+#[test]
+fn test_istr_at_u16_max_boundary() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, 7777).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStr { src: 0, addr: 65535 }, &mut fm, &mut backend).unwrap();
+    // Verify the value was written
+    assert_eq!(ctx.cmem.load(65535), 7777);
+}
+
+#[test]
+fn test_ildm_and_istr_roundtrip_at_addr_zero() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, -999).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IStr { src: 0, addr: 0 }, &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdm { dst: 1, addr: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), -999);
+}
+
+#[test]
+fn test_indirect_ildx_just_within_boundary() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // For ILDX, max valid address is 0xFFFF = 65535
+    ctx.cmem.store(65535, 55555);
+    ctx.iregs.set(1, 65535).unwrap();
+    execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 55555);
+}
+
+#[test]
+fn test_indirect_ildx_just_beyond_boundary() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // 65536 is one past the max valid address
+    ctx.iregs.set(1, 65536).unwrap();
+    let result = execute_instruction(&mut ctx, &Instruction::ILdx { dst: 0, addr_reg: 1 }, &mut fm, &mut backend);
+    assert!(result.is_err(), "Address 65536 should be out of range for ILDX");
+}
+
+// ---------------------------------------------------------------------------
+// 5. ECALL format string edge cases
+// ---------------------------------------------------------------------------
+
+#[test]
+fn test_ecall_print_int_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, 42).unwrap();
+    // PrintInt should not panic
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintInt },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintInt should succeed");
+}
+
+#[test]
+fn test_ecall_printstr_no_format_args() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Store "Hello" in CMEM at address 0
+    let msg = b"Hello";
+    for (i, &ch) in msg.iter().enumerate() {
+        ctx.cmem.store(i as u16, ch as i64);
+    }
+    ctx.iregs.set(0, 0).unwrap(); // base address
+    ctx.iregs.set(1, 5).unwrap(); // length
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr with no format specifiers should succeed");
+}
+
+#[test]
+fn test_ecall_printstr_with_missing_int_arg() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Format string "%d %d %d" requires 3 int args from R2, R3, R4
+    // We only set R2; R3 and R4 default to 0 (which is still valid).
+    let msg = b"%d %d %d";
+    for (i, &ch) in msg.iter().enumerate() {
+        ctx.cmem.store(i as u16, ch as i64);
+    }
+    ctx.iregs.set(0, 0).unwrap(); // base
+    ctx.iregs.set(1, 8).unwrap(); // length
+    ctx.iregs.set(2, 42).unwrap(); // first %d arg
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr should not panic when format args use default-zero registers");
+}
+
+#[test]
+fn test_ecall_printstr_with_extra_args_ignored() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Format string has only one specifier but we set many registers
+    let msg = b"%d";
+    for (i, &ch) in msg.iter().enumerate() {
+        ctx.cmem.store(i as u16, ch as i64);
+    }
+    ctx.iregs.set(0, 0).unwrap(); // base
+    ctx.iregs.set(1, 2).unwrap(); // length
+    ctx.iregs.set(2, 100).unwrap(); // only %d arg
+    ctx.iregs.set(3, 200).unwrap(); // extra, unused
+    ctx.iregs.set(4, 300).unwrap(); // extra, unused
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr should succeed when extra args are present");
+}
+
+#[test]
+fn test_ecall_printstr_percent_percent_escape() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Format string "%%d" should output "%d" (literal percent + d)
+    let msg = b"%%d";
+    for (i, &ch) in msg.iter().enumerate() {
+        ctx.cmem.store(i as u16, ch as i64);
+    }
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 3).unwrap();
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr %% escape should not panic");
+}
+
+#[test]
+fn test_ecall_printstr_zero_length() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    ctx.iregs.set(0, 0).unwrap(); // base
+    ctx.iregs.set(1, 0).unwrap(); // length = 0
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr with zero length should succeed (no output)");
+}
+
+#[test]
+fn test_ecall_printstr_unknown_format_specifier() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // "%x" is not a known specifier; should be passed through literally
+    let msg = b"%x";
+    for (i, &ch) in msg.iter().enumerate() {
+        ctx.cmem.store(i as u16, ch as i64);
+    }
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 2).unwrap();
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr with unknown format specifier should not panic");
+}
+
+#[test]
+fn test_ecall_printstr_trailing_percent() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Format string ending with "%" (incomplete specifier)
+    let msg = b"val%";
+    for (i, &ch) in msg.iter().enumerate() {
+        ctx.cmem.store(i as u16, ch as i64);
+    }
+    ctx.iregs.set(0, 0).unwrap();
+    ctx.iregs.set(1, 4).unwrap();
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintStr },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_ok(), "ECALL PrintStr with trailing %% should not panic");
 }

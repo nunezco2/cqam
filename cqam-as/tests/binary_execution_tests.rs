@@ -7,7 +7,7 @@ use cqam_as::assembler::assemble_source;
 use cqam_as::binary::{write_cqb, read_cqb};
 use cqam_as::disassembler::disassemble;
 use cqam_core::parser::parse_program;
-use cqam_core::instruction::Instruction;
+use cqam_core::instruction::*;
 
 /// Run the full assemble -> write -> read -> disassemble -> re-parse pipeline.
 fn roundtrip_parse(source: &str) -> Vec<Instruction> {
@@ -47,9 +47,9 @@ HALT
     let roundtripped = roundtrip_parse(source);
     assert_eq!(roundtripped.len(), original.len());
 
-    assert!(matches!(roundtripped[0], Instruction::QPrep { dst: 0, dist: 0 }));
-    assert!(matches!(roundtripped[1], Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 }));
-    assert!(matches!(roundtripped[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }));
+    assert!(matches!(roundtripped[0], Instruction::QPrep { dst: 0, dist: DistId::Uniform }));
+    assert!(matches!(roundtripped[1], Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 0, ctx1: 1 }));
+    assert!(matches!(roundtripped[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }));
     assert!(matches!(roundtripped[3], Instruction::Halt));
 }
 

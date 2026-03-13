@@ -215,7 +215,7 @@ pub enum Instruction {
     /// Environment call: invoke a built-in host procedure.
     /// Does not push the call stack (executes synchronously, falls through to PC+1).
     /// Arguments are passed via registers per the calling convention.
-    Ecall { proc_id: u8 },
+    Ecall { proc_id: ProcId },
 
     // -- Control flow ---------------------------------------------------------
 
@@ -242,20 +242,20 @@ pub enum Instruction {
     /// Prepare quantum register with distribution.
     /// Q[dst] = new_qdist(dist)
     /// dist: 0=uniform, 1=zero, 2=bell, 3=ghz (see dist_id module)
-    QPrep { dst: u8, dist: u8 },
+    QPrep { dst: u8, dist: DistId },
 
     /// Apply quantum kernel transformation.
     /// Q[dst] = kernel(Q[src], R[ctx0], R[ctx1])
     /// kernel: kernel ID (see kernel_id module)
     /// ctx0, ctx1: integer register indices providing classical context
-    QKernel { dst: u8, src: u8, kernel: u8, ctx0: u8, ctx1: u8 },
+    QKernel { dst: u8, src: u8, kernel: KernelId, ctx0: u8, ctx1: u8 },
 
     /// Destructively observe (measure) a quantum register.
     /// H[dst_h] = measure(Q[src_q])
     /// The quantum register Q[src_q] is consumed (set to None).
     /// mode: 0=DIST (full distribution), 1=PROB (single probability), 2=AMP (amplitude)
     /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
-    QObserve { dst_h: u8, src_q: u8, mode: u8, ctx0: u8, ctx1: u8 },
+    QObserve { dst_h: u8, src_q: u8, mode: ObserveMode, ctx0: u8, ctx1: u8 },
 
     /// Load quantum distribution from QMEM into quantum register.
     /// Q[dst_q] = QMEM[addr]
@@ -270,19 +270,19 @@ pub enum Instruction {
     /// The quantum register Q[src_q] is NOT consumed (non-destructive read).
     /// mode: 0=DIST (full distribution), 1=PROB (single probability), 2=AMP (amplitude)
     /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
-    QSample { dst_h: u8, src_q: u8, mode: u8, ctx0: u8, ctx1: u8 },
+    QSample { dst_h: u8, src_q: u8, mode: ObserveMode, ctx0: u8, ctx1: u8 },
 
     /// Apply quantum kernel with float context parameters from F-file.
     /// Q[dst] = kernel(Q[src], F[fctx0], F[fctx1])
     /// kernel: kernel ID (see kernel_id module)
     /// fctx0, fctx1: float register indices providing classical context
-    QKernelF { dst: u8, src: u8, kernel: u8, fctx0: u8, fctx1: u8 },
+    QKernelF { dst: u8, src: u8, kernel: KernelId, fctx0: u8, fctx1: u8 },
 
     /// Apply quantum kernel with complex context parameters from Z-file.
     /// Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1])
     /// kernel: kernel ID (see kernel_id module)
     /// zctx0, zctx1: complex register indices providing classical context
-    QKernelZ { dst: u8, src: u8, kernel: u8, zctx0: u8, zctx1: u8 },
+    QKernelZ { dst: u8, src: u8, kernel: KernelId, zctx0: u8, zctx1: u8 },
 
     /// Prepare quantum register with distribution ID from integer register.
     /// Q[dst] = new_qdist(R[dist_reg] as u8)
@@ -296,7 +296,7 @@ pub enum Instruction {
     /// src_base: first register index in the selected file (R, F, or Z)
     /// count: number of consecutive registers to read (must be power of 2)
     /// file_sel: register file selector (0=R, 1=F, 2=Z; see file_sel module)
-    QEncode { dst: u8, src_base: u8, count: u8, file_sel: u8 },
+    QEncode { dst: u8, src_base: u8, count: u8, file_sel: FileSel },
 
     /// Apply Hadamard gate to each qubit selected by a classical bitmask.
     ///
@@ -332,7 +332,7 @@ pub enum Instruction {
     /// axis: 0=X, 1=Y, 2=Z (see rot_axis module)
     /// The rotation angle theta is read from F[angle_freg] in radians.
     /// The target qubit index is read from R[qubit_reg].
-    QRot { dst: u8, src: u8, qubit_reg: u8, axis: u8, angle_freg: u8 },
+    QRot { dst: u8, src: u8, qubit_reg: u8, axis: RotAxis, angle_freg: u8 },
 
     /// Measure a single qubit within a quantum register.
     ///
@@ -384,7 +384,7 @@ pub enum Instruction {
     /// Q[dst] = new_qdist(dist, num_qubits=R[qubit_count_reg])
     /// dist: distribution ID (0=uniform, 1=zero, 2=bell, 3=ghz)
     /// The qubit count is read from R[qubit_count_reg] at runtime.
-    QPrepN { dst: u8, dist: u8, qubit_count_reg: u8 },
+    QPrepN { dst: u8, dist: DistId, qubit_count_reg: u8 },
 
     /// Float sine: F[dst] = sin(F[src])
     FSin { dst: u8, src: u8 },
@@ -434,7 +434,7 @@ pub enum Instruction {
     /// Conditional execution based on PSW flag.
     /// if PSW.flag[flag] then PC = address_of(target)
     /// flag: flag ID (see flag_id module)
-    JmpF { flag: u8, target: String },
+    JmpF { flag: FlagId, target: String },
 
     /// Reduce hybrid value to classical value.
     /// The output register file depends on the reduction function:
@@ -442,7 +442,7 @@ pub enum Instruction {
     /// - magnitude/phase/real/imag (6-9): H[src] -> F[dst] (float)
     /// - mean/mode/argmax/variance (10-13): H[src] -> F[dst] or R[dst]
     ///   func: reduction function ID (see reduce_fn module)
-    HReduce { src: u8, dst: u8, func: u8 },
+    HReduce { src: u8, dst: u8, func: ReduceFn },
 
     // -- Interrupt handling ---------------------------------------------------
 
@@ -453,438 +453,708 @@ pub enum Instruction {
     /// Set interrupt vector: register a handler address for a trap ID.
     /// trap_id: 0=Arithmetic, 1=QuantumError, 2=SyncFailure
     /// target: label name (resolved to address during encoding)
-    SetIV { trap_id: u8, target: String },
+    SetIV { trap_id: TrapId, target: String },
 }
 
 // =============================================================================
-// Named constant modules for numeric IDs
+// Type-safe ID enums
 // =============================================================================
+
+use std::fmt;
+use crate::error::CqamError;
 
 /// Trap IDs for SetIV instruction.
-pub mod trap_id {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum TrapId {
     /// Arithmetic fault (division by zero, overflow).
-    pub const ARITHMETIC: u8 = 0;
+    Arithmetic = 0,
     /// Quantum fidelity dropped below threshold.
-    pub const QUANTUM_ERROR: u8 = 1;
+    QuantumError = 1,
     /// Hybrid branch synchronization failure.
-    pub const SYNC_FAILURE: u8 = 2;
+    SyncFailure = 2,
 }
 
-/// Helper: name string for a trap ID (for display/debug).
-pub fn trap_id_name(id: u8) -> &'static str {
-    match id {
-        trap_id::ARITHMETIC => "arithmetic",
-        trap_id::QUANTUM_ERROR => "quantum_error",
-        trap_id::SYNC_FAILURE => "sync_failure",
-        _ => "unknown",
+impl TryFrom<u8> for TrapId {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(TrapId::Arithmetic),
+            1 => Ok(TrapId::QuantumError),
+            2 => Ok(TrapId::SyncFailure),
+            _ => Err(CqamError::InvalidId { domain: "TrapId", value: v }),
+        }
     }
 }
 
-/// Distribution IDs for QPrep.
-pub mod dist_id {
-    /// Uniform distribution: equal probability over all basis states.
-    pub const UNIFORM: u8 = 0;
-    /// Zero state: delta distribution at |0>.
-    pub const ZERO: u8 = 1;
-    /// Bell state: correlated pair distribution.
-    pub const BELL: u8 = 2;
-    /// GHZ state: multi-register correlation.
-    pub const GHZ: u8 = 3;
+impl From<TrapId> for u8 {
+    fn from(v: TrapId) -> u8 { v as u8 }
 }
 
-/// Kernel IDs for QKernel.
-pub mod kernel_id {
+impl fmt::Display for TrapId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl TrapId {
+    /// Human-readable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            TrapId::Arithmetic => "arithmetic",
+            TrapId::QuantumError => "quantum_error",
+            TrapId::SyncFailure => "sync_failure",
+        }
+    }
+
+    /// Parse from name string (case-insensitive) or numeric.
+    pub fn from_token(token: &str) -> Option<Self> {
+        match token.to_lowercase().as_str() {
+            "arithmetic" => Some(TrapId::Arithmetic),
+            "quantum_error" => Some(TrapId::QuantumError),
+            "sync_failure" => Some(TrapId::SyncFailure),
+            _ => token.parse::<u8>().ok().and_then(|v| Self::try_from(v).ok()),
+        }
+    }
+}
+
+/// Distribution IDs for QPrep / QPrepN.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum DistId {
+    /// Uniform distribution: equal probability over all basis states.
+    Uniform = 0,
+    /// Zero state: delta distribution at |0>.
+    Zero = 1,
+    /// Bell state: correlated pair distribution.
+    Bell = 2,
+    /// GHZ state: multi-register correlation.
+    Ghz = 3,
+}
+
+impl TryFrom<u8> for DistId {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(DistId::Uniform),
+            1 => Ok(DistId::Zero),
+            2 => Ok(DistId::Bell),
+            3 => Ok(DistId::Ghz),
+            _ => Err(CqamError::InvalidId { domain: "DistId", value: v }),
+        }
+    }
+}
+
+impl From<DistId> for u8 {
+    fn from(v: DistId) -> u8 { v as u8 }
+}
+
+impl fmt::Display for DistId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl DistId {
+    /// Human-readable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            DistId::Uniform => "uniform",
+            DistId::Zero => "zero",
+            DistId::Bell => "bell",
+            DistId::Ghz => "ghz",
+        }
+    }
+
+    /// Parse from token: accepts "UNIFORM", "ZERO", "BELL", "GHZ" or numeric.
+    pub fn from_token(token: &str) -> Option<Self> {
+        match token {
+            "UNIFORM" | "uniform" => Some(DistId::Uniform),
+            "ZERO" | "zero" => Some(DistId::Zero),
+            "BELL" | "bell" => Some(DistId::Bell),
+            "GHZ" | "ghz" => Some(DistId::Ghz),
+            _ => token.parse::<u8>().ok().and_then(|v| Self::try_from(v).ok()),
+        }
+    }
+}
+
+/// Kernel IDs for QKernel / QKernelF / QKernelZ.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+#[repr(u8)]
+pub enum KernelId {
     /// Initialization kernel.
-    pub const INIT: u8 = 0;
+    Init = 0,
     /// Entanglement kernel.
-    pub const ENTANGLE: u8 = 1;
+    Entangle = 1,
     /// Quantum Fourier Transform.
-    pub const FOURIER: u8 = 2;
+    Fourier = 2,
     /// Grover diffusion operator.
-    pub const DIFFUSE: u8 = 3;
+    Diffuse = 3,
     /// Grover iteration (oracle + diffusion).
-    pub const GROVER_ITER: u8 = 4;
-    /// Diagonal rotation kernel: U[k][k] = exp(i * theta * k).
-    pub const ROTATE: u8 = 5;
-    /// Phase shift kernel: U[k][k] = exp(i * |z| * k).
-    pub const PHASE_SHIFT: u8 = 6;
+    GroverIter = 4,
+    /// Diagonal rotation kernel.
+    Rotate = 5,
+    /// Phase shift kernel.
+    PhaseShift = 6,
     /// Inverse Quantum Fourier Transform.
-    pub const FOURIER_INV: u8 = 7;
-    /// Controlled-U kernel: applies a sub-kernel conditioned on a control qubit.
-    pub const CONTROLLED_U: u8 = 8;
-    /// Diagonal unitary kernel: applies arbitrary diagonal entries from CMEM.
-    pub const DIAGONAL_UNITARY: u8 = 9;
-    /// Permutation kernel: applies a basis-state permutation from CMEM.
-    pub const PERMUTATION: u8 = 10;
+    FourierInv = 7,
+    /// Controlled-U kernel.
+    ControlledU = 8,
+    /// Diagonal unitary kernel.
+    DiagonalUnitary = 9,
+    /// Permutation kernel.
+    Permutation = 10,
+}
+
+impl TryFrom<u8> for KernelId {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(KernelId::Init),
+            1 => Ok(KernelId::Entangle),
+            2 => Ok(KernelId::Fourier),
+            3 => Ok(KernelId::Diffuse),
+            4 => Ok(KernelId::GroverIter),
+            5 => Ok(KernelId::Rotate),
+            6 => Ok(KernelId::PhaseShift),
+            7 => Ok(KernelId::FourierInv),
+            8 => Ok(KernelId::ControlledU),
+            9 => Ok(KernelId::DiagonalUnitary),
+            10 => Ok(KernelId::Permutation),
+            _ => Err(CqamError::InvalidId { domain: "KernelId", value: v }),
+        }
+    }
+}
+
+impl From<KernelId> for u8 {
+    fn from(v: KernelId) -> u8 { v as u8 }
+}
+
+impl fmt::Display for KernelId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl KernelId {
+    /// Four-letter assembly mnemonic.
+    pub fn mnemonic(self) -> &'static str {
+        match self {
+            KernelId::Init => "UNIT",
+            KernelId::Entangle => "ENTG",
+            KernelId::Fourier => "QFFT",
+            KernelId::Diffuse => "DIFF",
+            KernelId::GroverIter => "GROV",
+            KernelId::Rotate => "DROT",
+            KernelId::PhaseShift => "PHSH",
+            KernelId::FourierInv => "QIFT",
+            KernelId::ControlledU => "CTLU",
+            KernelId::DiagonalUnitary => "DIAG",
+            KernelId::Permutation => "PERM",
+        }
+    }
+
+    /// Human-readable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            KernelId::Init => "init",
+            KernelId::Entangle => "entangle",
+            KernelId::Fourier => "fourier",
+            KernelId::Diffuse => "diffuse",
+            KernelId::GroverIter => "grover_iter",
+            KernelId::Rotate => "rotate",
+            KernelId::PhaseShift => "phase_shift",
+            KernelId::FourierInv => "fourier_inv",
+            KernelId::ControlledU => "controlled_u",
+            KernelId::DiagonalUnitary => "diagonal_unitary",
+            KernelId::Permutation => "permutation",
+        }
+    }
+
+    /// Parse from mnemonic string.
+    pub fn from_mnemonic(name: &str) -> Option<Self> {
+        match name {
+            "UNIT" => Some(KernelId::Init),
+            "ENTG" => Some(KernelId::Entangle),
+            "QFFT" => Some(KernelId::Fourier),
+            "DIFF" => Some(KernelId::Diffuse),
+            "GROV" => Some(KernelId::GroverIter),
+            "DROT" => Some(KernelId::Rotate),
+            "PHSH" => Some(KernelId::PhaseShift),
+            "QIFT" => Some(KernelId::FourierInv),
+            "CTLU" => Some(KernelId::ControlledU),
+            "DIAG" => Some(KernelId::DiagonalUnitary),
+            "PERM" => Some(KernelId::Permutation),
+            _ => None,
+        }
+    }
 }
 
 /// PSW flag IDs for JmpF.
-pub mod flag_id {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum FlagId {
     /// Zero flag.
-    pub const ZF: u8 = 0;
+    Zf = 0,
     /// Negative flag.
-    pub const NF: u8 = 1;
+    Nf = 1,
     /// Overflow flag.
-    pub const OF: u8 = 2;
+    Of = 2,
     /// Predicate flag.
-    pub const PF: u8 = 3;
+    Pf = 3,
     /// Quantum active flag.
-    pub const QF: u8 = 4;
+    Qf = 4,
     /// Superposition flag.
-    pub const SF: u8 = 5;
+    Sf = 5,
     /// Entanglement flag.
-    pub const EF: u8 = 6;
+    Ef = 6,
     /// Hybrid mode flag.
-    pub const HF: u8 = 7;
+    Hf = 7,
     /// Decoherence flag (sticky).
-    pub const DF: u8 = 8;
+    Df = 8,
     /// Collapsed flag (transient).
-    pub const CF: u8 = 9;
+    Cf = 9,
     /// Forked flag.
-    pub const FK: u8 = 10;
+    Fk = 10,
     /// Merged flag.
-    pub const MG: u8 = 11;
+    Mg = 11,
     /// Interference flag.
-    pub const IF: u8 = 12;
+    If = 12,
     /// Atomic section flag.
-    pub const AF: u8 = 13;
+    Af = 13,
+}
+
+impl TryFrom<u8> for FlagId {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(FlagId::Zf),
+            1 => Ok(FlagId::Nf),
+            2 => Ok(FlagId::Of),
+            3 => Ok(FlagId::Pf),
+            4 => Ok(FlagId::Qf),
+            5 => Ok(FlagId::Sf),
+            6 => Ok(FlagId::Ef),
+            7 => Ok(FlagId::Hf),
+            8 => Ok(FlagId::Df),
+            9 => Ok(FlagId::Cf),
+            10 => Ok(FlagId::Fk),
+            11 => Ok(FlagId::Mg),
+            12 => Ok(FlagId::If),
+            13 => Ok(FlagId::Af),
+            _ => Err(CqamError::InvalidId { domain: "FlagId", value: v }),
+        }
+    }
+}
+
+impl From<FlagId> for u8 {
+    fn from(v: FlagId) -> u8 { v as u8 }
+}
+
+impl fmt::Display for FlagId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.mnemonic())
+    }
+}
+
+impl FlagId {
+    /// Two-letter mnemonic.
+    pub fn mnemonic(self) -> &'static str {
+        match self {
+            FlagId::Zf => "ZF",
+            FlagId::Nf => "NF",
+            FlagId::Of => "OF",
+            FlagId::Pf => "PF",
+            FlagId::Qf => "QF",
+            FlagId::Sf => "SF",
+            FlagId::Ef => "EF",
+            FlagId::Hf => "HF",
+            FlagId::Df => "DF",
+            FlagId::Cf => "CF",
+            FlagId::Fk => "FK",
+            FlagId::Mg => "MG",
+            FlagId::If => "IF",
+            FlagId::Af => "AF",
+        }
+    }
+
+    /// Parse from mnemonic string.
+    pub fn from_mnemonic(name: &str) -> Option<Self> {
+        match name {
+            "ZF" => Some(FlagId::Zf),
+            "NF" => Some(FlagId::Nf),
+            "OF" => Some(FlagId::Of),
+            "PF" => Some(FlagId::Pf),
+            "QF" => Some(FlagId::Qf),
+            "SF" => Some(FlagId::Sf),
+            "EF" => Some(FlagId::Ef),
+            "HF" => Some(FlagId::Hf),
+            "DF" => Some(FlagId::Df),
+            "CF" => Some(FlagId::Cf),
+            "FK" => Some(FlagId::Fk),
+            "MG" => Some(FlagId::Mg),
+            "IF" => Some(FlagId::If),
+            "AF" => Some(FlagId::Af),
+            _ => None,
+        }
+    }
 }
 
 /// Observation mode IDs for QObserve/QSample.
-pub mod observe_mode {
-    /// Full diagonal distribution (default mode; returns all diagonal probabilities).
-    pub const DIST: u8 = 0;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ObserveMode {
+    /// Full diagonal distribution.
+    Dist = 0,
     /// Probability of basis state at index R[ctx0].
-    pub const PROB: u8 = 1;
+    Prob = 1,
     /// Amplitude dm.get(row, col) where row=R[ctx0], col=R[ctx1].
-    pub const AMP: u8 = 2;
-    /// Projective measurement: sample one outcome k with probability P(k) = rho_{k,k}.
-    /// Destructive (consumes the quantum register). Returns HybridValue::Int(k).
-    pub const SAMPLE: u8 = 3;
+    Amp = 2,
+    /// Projective measurement sample.
+    Sample = 3,
+}
+
+impl TryFrom<u8> for ObserveMode {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(ObserveMode::Dist),
+            1 => Ok(ObserveMode::Prob),
+            2 => Ok(ObserveMode::Amp),
+            3 => Ok(ObserveMode::Sample),
+            _ => Err(CqamError::InvalidId { domain: "ObserveMode", value: v }),
+        }
+    }
+}
+
+impl From<ObserveMode> for u8 {
+    fn from(v: ObserveMode) -> u8 { v as u8 }
+}
+
+impl fmt::Display for ObserveMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl ObserveMode {
+    /// Human-readable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            ObserveMode::Dist => "dist",
+            ObserveMode::Prob => "prob",
+            ObserveMode::Amp => "amp",
+            ObserveMode::Sample => "sample",
+        }
+    }
+}
+
+/// Which output register file a reduction function targets.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReduceOutput {
+    /// Result goes to integer register file (R).
+    IntReg,
+    /// Result goes to float register file (F).
+    FloatReg,
+    /// Result goes to complex register file (Z).
+    ComplexReg,
 }
 
 /// Reduction function IDs for HReduce.
-pub mod reduce_fn {
-    // Float -> Int reductions
-    /// Round to nearest integer.
-    pub const ROUND: u8 = 0;
-    /// Floor (round toward negative infinity).
-    pub const FLOOR: u8 = 1;
-    /// Ceiling (round toward positive infinity).
-    pub const CEIL: u8 = 2;
-    /// Truncate (round toward zero).
-    pub const TRUNC: u8 = 3;
-    /// Absolute value (as integer).
-    pub const ABS: u8 = 4;
-    /// Negate (as integer).
-    pub const NEGATE: u8 = 5;
-
-    // Complex -> Float reductions
-    /// Complex magnitude: sqrt(re^2 + im^2).
-    pub const MAGNITUDE: u8 = 6;
-    /// Complex phase: atan2(im, re).
-    pub const PHASE: u8 = 7;
-    /// Real part of complex.
-    pub const REAL: u8 = 8;
-    /// Imaginary part of complex.
-    pub const IMAG: u8 = 9;
-
-    // Distribution reductions
-    /// Mean of distribution.
-    pub const MEAN: u8 = 10;
-    /// Mode of distribution (most probable value).
-    pub const MODE: u8 = 11;
-    /// Argmax of distribution (index of most probable value).
-    pub const ARGMAX: u8 = 12;
-    /// Variance of distribution.
-    pub const VARIANCE: u8 = 13;
-
-    // Complex -> Z-file reductions
-    /// Conjugate: Z[dst] = (re, -im).
-    pub const CONJ_Z: u8 = 14;
-    /// Negate: Z[dst] = (-re, -im).
-    pub const NEGATE_Z: u8 = 15;
-
-    /// Expectation value: sum_k eigenvalue_k * p_k.
-    /// Reads eigenvalues from CMEM[R[ctx]..R[ctx]+n] where n is distribution size.
-    /// Output: F[dst] = expectation value.
-    pub const EXPECT: u8 = 16;
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ReduceFn {
+    Round = 0,
+    Floor = 1,
+    Ceil = 2,
+    Trunc = 3,
+    Abs = 4,
+    Negate = 5,
+    Magnitude = 6,
+    Phase = 7,
+    Real = 8,
+    Imag = 9,
+    Mean = 10,
+    Mode = 11,
+    Argmax = 12,
+    Variance = 13,
+    ConjZ = 14,
+    NegateZ = 15,
+    Expect = 16,
 }
 
-/// Helper: name string for a distribution ID (for display/debug).
-pub fn dist_name(id: u8) -> &'static str {
-    match id {
-        dist_id::UNIFORM => "uniform",
-        dist_id::ZERO => "zero",
-        dist_id::BELL => "bell",
-        dist_id::GHZ => "ghz",
-        _ => "unknown",
+impl TryFrom<u8> for ReduceFn {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(ReduceFn::Round),
+            1 => Ok(ReduceFn::Floor),
+            2 => Ok(ReduceFn::Ceil),
+            3 => Ok(ReduceFn::Trunc),
+            4 => Ok(ReduceFn::Abs),
+            5 => Ok(ReduceFn::Negate),
+            6 => Ok(ReduceFn::Magnitude),
+            7 => Ok(ReduceFn::Phase),
+            8 => Ok(ReduceFn::Real),
+            9 => Ok(ReduceFn::Imag),
+            10 => Ok(ReduceFn::Mean),
+            11 => Ok(ReduceFn::Mode),
+            12 => Ok(ReduceFn::Argmax),
+            13 => Ok(ReduceFn::Variance),
+            14 => Ok(ReduceFn::ConjZ),
+            15 => Ok(ReduceFn::NegateZ),
+            16 => Ok(ReduceFn::Expect),
+            _ => Err(CqamError::InvalidId { domain: "ReduceFn", value: v }),
+        }
     }
 }
 
-/// Helper: long name string for a kernel ID (for display/debug).
-pub fn kernel_name(id: u8) -> &'static str {
-    match id {
-        kernel_id::INIT => "init",
-        kernel_id::ENTANGLE => "entangle",
-        kernel_id::FOURIER => "fourier",
-        kernel_id::DIFFUSE => "diffuse",
-        kernel_id::GROVER_ITER => "grover_iter",
-        kernel_id::ROTATE => "rotate",
-        kernel_id::PHASE_SHIFT => "phase_shift",
-        kernel_id::FOURIER_INV => "fourier_inv",
-        kernel_id::CONTROLLED_U => "controlled_u",
-        kernel_id::DIAGONAL_UNITARY => "diagonal_unitary",
-        kernel_id::PERMUTATION => "permutation",
-        _ => "unknown",
+impl From<ReduceFn> for u8 {
+    fn from(v: ReduceFn) -> u8 { v as u8 }
+}
+
+impl fmt::Display for ReduceFn {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
-/// Four-letter assembly mnemonic for a kernel ID.
-pub fn kernel_mnemonic(id: u8) -> &'static str {
-    match id {
-        kernel_id::INIT => "UNIT",
-        kernel_id::ENTANGLE => "ENTG",
-        kernel_id::FOURIER => "QFFT",
-        kernel_id::DIFFUSE => "DIFF",
-        kernel_id::GROVER_ITER => "GROV",
-        kernel_id::ROTATE => "DROT",
-        kernel_id::PHASE_SHIFT => "PHSH",
-        kernel_id::FOURIER_INV => "QIFT",
-        kernel_id::CONTROLLED_U => "CTLU",
-        kernel_id::DIAGONAL_UNITARY => "DIAG",
-        kernel_id::PERMUTATION => "PERM",
-        _ => "????",
+impl ReduceFn {
+    /// Human-readable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            ReduceFn::Round => "round",
+            ReduceFn::Floor => "floor",
+            ReduceFn::Ceil => "ceil",
+            ReduceFn::Trunc => "trunc",
+            ReduceFn::Abs => "abs",
+            ReduceFn::Negate => "negate",
+            ReduceFn::Magnitude => "magnitude",
+            ReduceFn::Phase => "phase",
+            ReduceFn::Real => "real",
+            ReduceFn::Imag => "imag",
+            ReduceFn::Mean => "mean",
+            ReduceFn::Mode => "mode",
+            ReduceFn::Argmax => "argmax",
+            ReduceFn::Variance => "variance",
+            ReduceFn::ConjZ => "conj_z",
+            ReduceFn::NegateZ => "negate_z",
+            ReduceFn::Expect => "expect",
+        }
+    }
+
+    /// Five-letter assembly mnemonic.
+    pub fn mnemonic(self) -> &'static str {
+        match self {
+            ReduceFn::Round => "ROUND",
+            ReduceFn::Floor => "FLOOR",
+            ReduceFn::Ceil => "CEILI",
+            ReduceFn::Trunc => "TRUNC",
+            ReduceFn::Abs => "ABSOL",
+            ReduceFn::Negate => "NEGAT",
+            ReduceFn::Magnitude => "MAGNI",
+            ReduceFn::Phase => "PHASE",
+            ReduceFn::Real => "REALP",
+            ReduceFn::Imag => "IMAGP",
+            ReduceFn::Mean => "MEANT",
+            ReduceFn::Mode => "MODEV",
+            ReduceFn::Argmax => "ARGMX",
+            ReduceFn::Variance => "VARNC",
+            ReduceFn::ConjZ => "CONJZ",
+            ReduceFn::NegateZ => "NEGTZ",
+            ReduceFn::Expect => "EXPCT",
+        }
+    }
+
+    /// Parse from mnemonic string.
+    pub fn from_mnemonic(name: &str) -> Option<Self> {
+        match name {
+            "ROUND" => Some(ReduceFn::Round),
+            "FLOOR" => Some(ReduceFn::Floor),
+            "CEILI" => Some(ReduceFn::Ceil),
+            "TRUNC" => Some(ReduceFn::Trunc),
+            "ABSOL" => Some(ReduceFn::Abs),
+            "NEGAT" => Some(ReduceFn::Negate),
+            "MAGNI" => Some(ReduceFn::Magnitude),
+            "PHASE" => Some(ReduceFn::Phase),
+            "REALP" => Some(ReduceFn::Real),
+            "IMAGP" => Some(ReduceFn::Imag),
+            "MEANT" => Some(ReduceFn::Mean),
+            "MODEV" => Some(ReduceFn::Mode),
+            "ARGMX" => Some(ReduceFn::Argmax),
+            "VARNC" => Some(ReduceFn::Variance),
+            "CONJZ" => Some(ReduceFn::ConjZ),
+            "NEGTZ" => Some(ReduceFn::NegateZ),
+            "EXPCT" => Some(ReduceFn::Expect),
+            _ => None,
+        }
+    }
+
+    /// Which register file the output goes to.
+    pub fn output_file(self) -> ReduceOutput {
+        match self {
+            ReduceFn::Round | ReduceFn::Floor | ReduceFn::Ceil
+            | ReduceFn::Trunc | ReduceFn::Abs | ReduceFn::Negate
+            | ReduceFn::Mode | ReduceFn::Argmax => ReduceOutput::IntReg,
+            ReduceFn::Magnitude | ReduceFn::Phase | ReduceFn::Real
+            | ReduceFn::Imag | ReduceFn::Mean | ReduceFn::Variance
+            | ReduceFn::Expect => ReduceOutput::FloatReg,
+            ReduceFn::ConjZ | ReduceFn::NegateZ => ReduceOutput::ComplexReg,
+        }
     }
 }
 
-/// Parse a kernel mnemonic to its numeric ID.
-///
-/// Accepts four-letter mnemonics (UNIT, ENTG, QFFT, DIFF, GROV, DROT,
-/// PHSH, QIFT, CTLU, DIAG, PERM). Returns `None` for unrecognized names.
-pub fn kernel_name_to_id(name: &str) -> Option<u8> {
-    match name {
-        "UNIT" => Some(kernel_id::INIT),
-        "ENTG" => Some(kernel_id::ENTANGLE),
-        "QFFT" => Some(kernel_id::FOURIER),
-        "DIFF" => Some(kernel_id::DIFFUSE),
-        "GROV" => Some(kernel_id::GROVER_ITER),
-        "DROT" => Some(kernel_id::ROTATE),
-        "PHSH" => Some(kernel_id::PHASE_SHIFT),
-        "QIFT" => Some(kernel_id::FOURIER_INV),
-        "CTLU" => Some(kernel_id::CONTROLLED_U),
-        "DIAG" => Some(kernel_id::DIAGONAL_UNITARY),
-        "PERM" => Some(kernel_id::PERMUTATION),
-        _ => None,
+/// Rotation axis for QROT instruction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum RotAxis {
+    /// Rotation about X axis.
+    X = 0,
+    /// Rotation about Y axis.
+    Y = 1,
+    /// Rotation about Z axis.
+    Z = 2,
+}
+
+impl TryFrom<u8> for RotAxis {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(RotAxis::X),
+            1 => Ok(RotAxis::Y),
+            2 => Ok(RotAxis::Z),
+            _ => Err(CqamError::InvalidId { domain: "RotAxis", value: v }),
+        }
     }
 }
 
-/// Parse a flag name string to its numeric ID.
-///
-/// Accepts the canonical two-letter names (ZF, NF, OF, PF, QF, SF, EF, HF,
-/// DF, CF, FK, MG, IF). Returns `None` for unrecognized names.
-pub fn flag_name_to_id(name: &str) -> Option<u8> {
-    match name {
-        "ZF" => Some(flag_id::ZF),
-        "NF" => Some(flag_id::NF),
-        "OF" => Some(flag_id::OF),
-        "PF" => Some(flag_id::PF),
-        "QF" => Some(flag_id::QF),
-        "SF" => Some(flag_id::SF),
-        "EF" => Some(flag_id::EF),
-        "HF" => Some(flag_id::HF),
-        "DF" => Some(flag_id::DF),
-        "CF" => Some(flag_id::CF),
-        "FK" => Some(flag_id::FK),
-        "MG" => Some(flag_id::MG),
-        "IF" => Some(flag_id::IF),
-        "AF" => Some(flag_id::AF),
-        _ => None,
+impl From<RotAxis> for u8 {
+    fn from(v: RotAxis) -> u8 { v as u8 }
+}
+
+impl fmt::Display for RotAxis {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
-/// Helper: name string for a flag ID (for display/debug).
-pub fn flag_name(id: u8) -> &'static str {
-    match id {
-        flag_id::ZF => "ZF",
-        flag_id::NF => "NF",
-        flag_id::OF => "OF",
-        flag_id::PF => "PF",
-        flag_id::QF => "QF",
-        flag_id::SF => "SF",
-        flag_id::EF => "EF",
-        flag_id::HF => "HF",
-        flag_id::DF => "DF",
-        flag_id::CF => "CF",
-        flag_id::FK => "FK",
-        flag_id::MG => "MG",
-        flag_id::IF => "IF",
-        flag_id::AF => "AF",
-        _ => "unknown",
+impl RotAxis {
+    /// Human-readable name.
+    pub fn name(self) -> &'static str {
+        match self {
+            RotAxis::X => "X",
+            RotAxis::Y => "Y",
+            RotAxis::Z => "Z",
+        }
     }
 }
 
-/// Helper: name string for an observation mode (for display/debug).
-pub fn observe_mode_name(mode: u8) -> &'static str {
-    match mode {
-        observe_mode::DIST => "dist",
-        observe_mode::PROB => "prob",
-        observe_mode::AMP => "amp",
-        observe_mode::SAMPLE => "sample",
-        _ => "unknown",
+/// Register file selector for QEncode instruction.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum FileSel {
+    /// Integer register file.
+    RFile = 0,
+    /// Float register file.
+    FFile = 1,
+    /// Complex register file.
+    ZFile = 2,
+}
+
+impl TryFrom<u8> for FileSel {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(FileSel::RFile),
+            1 => Ok(FileSel::FFile),
+            2 => Ok(FileSel::ZFile),
+            _ => Err(CqamError::InvalidId { domain: "FileSel", value: v }),
+        }
+    }
+}
+
+impl From<FileSel> for u8 {
+    fn from(v: FileSel) -> u8 { v as u8 }
+}
+
+impl fmt::Display for FileSel {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl FileSel {
+    /// Short name.
+    pub fn name(self) -> &'static str {
+        match self {
+            FileSel::RFile => "R",
+            FileSel::FFile => "F",
+            FileSel::ZFile => "Z",
+        }
     }
 }
 
 /// Built-in procedure IDs for ECALL instruction.
-pub mod proc_id {
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[repr(u8)]
+pub enum ProcId {
     /// Print R[0] as a signed decimal integer followed by newline.
-    pub const PRINT_INT: u8 = 0;
+    PrintInt = 0,
     /// Print F[0] as a floating-point number followed by newline.
-    pub const PRINT_FLOAT: u8 = 1;
-    /// Print formatted string from CMEM. R[0] = base address, R[1] = length.
-    /// Format specifiers: %d = next int arg (R[2], R[3], ...),
-    /// %f = next float arg (F[1], F[2], ...), %% = literal %.
-    pub const PRINT_STR: u8 = 2;
+    PrintFloat = 1,
+    /// Print formatted string from CMEM.
+    PrintStr = 2,
     /// Print R[0] as a single ASCII character (no newline).
-    pub const PRINT_CHAR: u8 = 3;
+    PrintChar = 3,
     /// Debug dump: print all non-zero registers to stderr.
-    pub const DUMP_REGS: u8 = 4;
+    DumpRegs = 4,
 }
 
-/// Helper: name string for a procedure ID (for display/debug).
-pub fn proc_id_name(id: u8) -> &'static str {
-    match id {
-        proc_id::PRINT_INT => "PRINT_INT",
-        proc_id::PRINT_FLOAT => "PRINT_FLOAT",
-        proc_id::PRINT_STR => "PRINT_STR",
-        proc_id::PRINT_CHAR => "PRINT_CHAR",
-        proc_id::DUMP_REGS => "DUMP_REGS",
-        _ => "unknown",
+impl TryFrom<u8> for ProcId {
+    type Error = CqamError;
+    fn try_from(v: u8) -> Result<Self, CqamError> {
+        match v {
+            0 => Ok(ProcId::PrintInt),
+            1 => Ok(ProcId::PrintFloat),
+            2 => Ok(ProcId::PrintStr),
+            3 => Ok(ProcId::PrintChar),
+            4 => Ok(ProcId::DumpRegs),
+            _ => Err(CqamError::InvalidId { domain: "ProcId", value: v }),
+        }
     }
 }
 
-/// Register file selector constants for QEncode instruction.
-///
-/// Determines which classical register file provides the source amplitudes:
-/// - R_FILE (0): Read from integer registers (R-file), values cast i64 -> f64
-/// - F_FILE (1): Read from float registers (F-file), values used as real part
-/// - Z_FILE (2): Read from complex registers (Z-file), values used directly
-pub mod file_sel {
-    /// Integer register file: R[src_base]..R[src_base+count-1] as i64.
-    /// Each value is converted to a complex amplitude: (val as f64, 0.0).
-    pub const R_FILE: u8 = 0;
-
-    /// Float register file: F[src_base]..F[src_base+count-1] as f64.
-    /// Each value is converted to a complex amplitude: (val, 0.0).
-    pub const F_FILE: u8 = 1;
-
-    /// Complex register file: Z[src_base]..Z[src_base+count-1] as (f64, f64).
-    /// Values are used directly as complex amplitudes.
-    pub const Z_FILE: u8 = 2;
+impl From<ProcId> for u8 {
+    fn from(v: ProcId) -> u8 { v as u8 }
 }
 
-/// Helper: name string for a file selector ID (for display/debug).
-pub fn file_sel_name(id: u8) -> &'static str {
-    match id {
-        0 => "R",
-        1 => "F",
-        2 => "Z",
-        _ => "unknown",
+impl fmt::Display for ProcId {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.name())
     }
 }
 
-/// Rotation axis constants for QROT instruction.
-pub mod rot_axis {
-    /// Rotation about X axis: Rx(theta).
-    pub const X: u8 = 0;
-    /// Rotation about Y axis: Ry(theta).
-    pub const Y: u8 = 1;
-    /// Rotation about Z axis: Rz(theta).
-    pub const Z: u8 = 2;
-}
-
-/// Helper: name string for a rotation axis (for display/debug).
-pub fn rot_axis_name(axis: u8) -> &'static str {
-    match axis {
-        rot_axis::X => "X",
-        rot_axis::Y => "Y",
-        rot_axis::Z => "Z",
-        _ => "unknown",
+impl ProcId {
+    /// Canonical name string.
+    pub fn name(self) -> &'static str {
+        match self {
+            ProcId::PrintInt => "PRINT_INT",
+            ProcId::PrintFloat => "PRINT_FLOAT",
+            ProcId::PrintStr => "PRINT_STR",
+            ProcId::PrintChar => "PRINT_CHAR",
+            ProcId::DumpRegs => "DUMP_REGS",
+        }
     }
-}
 
-/// Helper: name string for a reduction function ID (for display/debug).
-pub fn reduce_fn_name(id: u8) -> &'static str {
-    match id {
-        reduce_fn::ROUND => "round",
-        reduce_fn::FLOOR => "floor",
-        reduce_fn::CEIL => "ceil",
-        reduce_fn::TRUNC => "trunc",
-        reduce_fn::ABS => "abs",
-        reduce_fn::NEGATE => "negate",
-        reduce_fn::MAGNITUDE => "magnitude",
-        reduce_fn::PHASE => "phase",
-        reduce_fn::REAL => "real",
-        reduce_fn::IMAG => "imag",
-        reduce_fn::MEAN => "mean",
-        reduce_fn::MODE => "mode",
-        reduce_fn::ARGMAX => "argmax",
-        reduce_fn::VARIANCE => "variance",
-        reduce_fn::CONJ_Z => "conj_z",
-        reduce_fn::NEGATE_Z => "negate_z",
-        reduce_fn::EXPECT => "expect",
-        _ => "unknown",
-    }
-}
-
-/// Five-letter assembly mnemonic for a reduction function ID.
-pub fn reduce_fn_mnemonic(id: u8) -> &'static str {
-    match id {
-        reduce_fn::ROUND => "ROUND",
-        reduce_fn::FLOOR => "FLOOR",
-        reduce_fn::CEIL => "CEILI",
-        reduce_fn::TRUNC => "TRUNC",
-        reduce_fn::ABS => "ABSOL",
-        reduce_fn::NEGATE => "NEGAT",
-        reduce_fn::MAGNITUDE => "MAGNI",
-        reduce_fn::PHASE => "PHASE",
-        reduce_fn::REAL => "REALP",
-        reduce_fn::IMAG => "IMAGP",
-        reduce_fn::MEAN => "MEANT",
-        reduce_fn::MODE => "MODEV",
-        reduce_fn::ARGMAX => "ARGMX",
-        reduce_fn::VARIANCE => "VARNC",
-        reduce_fn::CONJ_Z => "CONJZ",
-        reduce_fn::NEGATE_Z => "NEGTZ",
-        reduce_fn::EXPECT => "EXPCT",
-        _ => "?????",
-    }
-}
-
-/// Parse a reduction function mnemonic to its numeric ID.
-///
-/// Accepts five-letter mnemonics (ROUND, FLOOR, CEILI, TRUNC, ABSOL, NEGAT,
-/// MAGNI, PHASE, REALP, IMAGP, MEANT, MODEV, ARGMX, VARNC, CONJZ, NEGTZ,
-/// EXPCT). Returns `None` for unrecognized names.
-pub fn reduce_fn_name_to_id(name: &str) -> Option<u8> {
-    match name {
-        "ROUND" => Some(reduce_fn::ROUND),
-        "FLOOR" => Some(reduce_fn::FLOOR),
-        "CEILI" => Some(reduce_fn::CEIL),
-        "TRUNC" => Some(reduce_fn::TRUNC),
-        "ABSOL" => Some(reduce_fn::ABS),
-        "NEGAT" => Some(reduce_fn::NEGATE),
-        "MAGNI" => Some(reduce_fn::MAGNITUDE),
-        "PHASE" => Some(reduce_fn::PHASE),
-        "REALP" => Some(reduce_fn::REAL),
-        "IMAGP" => Some(reduce_fn::IMAG),
-        "MEANT" => Some(reduce_fn::MEAN),
-        "MODEV" => Some(reduce_fn::MODE),
-        "ARGMX" => Some(reduce_fn::ARGMAX),
-        "VARNC" => Some(reduce_fn::VARIANCE),
-        "CONJZ" => Some(reduce_fn::CONJ_Z),
-        "NEGTZ" => Some(reduce_fn::NEGATE_Z),
-        "EXPCT" => Some(reduce_fn::EXPECT),
-        _ => None,
+    /// Parse from name string.
+    pub fn from_name(name: &str) -> Option<Self> {
+        match name {
+            "PRINT_INT" => Some(ProcId::PrintInt),
+            "PRINT_FLOAT" => Some(ProcId::PrintFloat),
+            "PRINT_STR" => Some(ProcId::PrintStr),
+            "PRINT_CHAR" => Some(ProcId::PrintChar),
+            "DUMP_REGS" => Some(ProcId::DumpRegs),
+            _ => None,
+        }
     }
 }

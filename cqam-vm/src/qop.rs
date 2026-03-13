@@ -1,65 +1,55 @@
 //! Quantum operation handlers for the CQAM virtual machine.
 //!
-//! Implements QPREP, QKERNEL, QOBSERVE, QLOAD, and QSTORE using the
-//! `QuantumRegister` simulation backend from `cqam-sim`, which dispatches
-//! to either Statevector (pure) or DensityMatrix (mixed) as appropriate.
+//! Dispatches quantum instructions to the QuantumBackend trait, extracts
+//! parameters from registers/CMEM, and updates PSW flags from operation results.
 
 use cqam_core::error::CqamError;
-use cqam_core::instruction::{Instruction, dist_id, file_sel, kernel_id, observe_mode, rot_axis};
+use cqam_core::instruction::{Instruction, DistId, FileSel, KernelId, RotAxis};
+use cqam_core::quantum_backend::{
+    KernelParams, ObserveResult, QuantumBackend,
+};
 use cqam_core::register::HybridValue;
-use cqam_sim::complex::{C64, ZERO, ONE};
-use cqam_sim::density_matrix::DensityMatrix;
-use cqam_sim::quantum_register::QuantumRegister;
-use cqam_sim::kernel::Kernel;
-use cqam_sim::kernels::init::Init;
-use cqam_sim::kernels::entangle::Entangle;
-use cqam_sim::kernels::fourier::Fourier;
-use cqam_sim::kernels::diffuse::Diffuse;
-use cqam_sim::kernels::grover::GroverIter;
-use cqam_sim::kernels::rotate::Rotate;
-use cqam_sim::kernels::phase::PhaseShift;
-use cqam_sim::kernels::fourier_inv::FourierInv;
-use cqam_sim::kernels::controlled_u::ControlledU;
-use cqam_sim::kernels::diagonal::DiagonalUnitary;
-use cqam_sim::kernels::permutation::Permutation;
-use rand::Rng;
 use crate::context::ExecutionContext;
 
+// =============================================================================
+// Intent flag functions (ISA-level, not backend-specific)
+// =============================================================================
+
 /// Return (SF, EF, IF) intent flags for a kernel ID.
-fn kernel_intent(kid: u8) -> (bool, bool, bool) {
-    use cqam_core::instruction::kernel_id;
+fn kernel_intent(kid: KernelId) -> (bool, bool, bool) {
     match kid {
-        kernel_id::INIT             => (true,  false, false),
-        kernel_id::ENTANGLE         => (true,  true,  false),
-        kernel_id::FOURIER          => (true,  false, true),
-        kernel_id::DIFFUSE          => (true,  false, true),
-        kernel_id::GROVER_ITER      => (true,  false, true),
-        kernel_id::PHASE_SHIFT      => (false, false, true),
-        kernel_id::ROTATE           => (true,  false, false),
-        kernel_id::FOURIER_INV      => (true,  false, true),
-        kernel_id::CONTROLLED_U     => (true,  true,  false),
-        kernel_id::PERMUTATION      => (false, false, false),
-        kernel_id::DIAGONAL_UNITARY => (false, false, true),
-        _                           => (false, false, false),
+        KernelId::Init             => (true,  false, false),
+        KernelId::Entangle         => (true,  true,  false),
+        KernelId::Fourier          => (true,  false, true),
+        KernelId::Diffuse          => (true,  false, true),
+        KernelId::GroverIter       => (true,  false, true),
+        KernelId::PhaseShift       => (false, false, true),
+        KernelId::Rotate           => (true,  false, false),
+        KernelId::FourierInv       => (true,  false, true),
+        KernelId::ControlledU      => (true,  true,  false),
+        KernelId::Permutation      => (false, false, false),
+        KernelId::DiagonalUnitary  => (false, false, true),
     }
 }
 
 /// Return (SF, EF) intent flags for a distribution ID.
 /// IF is always false for preparation instructions.
-fn dist_intent(dist: u8) -> (bool, bool) {
-    use cqam_core::instruction::dist_id;
+fn dist_intent(dist: DistId) -> (bool, bool) {
     match dist {
-        dist_id::UNIFORM => (true, false),
-        dist_id::ZERO    => (false, false),
-        dist_id::BELL    => (true, true),
-        dist_id::GHZ     => (true, true),
-        _                => (false, false),
+        DistId::Uniform => (true, false),
+        DistId::Zero    => (false, false),
+        DistId::Bell    => (true, true),
+        DistId::Ghz     => (true, true),
     }
 }
 
 // =============================================================================
 // Gate matrices for masked register-level operations
 // =============================================================================
+
+type C64 = (f64, f64);
+const ZERO: C64 = (0.0, 0.0);
+const ONE: C64 = (1.0, 0.0);
 
 /// Hadamard gate: (1/sqrt(2)) * [[1,1],[1,-1]]
 fn hadamard() -> [C64; 4] {
@@ -78,7 +68,6 @@ fn pauli_z() -> [C64; 4] {
 }
 
 /// CZ gate (4x4): diag(1, 1, 1, -1)
-/// |00> -> |00>, |01> -> |01>, |10> -> |10>, |11> -> -|11>
 fn cz_gate() -> [C64; 16] {
     [
         ONE,  ZERO, ZERO, ZERO,
@@ -89,7 +78,6 @@ fn cz_gate() -> [C64; 16] {
 }
 
 /// SWAP gate (4x4): swaps |01> <-> |10>
-/// [[1,0,0,0],[0,0,1,0],[0,1,0,0],[0,0,0,1]]
 fn swap_gate() -> [C64; 16] {
     [
         ONE,  ZERO, ZERO, ZERO,
@@ -99,8 +87,7 @@ fn swap_gate() -> [C64; 16] {
     ]
 }
 
-/// CNOT gate (4x4): |00> -> |00>, |01> -> |01>, |10> -> |11>, |11> -> |10>
-/// Matrix: [[1,0,0,0],[0,1,0,0],[0,0,0,1],[0,0,1,0]]
+/// CNOT gate (4x4)
 fn cnot_gate() -> [C64; 16] {
     [
         ONE,  ZERO, ZERO, ZERO,
@@ -110,7 +97,7 @@ fn cnot_gate() -> [C64; 16] {
     ]
 }
 
-/// Build Rx(theta) = [[cos(t/2), -i*sin(t/2)], [-i*sin(t/2), cos(t/2)]]
+/// Build Rx(theta)
 fn rotation_x(theta: f64) -> [C64; 4] {
     let half = theta / 2.0;
     let c = half.cos();
@@ -121,7 +108,7 @@ fn rotation_x(theta: f64) -> [C64; 4] {
     ]
 }
 
-/// Build Ry(theta) = [[cos(t/2), -sin(t/2)], [sin(t/2), cos(t/2)]]
+/// Build Ry(theta)
 fn rotation_y(theta: f64) -> [C64; 4] {
     let half = theta / 2.0;
     let c = half.cos();
@@ -132,7 +119,7 @@ fn rotation_y(theta: f64) -> [C64; 4] {
     ]
 }
 
-/// Build Rz(theta) = [[exp(-i*t/2), 0], [0, exp(i*t/2)]]
+/// Build Rz(theta)
 fn rotation_z(theta: f64) -> [C64; 4] {
     let half = theta / 2.0;
     [
@@ -141,76 +128,62 @@ fn rotation_z(theta: f64) -> [C64; 4] {
     ]
 }
 
-// =============================================================================
-// Masked gate execution
-// =============================================================================
-
-/// Execute a masked single-qubit gate across selected qubits.
+/// Execute a quantum instruction using the given backend.
 ///
-/// Reads the bitmask from R[mask_reg], iterates over qubits 0..num_qubits,
-/// and applies the given gate to each qubit where the corresponding mask bit
-/// is set.
-fn execute_masked_gate(
+/// Returns `Ok(())` on success, or `Err(CqamError)` on runtime errors.
+pub fn execute_qop<B: QuantumBackend + ?Sized>(
     ctx: &mut ExecutionContext,
-    dst: u8,
-    src: u8,
-    mask_reg: u8,
-    gate_fn: fn() -> [C64; 4],
-    _instr_name: &str,
-    intent: (bool, bool, bool),
+    instr: &Instruction,
+    backend: &mut B,
 ) -> Result<(), CqamError> {
-    if let Some(ref qr) = ctx.qregs[src as usize] {
-        let mask = ctx.iregs.get(mask_reg)? as u64;
-        let n = qr.num_qubits();
-        let gate = gate_fn();
-
-        let mut result = qr.clone();
-        for qubit in 0..n {
-            if (mask >> qubit) & 1 == 1 {
-                result.apply_single_qubit_gate(qubit, &gate);
-            }
-        }
-
-        let purity = result.purity();
-
-        ctx.qregs[dst as usize] = Some(result);
-        ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
-        ctx.psw.sf = intent.0;
-        ctx.psw.ef = intent.1;
-        ctx.psw.inf = intent.2;
-        Ok(())
-    } else {
-        Err(CqamError::UninitializedRegister {
-            file: "Q".to_string(),
-            index: src,
-        })
-    }
-}
-
-/// Execute a quantum instruction.
-///
-/// Returns `Ok(())` on success, or `Err(CqamError)` on runtime errors
-/// (unknown kernel, uninitialized quantum register, etc.).
-pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<(), CqamError> {
     match instr {
         Instruction::QPrep { dst, dist } => {
             let num_qubits = ctx.config.default_qubits;
             let force_dm = ctx.config.force_density_matrix;
-            let qr = match *dist {
-                dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
-                dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
-                dist_id::BELL => QuantumRegister::new_bell(force_dm),
-                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm)
-                    .map_err(|e| CqamError::TypeMismatch {
-                        instruction: "QPREP/GHZ".to_string(),
-                        detail: e,
-                    })?,
-                _ => {
-                    return Err(CqamError::UnknownDistribution(*dist));
-                }
-            };
+            let (handle, _result) = backend.prep(*dist, num_qubits, force_dm)?;
             let (sf, ef) = dist_intent(*dist);
-            ctx.qregs[*dst as usize] = Some(qr);
+            ctx.set_qreg(*dst, handle, backend);
+            ctx.psw.qf = true;
+            ctx.psw.sf = sf;
+            ctx.psw.ef = ef;
+            ctx.psw.inf = false;
+            ctx.psw.clear_decoherence();
+            ctx.psw.cf = false;
+            Ok(())
+        }
+
+        Instruction::QPrepR { dst, dist_reg } => {
+            let dist_id_val = DistId::try_from(ctx.iregs.get(*dist_reg)? as u8)?;
+            let num_qubits = ctx.config.default_qubits;
+            let force_dm = ctx.config.force_density_matrix;
+            let (handle, _result) = backend.prep(dist_id_val, num_qubits, force_dm)?;
+            let (sf, ef) = dist_intent(dist_id_val);
+            ctx.set_qreg(*dst, handle, backend);
+            ctx.psw.qf = true;
+            ctx.psw.sf = sf;
+            ctx.psw.ef = ef;
+            ctx.psw.inf = false;
+            ctx.psw.clear_decoherence();
+            ctx.psw.cf = false;
+            Ok(())
+        }
+
+        Instruction::QPrepN { dst, dist, qubit_count_reg } => {
+            let num_qubits = ctx.iregs.get(*qubit_count_reg)? as u8;
+            let force_dm = ctx.config.force_density_matrix;
+            let max_qubits = backend.max_qubits();
+
+            if num_qubits == 0 || num_qubits > max_qubits {
+                return Err(CqamError::QubitLimitExceeded {
+                    instruction: "QPREPN".to_string(),
+                    required: num_qubits,
+                    max: max_qubits,
+                });
+            }
+
+            let (handle, _result) = backend.prep(*dist, num_qubits, force_dm)?;
+            let (sf, ef) = dist_intent(*dist);
+            ctx.set_qreg(*dst, handle, backend);
             ctx.psw.qf = true;
             ctx.psw.sf = sf;
             ctx.psw.ef = ef;
@@ -224,174 +197,15 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let param0 = ctx.iregs.get(*ctx0)?;
             let param1 = ctx.iregs.get(*ctx1)?;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
-                let k: Box<dyn Kernel> = match *kernel {
-                    kernel_id::INIT => Box::new(Init),
-                    kernel_id::ENTANGLE => Box::new(Entangle),
-                    kernel_id::FOURIER => Box::new(Fourier),
-                    kernel_id::DIFFUSE => Box::new(Diffuse),
-                    kernel_id::GROVER_ITER => {
-                        let target = param0 as u16;
-                        let multi_addr = param1;
+            if let Some(handle) = ctx.qregs[*src as usize] {
+                // Pre-read CMEM data for kernels that need it
+                let cmem_data = pre_read_cmem_int(ctx, *kernel, param0, param1, handle, backend)?;
 
-                        if multi_addr == 0 {
-                            // Single-target mode (backward compatible)
-                            Box::new(GroverIter::single(target))
-                        } else {
-                            // Multi-target mode: read target list from CMEM
-                            let base = multi_addr as u16;
-                            let count = ctx.cmem.load(base) as usize;
-                            let mut targets = Vec::with_capacity(count);
-                            for i in 0..count {
-                                let t = ctx.cmem.load(base.wrapping_add(1 + i as u16)) as u16;
-                                targets.push(t);
-                            }
-                            Box::new(GroverIter::multi(targets))
-                        }
-                    }
-                    kernel_id::FOURIER_INV => Box::new(FourierInv),
-                    kernel_id::CONTROLLED_U => {
-                        // R[ctx0] = control qubit index
-                        // R[ctx1] = CMEM base address for 5-cell parameter block
-                        //   CMEM[base+0] = sub_kernel_id
-                        //   CMEM[base+1] = power
-                        //   CMEM[base+2] = param_re (f64 bits) or sub-data CMEM addr (i64)
-                        //   CMEM[base+3] = param_im (f64 bits) or unused
-                        //   CMEM[base+4] = target_qubits
-                        let control_qubit = param0 as u8;
-                        let base = param1 as u16;
-                        let sub_kernel_id = ctx.cmem.load(base) as u8;
-                        let power = ctx.cmem.load(base.wrapping_add(1)) as u32;
-                        let param_re = f64::from_bits(ctx.cmem.load(base.wrapping_add(2)) as u64);
-                        let param_im = f64::from_bits(ctx.cmem.load(base.wrapping_add(3)) as u64);
-                        let target_qubits = ctx.cmem.load(base.wrapping_add(4)) as u8;
+                let params = KernelParams::Int { param0, param1, cmem_data };
+                let (new_handle, result) = backend.apply_kernel(handle, *kernel, &params)?;
 
-                        // For CMEM-dependent sub-kernels, pre-build from CMEM data.
-                        // CMEM[base+2] holds the sub-data base address as a plain integer.
-                        let sub_kernel_override: Option<Box<dyn cqam_sim::kernel::Kernel>> =
-                            match sub_kernel_id {
-                                kernel_id::DIAGONAL_UNITARY => {
-                                    let sub_base = ctx.cmem.load(base.wrapping_add(2)) as u16;
-                                    let t = if target_qubits == 0 {
-                                        qr.num_qubits() - 1
-                                    } else {
-                                        target_qubits
-                                    };
-                                    let sub_dim = 1usize << t;
-                                    let mut diagonal = Vec::with_capacity(sub_dim);
-                                    for k in 0..sub_dim {
-                                        let addr = sub_base.wrapping_add((2 * k) as u16);
-                                        let re = f64::from_bits(ctx.cmem.load(addr) as u64);
-                                        let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
-                                        diagonal.push((re, im));
-                                    }
-                                    Some(Box::new(DiagonalUnitary { diagonal }))
-                                }
-                                kernel_id::PERMUTATION => {
-                                    let sub_base = ctx.cmem.load(base.wrapping_add(2)) as u16;
-                                    let t = if target_qubits == 0 {
-                                        qr.num_qubits() - 1
-                                    } else {
-                                        target_qubits
-                                    };
-                                    let sub_dim = 1usize << t;
-                                    let mut table = Vec::with_capacity(sub_dim);
-                                    for k in 0..sub_dim {
-                                        let addr = sub_base.wrapping_add(k as u16);
-                                        table.push(ctx.cmem.load(addr) as usize);
-                                    }
-                                    let perm = Permutation::new(table).map_err(|e| {
-                                        CqamError::TypeMismatch {
-                                            instruction: "QKERNEL/CONTROLLED_U(PERMUTATION)".to_string(),
-                                            detail: e,
-                                        }
-                                    })?;
-                                    Some(Box::new(perm))
-                                }
-                                _ => None,
-                            };
-
-                        Box::new(ControlledU {
-                            control_qubit,
-                            sub_kernel_id,
-                            power,
-                            param_re,
-                            param_im,
-                            target_qubits,
-                            sub_kernel_override,
-                        })
-                    }
-                    kernel_id::DIAGONAL_UNITARY => {
-                        // R[ctx0] = CMEM base address for diagonal entries
-                        // R[ctx1] = dimension (must equal Q[src].dimension())
-                        let base = param0 as u16;
-                        let dim = param1 as usize;
-                        let qr_dim = qr.dimension();
-                        if dim != qr_dim {
-                            return Err(CqamError::TypeMismatch {
-                                instruction: "QKERNEL/DIAGONAL_UNITARY".to_string(),
-                                detail: format!(
-                                    "dim_reg={} but Q[src] dimension={}",
-                                    dim, qr_dim
-                                ),
-                            });
-                        }
-                        // Read diagonal entries from CMEM
-                        let mut diagonal = Vec::with_capacity(dim);
-                        for k in 0..dim {
-                            let addr = base.wrapping_add((2 * k) as u16);
-                            let re = f64::from_bits(ctx.cmem.load(addr) as u64);
-                            let im = f64::from_bits(ctx.cmem.load(addr.wrapping_add(1)) as u64);
-                            diagonal.push((re, im));
-                        }
-                        Box::new(DiagonalUnitary { diagonal })
-                    }
-                    kernel_id::PERMUTATION => {
-                        // R[ctx0] = CMEM base address for permutation table
-                        // R[ctx1] = unused (dimension inferred from register)
-                        let base = param0 as u16;
-                        let dim = qr.dimension();
-
-                        if dim > 65536 {
-                            return Err(CqamError::TypeMismatch {
-                                instruction: "QKERNEL/PERMUTATION".to_string(),
-                                detail: format!(
-                                    "permutation table needs {} entries but CMEM has only 65536 cells",
-                                    dim
-                                ),
-                            });
-                        }
-
-                        // Read permutation table from CMEM: dim entries, each a plain i64
-                        let mut table = Vec::with_capacity(dim);
-                        for k in 0..dim {
-                            let addr = base.wrapping_add(k as u16);
-                            let val = ctx.cmem.load(addr);
-                            table.push(val as usize);
-                        }
-
-                        // Construct and validate permutation
-                        let perm = Permutation::new(table).map_err(|e| {
-                            CqamError::TypeMismatch {
-                                instruction: "QKERNEL/PERMUTATION".to_string(),
-                                detail: e,
-                            }
-                        })?;
-                        Box::new(perm)
-                    }
-                    _ => {
-                        return Err(CqamError::UnknownKernel(
-                            format!("Unknown kernel ID: {}", kernel),
-                        ));
-                    }
-                };
-
-                let result = qr.apply_kernel(k.as_ref())?;
-
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 let (sf, ef, inf) = kernel_intent(*kernel);
                 ctx.psw.sf = sf;
                 ctx.psw.ef = ef;
@@ -409,44 +223,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let fparam0 = ctx.fregs.get(*fctx0)?;
             let fparam1 = ctx.fregs.get(*fctx1)?;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
-                let k: Box<dyn Kernel> = match *kernel {
-                    kernel_id::INIT => Box::new(Init),
-                    kernel_id::ENTANGLE => Box::new(Entangle),
-                    kernel_id::FOURIER => Box::new(Fourier),
-                    kernel_id::DIFFUSE => Box::new(Diffuse),
-                    kernel_id::GROVER_ITER => {
-                        let target = fparam0 as u16;
-                        Box::new(GroverIter::single(target))
-                    }
-                    kernel_id::ROTATE => Box::new(Rotate { theta: fparam0 }),
-                    kernel_id::PHASE_SHIFT => Box::new(PhaseShift { amplitude: (fparam0, 0.0) }),
-                    kernel_id::FOURIER_INV => Box::new(FourierInv),
-                    kernel_id::CONTROLLED_U => {
-                        // QKernelF shorthand: F[fctx0] = control qubit, F[fctx1] = theta
-                        // Controlled-ROTATE with power=0, all target qubits
-                        Box::new(ControlledU {
-                            control_qubit: fparam0 as u8,
-                            sub_kernel_id: kernel_id::ROTATE,
-                            power: 0,
-                            param_re: fparam1,
-                            param_im: 0.0,
-                            target_qubits: 0,
-                            sub_kernel_override: None,
-                        })
-                    }
-                    _ => {
-                        return Err(CqamError::UnknownKernel(
-                            format!("Unknown kernel ID: {}", kernel),
-                        ));
-                    }
-                };
+            if let Some(handle) = ctx.qregs[*src as usize] {
+                let params = KernelParams::Float { param0: fparam0, param1: fparam1 };
+                let (new_handle, result) = backend.apply_kernel(handle, *kernel, &params)?;
 
-                let result = qr.apply_kernel(k.as_ref())?;
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 let (sf, ef, inf) = kernel_intent(*kernel);
                 ctx.psw.sf = sf;
                 ctx.psw.ef = ef;
@@ -464,44 +246,12 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let zparam0 = ctx.zregs.get(*zctx0)?;
             let zparam1 = ctx.zregs.get(*zctx1)?;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
-                let k: Box<dyn Kernel> = match *kernel {
-                    kernel_id::INIT => Box::new(Init),
-                    kernel_id::ENTANGLE => Box::new(Entangle),
-                    kernel_id::FOURIER => Box::new(Fourier),
-                    kernel_id::DIFFUSE => Box::new(Diffuse),
-                    kernel_id::GROVER_ITER => {
-                        let target = zparam0.0 as u16;
-                        Box::new(GroverIter::single(target))
-                    }
-                    kernel_id::ROTATE => Box::new(Rotate { theta: zparam0.0 }),
-                    kernel_id::PHASE_SHIFT => Box::new(PhaseShift { amplitude: zparam0 }),
-                    kernel_id::FOURIER_INV => Box::new(FourierInv),
-                    kernel_id::CONTROLLED_U => {
-                        // QKernelZ: Z[zctx0] = (control_qubit, sub_kernel_id)
-                        //           Z[zctx1] = (param_re, param_im)
-                        Box::new(ControlledU {
-                            control_qubit: zparam0.0 as u8,
-                            sub_kernel_id: zparam0.1 as u8,
-                            power: 0,
-                            param_re: zparam1.0,
-                            param_im: zparam1.1,
-                            target_qubits: 0,
-                            sub_kernel_override: None,
-                        })
-                    }
-                    _ => {
-                        return Err(CqamError::UnknownKernel(
-                            format!("Unknown kernel ID: {}", kernel),
-                        ));
-                    }
-                };
+            if let Some(handle) = ctx.qregs[*src as usize] {
+                let params = KernelParams::Complex { param0: zparam0, param1: zparam1 };
+                let (new_handle, result) = backend.apply_kernel(handle, *kernel, &params)?;
 
-                let result = qr.apply_kernel(k.as_ref())?;
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 let (sf, ef, inf) = kernel_intent(*kernel);
                 ctx.psw.sf = sf;
                 ctx.psw.ef = ef;
@@ -516,63 +266,19 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if let Some(qr) = ctx.qregs[*src_q as usize].take() {
-                let hval = match *mode {
-                    observe_mode::DIST => {
-                        let probs = qr.diagonal_probabilities();
-                        let dist_pairs: Vec<(u16, f64)> = probs.iter().enumerate()
-                            .filter(|(_, p)| **p >= 1e-15)
-                            .map(|(k, p)| (k as u16, *p))
-                            .collect();
-                        HybridValue::Dist(dist_pairs)
-                    }
-                    observe_mode::PROB => {
-                        let index = ctx.iregs.get(*ctx0)? as usize;
-                        let dim = qr.dimension();
-                        if index >= dim {
-                            return Err(CqamError::QuantumIndexOutOfRange {
-                                instruction: "QOBSERVE/PROB".to_string(),
-                                index,
-                                limit: dim,
-                            });
-                        }
-                        let prob = qr.get_element(index, index).0;
-                        HybridValue::Complex(prob, 0.0)
-                    }
-                    observe_mode::AMP => {
-                        let row = ctx.iregs.get(*ctx0)? as usize;
-                        let col = ctx.iregs.get(*ctx1)? as usize;
-                        let dim = qr.dimension();
-                        if row >= dim || col >= dim {
-                            return Err(CqamError::QuantumIndexOutOfRange {
-                                instruction: "QOBSERVE/AMP".to_string(),
-                                index: row.max(col),
-                                limit: dim,
-                            });
-                        }
-                        let (re, im) = qr.get_element(row, col);
-                        HybridValue::Complex(re, im)
-                    }
-                    observe_mode::SAMPLE => {
-                        let probs = qr.diagonal_probabilities();
-                        let r: f64 = ctx.rng.gen_range(0.0..1.0);
-                        let mut cumulative = 0.0;
-                        let mut outcome = (probs.len() - 1) as i64;
-                        for (k, p) in probs.iter().enumerate() {
-                            cumulative += p;
-                            if r < cumulative {
-                                outcome = k as i64;
-                                break;
-                            }
-                        }
-                        ctx.psw.zf = outcome == 0;
-                        HybridValue::Int(outcome)
-                    }
-                    _ => {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: "QOBSERVE".to_string(),
-                            detail: format!("unknown mode: {}", mode),
-                        });
+            if let Some(handle) = ctx.take_qreg(*src_q) {
+                let c0 = ctx.iregs.get(*ctx0)? as usize;
+                let c1 = ctx.iregs.get(*ctx1)? as usize;
+                let obs_result = backend.observe(handle, *mode, c0, c1)?;
+                // observe consumes the handle; no need to release
+
+                let hval = match obs_result {
+                    ObserveResult::Dist(pairs) => HybridValue::Dist(pairs),
+                    ObserveResult::Prob(p) => HybridValue::Complex(p, 0.0),
+                    ObserveResult::Amp(re, im) => HybridValue::Complex(re, im),
+                    ObserveResult::Sample(k) => {
+                        ctx.psw.zf = k == 0;
+                        HybridValue::Int(k)
                     }
                 };
                 ctx.hregs.set(*dst_h, hval)?;
@@ -592,49 +298,16 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if let Some(ref qr) = ctx.qregs[*src_q as usize] {
-                let hval = match *mode {
-                    observe_mode::DIST => {
-                        let probs = qr.diagonal_probabilities();
-                        let dist_pairs: Vec<(u16, f64)> = probs.iter().enumerate()
-                            .filter(|(_, p)| **p >= 1e-15)
-                            .map(|(k, p)| (k as u16, *p))
-                            .collect();
-                        HybridValue::Dist(dist_pairs)
-                    }
-                    observe_mode::PROB => {
-                        let index = ctx.iregs.get(*ctx0)? as usize;
-                        let dim = qr.dimension();
-                        if index >= dim {
-                            return Err(CqamError::QuantumIndexOutOfRange {
-                                instruction: "QSAMPLE/PROB".to_string(),
-                                index,
-                                limit: dim,
-                            });
-                        }
-                        let prob = qr.get_element(index, index).0;
-                        HybridValue::Complex(prob, 0.0)
-                    }
-                    observe_mode::AMP => {
-                        let row = ctx.iregs.get(*ctx0)? as usize;
-                        let col = ctx.iregs.get(*ctx1)? as usize;
-                        let dim = qr.dimension();
-                        if row >= dim || col >= dim {
-                            return Err(CqamError::QuantumIndexOutOfRange {
-                                instruction: "QSAMPLE/AMP".to_string(),
-                                index: row.max(col),
-                                limit: dim,
-                            });
-                        }
-                        let (re, im) = qr.get_element(row, col);
-                        HybridValue::Complex(re, im)
-                    }
-                    _ => {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: "QSAMPLE".to_string(),
-                            detail: format!("unknown mode: {}", mode),
-                        });
-                    }
+            if let Some(handle) = ctx.qregs[*src_q as usize] {
+                let c0 = ctx.iregs.get(*ctx0)? as usize;
+                let c1 = ctx.iregs.get(*ctx1)? as usize;
+                let obs_result = backend.sample(handle, *mode, c0, c1)?;
+
+                let hval = match obs_result {
+                    ObserveResult::Dist(pairs) => HybridValue::Dist(pairs),
+                    ObserveResult::Prob(p) => HybridValue::Complex(p, 0.0),
+                    ObserveResult::Amp(re, im) => HybridValue::Complex(re, im),
+                    ObserveResult::Sample(k) => HybridValue::Int(k),
                 };
                 ctx.hregs.set(*dst_h, hval)?;
                 Ok(())
@@ -647,8 +320,9 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QLoad { dst_q, addr } => {
-            if let Some(qr) = ctx.qmem.load(*addr) {
-                ctx.qregs[*dst_q as usize] = Some(qr.clone());
+            if let Some(qmem_handle) = ctx.qmem.load(*addr) {
+                let new_handle = backend.clone_state(*qmem_handle)?;
+                ctx.set_qreg(*dst_q, new_handle, backend);
                 ctx.psw.qf = true;
                 ctx.psw.sf = false;
                 ctx.psw.ef = false;
@@ -663,8 +337,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QStore { src_q, addr } => {
-            if let Some(ref qr) = ctx.qregs[*src_q as usize] {
-                ctx.qmem.store(*addr, qr.clone());
+            if let Some(handle) = ctx.qregs[*src_q as usize] {
+                let cloned = backend.clone_state(handle)?;
+                // Release any previous QMEM handle at this address
+                if let Some(old) = ctx.qmem.take(*addr) {
+                    backend.release(old);
+                }
+                ctx.qmem.store(*addr, cloned);
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -674,50 +353,21 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             }
         }
 
-        Instruction::QPrepR { dst, dist_reg } => {
-            let dist_id_val = ctx.iregs.get(*dist_reg)? as u8;
-            let num_qubits = ctx.config.default_qubits;
-            let force_dm = ctx.config.force_density_matrix;
-            let qr = match dist_id_val {
-                dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
-                dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
-                dist_id::BELL => QuantumRegister::new_bell(force_dm),
-                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm)
-                    .map_err(|e| CqamError::TypeMismatch {
-                        instruction: "QPREPR/GHZ".to_string(),
-                        detail: e,
-                    })?,
-                _ => {
-                    return Err(CqamError::UnknownDistribution(dist_id_val));
-                }
-            };
-            let (sf, ef) = dist_intent(dist_id_val);
-            ctx.qregs[*dst as usize] = Some(qr);
-            ctx.psw.qf = true;
-            ctx.psw.sf = sf;
-            ctx.psw.ef = ef;
-            ctx.psw.inf = false;
-            ctx.psw.clear_decoherence();
-            ctx.psw.cf = false;
-            Ok(())
-        }
-
         Instruction::QHadM { dst, src, mask_reg } => {
-            execute_masked_gate(ctx, *dst, *src, *mask_reg, hadamard, "QHADM", (true, false, false))
+            execute_masked_gate_backend(ctx, backend, *dst, *src, *mask_reg, hadamard, "QHADM", (true, false, false))
         }
 
         Instruction::QFlip { dst, src, mask_reg } => {
-            execute_masked_gate(ctx, *dst, *src, *mask_reg, pauli_x, "QFLIP", (false, false, false))
+            execute_masked_gate_backend(ctx, backend, *dst, *src, *mask_reg, pauli_x, "QFLIP", (false, false, false))
         }
 
         Instruction::QPhase { dst, src, mask_reg } => {
-            execute_masked_gate(ctx, *dst, *src, *mask_reg, pauli_z, "QPHASE", (false, false, false))
+            execute_masked_gate_backend(ctx, backend, *dst, *src, *mask_reg, pauli_z, "QPHASE", (false, false, false))
         }
 
         Instruction::QEncode { dst, src_base, count, file_sel: fs } => {
             let count_val = *count as usize;
 
-            // Pre-validate: count must be > 0 and a power of 2
             if count_val == 0 || (count_val & (count_val - 1)) != 0 {
                 return Err(CqamError::TypeMismatch {
                     instruction: "QENCODE".to_string(),
@@ -728,33 +378,25 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 });
             }
 
-            // Build amplitude vector from the selected register file
             let mut psi: Vec<(f64, f64)> = Vec::with_capacity(count_val);
             for i in 0..count_val {
                 let reg_idx = src_base + i as u8;
                 let amplitude: (f64, f64) = match *fs {
-                    file_sel::R_FILE => {
+                    FileSel::RFile => {
                         let val = ctx.iregs.get(reg_idx)?;
                         (val as f64, 0.0)
                     }
-                    file_sel::F_FILE => {
+                    FileSel::FFile => {
                         let val = ctx.fregs.get(reg_idx)?;
                         (val, 0.0)
                     }
-                    file_sel::Z_FILE => {
+                    FileSel::ZFile => {
                         ctx.zregs.get(reg_idx)?
-                    }
-                    _ => {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: "QENCODE".to_string(),
-                            detail: format!("invalid file_sel: {}", fs),
-                        });
                     }
                 };
                 psi.push(amplitude);
             }
 
-            // Validate statevector is not all-zero
             let norm_sq: f64 = psi.iter()
                 .map(|(re, im)| re * re + im * im)
                 .sum();
@@ -765,15 +407,8 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 });
             }
 
-            // Delegate to QuantumRegister::from_amplitudes (always Pure)
-            let qr = QuantumRegister::from_amplitudes(psi).map_err(|e| {
-                CqamError::TypeMismatch {
-                    instruction: "QENCODE".to_string(),
-                    detail: e,
-                }
-            })?;
-
-            ctx.qregs[*dst as usize] = Some(qr);
+            let (handle, _result) = backend.prep_from_amplitudes(&psi)?;
+            ctx.set_qreg(*dst, handle, backend);
             ctx.psw.qf = true;
             ctx.psw.sf = true;
             ctx.psw.ef = false;
@@ -785,29 +420,27 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let ctrl = ctx.iregs.get(*ctrl_qubit_reg)? as u8;
             let tgt = ctx.iregs.get(*tgt_qubit_reg)? as u8;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
+            if let Some(handle) = ctx.qregs[*src as usize] {
                 if ctrl == tgt {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QCNOT".to_string(),
                         detail: format!("ctrl ({}) == tgt ({})", ctrl, tgt),
                     });
                 }
-                if ctrl >= qr.num_qubits() || tgt >= qr.num_qubits() {
+                let n = backend.num_qubits(handle)?;
+                if ctrl >= n || tgt >= n {
                     return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QCNOT".to_string(),
                         index: ctrl.max(tgt) as usize,
-                        limit: qr.num_qubits() as usize,
+                        limit: n as usize,
                     });
                 }
 
                 let gate = cnot_gate();
-                let mut result = qr.clone();
-                result.apply_two_qubit_gate(ctrl, tgt, &gate);
+                let (new_handle, result) = backend.apply_two_qubit_gate(handle, ctrl, tgt, &gate)?;
 
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = false;
                 ctx.psw.ef = true;
                 ctx.psw.inf = false;
@@ -824,34 +457,26 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
             let theta = ctx.fregs.get(*angle_freg)?;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
-                if qubit >= qr.num_qubits() {
+            if let Some(handle) = ctx.qregs[*src as usize] {
+                let n = backend.num_qubits(handle)?;
+                if qubit >= n {
                     return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QROT".to_string(),
                         index: qubit as usize,
-                        limit: qr.num_qubits() as usize,
+                        limit: n as usize,
                     });
                 }
 
                 let gate = match *axis {
-                    rot_axis::X => rotation_x(theta),
-                    rot_axis::Y => rotation_y(theta),
-                    rot_axis::Z => rotation_z(theta),
-                    _ => {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: "QROT".to_string(),
-                            detail: format!("unknown axis: {}", axis),
-                        });
-                    }
+                    RotAxis::X => rotation_x(theta),
+                    RotAxis::Y => rotation_y(theta),
+                    RotAxis::Z => rotation_z(theta),
                 };
 
-                let mut result = qr.clone();
-                result.apply_single_qubit_gate(qubit, &gate);
+                let (new_handle, result) = backend.apply_single_gate(handle, qubit, &gate)?;
 
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = true;
                 ctx.psw.ef = false;
                 ctx.psw.inf = false;
@@ -867,30 +492,31 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         Instruction::QMeas { dst_r, src_q, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 
-            if let Some(qr) = ctx.qregs[*src_q as usize].take() {
-                if qubit >= qr.num_qubits() {
-                    let nq = qr.num_qubits();
-                    ctx.qregs[*src_q as usize] = Some(qr);
+            if let Some(handle) = ctx.take_qreg(*src_q) {
+                let n = backend.num_qubits(handle)?;
+                if qubit >= n {
+                    // Put handle back
+                    ctx.qregs[*src_q as usize] = Some(handle);
                     return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QMEAS".to_string(),
                         index: qubit as usize,
-                        limit: nq as usize,
+                        limit: n as usize,
                     });
                 }
 
-                let (outcome, post_qr) = qr.measure_qubit_with_rng(qubit, &mut ctx.rng);
+                let (new_handle, meas) = backend.measure_qubit(handle, qubit)?;
+                // Old handle consumed by measure_qubit
 
-                let purity = post_qr.purity();
-                ctx.iregs.set(*dst_r, outcome as i64)?;
-                ctx.qregs[*src_q as usize] = Some(post_qr);
+                ctx.iregs.set(*dst_r, meas.outcome as i64)?;
+                ctx.qregs[*src_q as usize] = Some(new_handle);
 
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.psw.update_from_qmeta(meas.purity, ctx.config.min_purity);
                 ctx.psw.sf = false;
                 ctx.psw.ef = false;
                 ctx.psw.inf = false;
                 ctx.psw.mark_decohered();
                 ctx.psw.mark_collapsed();
-                ctx.psw.zf = outcome == 0;
+                ctx.psw.zf = meas.outcome == 0;
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {
@@ -901,35 +527,26 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
         }
 
         Instruction::QTensor { dst, src0, src1 } => {
-            let qr0 = ctx.qregs[*src0 as usize].take().ok_or_else(|| {
+            let h0 = ctx.take_qreg(*src0).ok_or_else(|| {
                 CqamError::UninitializedRegister {
                     file: "Q".to_string(),
                     index: *src0,
                 }
             })?;
-            let qr1 = ctx.qregs[*src1 as usize].take().ok_or_else(|| {
+            let h1 = ctx.take_qreg(*src1).ok_or_else(|| {
+                // Put h0 back
+                ctx.qregs[*src0 as usize] = Some(h0);
                 CqamError::UninitializedRegister {
                     file: "Q".to_string(),
                     index: *src1,
                 }
             })?;
 
-            let result = qr0.tensor_product(&qr1).map_err(|_e| {
-                CqamError::QubitLimitExceeded {
-                    instruction: "QTENSOR".to_string(),
-                    required: qr0.num_qubits() + qr1.num_qubits(),
-                    max: if ctx.config.force_density_matrix {
-                        cqam_sim::density_matrix::MAX_QUBITS
-                    } else {
-                        cqam_sim::statevector::MAX_SV_QUBITS
-                    },
-                }
-            })?;
+            let (new_handle, result) = backend.tensor_product(h0, h1)?;
+            // tensor_product consumes both handles
 
-            let purity = result.purity();
-
-            ctx.qregs[*dst as usize] = Some(result);
-            ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+            ctx.set_qreg(*dst, new_handle, backend);
+            ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
             ctx.psw.sf = false;
             ctx.psw.ef = false;
             ctx.psw.inf = false;
@@ -940,15 +557,7 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let base_addr = ctx.iregs.get(*base_addr_reg)? as u16;
             let dim_val = ctx.iregs.get(*dim_reg)? as usize;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
-                let qr_dim = qr.dimension();
-                if dim_val != qr_dim {
-                    return Err(CqamError::TypeMismatch {
-                        instruction: "QCUSTOM".to_string(),
-                        detail: format!("dim_reg={} but Q[src] dimension={}", dim_val, qr_dim),
-                    });
-                }
-
+            if let Some(handle) = ctx.qregs[*src as usize] {
                 // Read unitary from CMEM: 2 * dim * dim cells (re, im pairs)
                 let mut unitary = Vec::with_capacity(dim_val * dim_val);
                 for idx in 0..dim_val * dim_val {
@@ -958,40 +567,10 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                     unitary.push((re, im));
                 }
 
-                // Validate unitarity: U^dagger * U ~= I
-                let tol = 1e-6;
-                for i in 0..dim_val {
-                    for j in 0..dim_val {
-                        // (U^dagger * U)[i][j] = sum_k conj(U[k][i]) * U[k][j]
-                        let mut re_sum = 0.0_f64;
-                        let mut im_sum = 0.0_f64;
-                        for k in 0..dim_val {
-                            let (a_re, a_im) = unitary[k * dim_val + i];
-                            let (b_re, b_im) = unitary[k * dim_val + j];
-                            // conj(a) * b = (a_re - a_im*i)(b_re + b_im*i)
-                            re_sum += a_re * b_re + a_im * b_im;
-                            im_sum += a_re * b_im - a_im * b_re;
-                        }
-                        let expected_re = if i == j { 1.0 } else { 0.0 };
-                        if (re_sum - expected_re).abs() > tol || im_sum.abs() > tol {
-                            return Err(CqamError::TypeMismatch {
-                                instruction: "QCUSTOM".to_string(),
-                                detail: format!(
-                                    "matrix is not unitary: (U^dagger*U)[{}][{}] = ({:.6}, {:.6}), expected ({:.1}, 0.0)",
-                                    i, j, re_sum, im_sum, expected_re
-                                ),
-                            });
-                        }
-                    }
-                }
+                let (new_handle, result) = backend.apply_custom_unitary(handle, &unitary, dim_val)?;
 
-                let mut result = qr.clone();
-                result.apply_unitary(&unitary);
-
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = true;
                 ctx.psw.ef = true;
                 ctx.psw.inf = false;
@@ -1008,29 +587,27 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let ctrl = ctx.iregs.get(*ctrl_qubit_reg)? as u8;
             let tgt = ctx.iregs.get(*tgt_qubit_reg)? as u8;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
+            if let Some(handle) = ctx.qregs[*src as usize] {
                 if ctrl == tgt {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QCZ".to_string(),
                         detail: format!("ctrl ({}) == tgt ({})", ctrl, tgt),
                     });
                 }
-                if ctrl >= qr.num_qubits() || tgt >= qr.num_qubits() {
+                let n = backend.num_qubits(handle)?;
+                if ctrl >= n || tgt >= n {
                     return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QCZ".to_string(),
                         index: ctrl.max(tgt) as usize,
-                        limit: qr.num_qubits() as usize,
+                        limit: n as usize,
                     });
                 }
 
                 let gate = cz_gate();
-                let mut result = qr.clone();
-                result.apply_two_qubit_gate(ctrl, tgt, &gate);
+                let (new_handle, result) = backend.apply_two_qubit_gate(handle, ctrl, tgt, &gate)?;
 
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = false;
                 ctx.psw.ef = true;
                 ctx.psw.inf = false;
@@ -1047,29 +624,27 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             let qubit_a = ctx.iregs.get(*qubit_a_reg)? as u8;
             let qubit_b = ctx.iregs.get(*qubit_b_reg)? as u8;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
+            if let Some(handle) = ctx.qregs[*src as usize] {
                 if qubit_a == qubit_b {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QSWAP".to_string(),
                         detail: format!("qubit_a ({}) == qubit_b ({})", qubit_a, qubit_b),
                     });
                 }
-                if qubit_a >= qr.num_qubits() || qubit_b >= qr.num_qubits() {
+                let n = backend.num_qubits(handle)?;
+                if qubit_a >= n || qubit_b >= n {
                     return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QSWAP".to_string(),
                         index: qubit_a.max(qubit_b) as usize,
-                        limit: qr.num_qubits() as usize,
+                        limit: n as usize,
                     });
                 }
 
                 let gate = swap_gate();
-                let mut result = qr.clone();
-                result.apply_two_qubit_gate(qubit_a, qubit_b, &gate);
+                let (new_handle, result) = backend.apply_two_qubit_gate(handle, qubit_a, qubit_b, &gate)?;
 
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = false;
                 ctx.psw.ef = false;
                 ctx.psw.inf = false;
@@ -1082,12 +657,11 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             }
         }
 
-        // -- QMIXED: build a mixed quantum state from a weighted ensemble in CMEM --
         Instruction::QMixed { dst, base_addr_reg, count_reg } => {
             let base = ctx.iregs.get(*base_addr_reg)? as u16;
             let count = ctx.iregs.get(*count_reg)? as usize;
 
-            let mut states: Vec<(f64, Vec<C64>)> = Vec::with_capacity(count);
+            let mut states: Vec<(f64, Vec<(f64, f64)>)> = Vec::with_capacity(count);
             let mut addr = base;
             for _ in 0..count {
                 let weight = f64::from_bits(ctx.cmem.load(addr) as u64);
@@ -1104,18 +678,13 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 states.push((weight, psi));
             }
 
-            let refs: Vec<(f64, &[C64])> = states.iter()
+            let refs: Vec<(f64, &[(f64, f64)])> = states.iter()
                 .map(|(w, psi)| (*w, psi.as_slice()))
                 .collect();
 
-            let dm = DensityMatrix::from_mixture(&refs).map_err(|e| {
-                CqamError::TypeMismatch {
-                    instruction: "QMIXED".to_string(),
-                    detail: e,
-                }
-            })?;
+            let (handle, _result) = backend.prep_mixed(&refs)?;
 
-            ctx.qregs[*dst as usize] = Some(QuantumRegister::Mixed(dm));
+            ctx.set_qreg(*dst, handle, backend);
             ctx.psw.qf = true;
             ctx.psw.sf = true;
             ctx.psw.ef = false;
@@ -1123,76 +692,25 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             Ok(())
         }
 
-        // -- QPREPN: prepare a quantum register with a runtime-specified qubit count --
-        Instruction::QPrepN { dst, dist, qubit_count_reg } => {
-            let num_qubits = ctx.iregs.get(*qubit_count_reg)? as u8;
-            let force_dm = ctx.config.force_density_matrix;
-
-            // Validate against the appropriate max for the chosen backend
-            let max_qubits = if force_dm {
-                cqam_sim::density_matrix::MAX_QUBITS
-            } else {
-                cqam_sim::statevector::MAX_SV_QUBITS
-            };
-
-            if num_qubits == 0 || num_qubits > max_qubits {
-                return Err(CqamError::QubitLimitExceeded {
-                    instruction: "QPREPN".to_string(),
-                    required: num_qubits,
-                    max: max_qubits,
-                });
-            }
-
-            let qr = match *dist {
-                dist_id::UNIFORM => QuantumRegister::new_uniform(num_qubits, force_dm),
-                dist_id::ZERO => QuantumRegister::new_zero_state(num_qubits, force_dm),
-                dist_id::BELL => QuantumRegister::new_bell(force_dm),
-                dist_id::GHZ => QuantumRegister::new_ghz(num_qubits, force_dm)
-                    .map_err(|e| CqamError::TypeMismatch {
-                        instruction: "QPREPN/GHZ".to_string(),
-                        detail: e,
-                    })?,
-                _ => {
-                    return Err(CqamError::UnknownDistribution(*dist));
-                }
-            };
-            let (sf, ef) = dist_intent(*dist);
-            ctx.qregs[*dst as usize] = Some(qr);
-            ctx.psw.qf = true;
-            ctx.psw.sf = sf;
-            ctx.psw.ef = ef;
-            ctx.psw.inf = false;
-            ctx.psw.clear_decoherence();
-            ctx.psw.cf = false;
-            Ok(())
-        }
-
-        // -- QPTRACE: reduce a composite system to subsystem A via partial trace --
         Instruction::QPtrace { dst, src, num_qubits_a_reg } => {
             let num_qubits_a = ctx.iregs.get(*num_qubits_a_reg)? as u8;
 
-            if let Some(ref qr) = ctx.qregs[*src as usize] {
-                if num_qubits_a == 0 || num_qubits_a >= qr.num_qubits() {
+            if let Some(handle) = ctx.qregs[*src as usize] {
+                let n = backend.num_qubits(handle)?;
+                if num_qubits_a == 0 || num_qubits_a >= n {
                     return Err(CqamError::TypeMismatch {
                         instruction: "QPTRACE".to_string(),
                         detail: format!(
                             "num_qubits_a must be 1..{}, got {}",
-                            qr.num_qubits(), num_qubits_a
+                            n, num_qubits_a
                         ),
                     });
                 }
 
-                let result = qr.partial_trace_b(num_qubits_a).map_err(|e| {
-                    CqamError::TypeMismatch {
-                        instruction: "QPTRACE".to_string(),
-                        detail: e,
-                    }
-                })?;
+                let (new_handle, result) = backend.partial_trace(handle, num_qubits_a)?;
 
-                let purity = result.purity();
-
-                ctx.qregs[*dst as usize] = Some(result);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = false;
                 ctx.psw.ef = false;
                 ctx.psw.inf = false;
@@ -1205,32 +723,24 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
             }
         }
 
-        // -- QRESET: measure a qubit and conditionally flip it back to |0> --
         Instruction::QReset { dst, src, qubit_reg } => {
             let qubit = ctx.iregs.get(*qubit_reg)? as u8;
 
-            if let Some(qr) = ctx.qregs[*src as usize].take() {
-                if qubit >= qr.num_qubits() {
-                    let nq = qr.num_qubits();
-                    ctx.qregs[*src as usize] = Some(qr);
+            if let Some(handle) = ctx.take_qreg(*src) {
+                let n = backend.num_qubits(handle)?;
+                if qubit >= n {
+                    ctx.qregs[*src as usize] = Some(handle);
                     return Err(CqamError::QuantumIndexOutOfRange {
                         instruction: "QRESET".to_string(),
                         index: qubit as usize,
-                        limit: nq as usize,
+                        limit: n as usize,
                     });
                 }
 
-                let (outcome, mut post_qr) = qr.measure_qubit_with_rng(qubit, &mut ctx.rng);
+                let (new_handle, result) = backend.reset_qubit(handle, qubit)?;
 
-                if outcome == 1 {
-                    let x_gate = pauli_x();
-                    post_qr.apply_single_qubit_gate(qubit, &x_gate);
-                }
-
-                let purity = post_qr.purity();
-
-                ctx.qregs[*dst as usize] = Some(post_qr);
-                ctx.psw.update_from_qmeta(purity, ctx.config.min_purity);
+                ctx.set_qreg(*dst, new_handle, backend);
+                ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
                 ctx.psw.sf = false;
                 ctx.psw.ef = false;
                 ctx.psw.inf = false;
@@ -1249,5 +759,173 @@ pub fn execute_qop(ctx: &mut ExecutionContext, instr: &Instruction) -> Result<()
                 detail: "Invalid instruction passed to execute_qop".to_string(),
             })
         }
+    }
+}
+
+// =============================================================================
+// Proper masked gate implementation
+// =============================================================================
+
+/// Execute a masked single-qubit gate across selected qubits using the backend.
+#[allow(clippy::too_many_arguments)]
+fn execute_masked_gate_backend<B: QuantumBackend + ?Sized>(
+    ctx: &mut ExecutionContext,
+    backend: &mut B,
+    dst: u8,
+    src: u8,
+    mask_reg: u8,
+    gate_fn: fn() -> [C64; 4],
+    _instr_name: &str,
+    intent: (bool, bool, bool),
+) -> Result<(), CqamError> {
+    if let Some(handle) = ctx.qregs[src as usize] {
+        let mask = ctx.iregs.get(mask_reg)? as u64;
+        let n = backend.num_qubits(handle)?;
+        let gate = gate_fn();
+
+        let mut current_handle = handle;
+        let mut last_purity = 1.0_f64;
+        for qubit in 0..n {
+            if (mask >> qubit) & 1 == 1 {
+                let (new_handle, result) = backend.apply_single_gate(current_handle, qubit, &gate)?;
+                if current_handle != handle {
+                    backend.release(current_handle);
+                }
+                current_handle = new_handle;
+                last_purity = result.purity;
+            }
+        }
+
+        // If no gates were applied (mask was empty), current_handle == handle.
+        // When dst == src and no gate was applied, the state is unchanged -- skip set_qreg
+        // to avoid releasing the original handle and invalidating it.
+        if current_handle == handle && dst == src {
+            // No-op: nothing changed.
+        } else if current_handle == handle && dst != src {
+            // Need an independent copy for the destination.
+            let cloned = backend.clone_state(handle)?;
+            ctx.set_qreg(dst, cloned, backend);
+        } else {
+            ctx.set_qreg(dst, current_handle, backend);
+        }
+        ctx.psw.update_from_qmeta(last_purity, ctx.config.min_purity);
+        ctx.psw.sf = intent.0;
+        ctx.psw.ef = intent.1;
+        ctx.psw.inf = intent.2;
+        Ok(())
+    } else {
+        Err(CqamError::UninitializedRegister {
+            file: "Q".to_string(),
+            index: src,
+        })
+    }
+}
+
+// =============================================================================
+// CMEM pre-reading for integer-context kernels
+// =============================================================================
+
+/// Pre-read CMEM data needed for integer-context kernels.
+///
+/// Returns a Vec<i64> of pre-read data. For kernels that don't need CMEM data,
+/// returns an empty vec.
+fn pre_read_cmem_int<B: QuantumBackend + ?Sized>(
+    ctx: &ExecutionContext,
+    kernel: KernelId,
+    param0: i64,
+    param1: i64,
+    handle: cqam_core::quantum_backend::QRegHandle,
+    backend: &B,
+) -> Result<Vec<i64>, CqamError> {
+    match kernel {
+        KernelId::GroverIter => {
+            let multi_addr = param1;
+            if multi_addr == 0 {
+                Ok(vec![])
+            } else {
+                // Multi-target: read count + targets from CMEM
+                let base = multi_addr as u16;
+                let count = ctx.cmem.load(base) as usize;
+                let mut data = Vec::with_capacity(1 + count);
+                data.push(count as i64);
+                for i in 0..count {
+                    let t = ctx.cmem.load(base.wrapping_add(1 + i as u16));
+                    data.push(t);
+                }
+                Ok(data)
+            }
+        }
+        KernelId::ControlledU => {
+            // R[ctx0] = control qubit index
+            // R[ctx1] = CMEM base address for 5-cell parameter block
+            let base = param1 as u16;
+            let sub_kernel_id_raw = ctx.cmem.load(base);
+            let power = ctx.cmem.load(base.wrapping_add(1));
+            let param_re_bits = ctx.cmem.load(base.wrapping_add(2));
+            let param_im_bits = ctx.cmem.load(base.wrapping_add(3));
+            let target_qubits = ctx.cmem.load(base.wrapping_add(4));
+
+            let mut data = vec![sub_kernel_id_raw, power, param_re_bits, param_im_bits, target_qubits];
+
+            // Check if sub-kernel needs CMEM data
+            let sub_kernel_id = KernelId::try_from(sub_kernel_id_raw as u8)?;
+            let tq = target_qubits as u8;
+            match sub_kernel_id {
+                KernelId::DiagonalUnitary => {
+                    let sub_base = param_re_bits as u16; // CMEM[base+2] is the sub-data addr
+                    let t = if tq == 0 {
+                        backend.num_qubits(handle)? - 1
+                    } else {
+                        tq
+                    };
+                    let sub_dim = 1usize << t;
+                    for k in 0..sub_dim {
+                        let addr = sub_base.wrapping_add((2 * k) as u16);
+                        data.push(ctx.cmem.load(addr));
+                        data.push(ctx.cmem.load(addr.wrapping_add(1)));
+                    }
+                }
+                KernelId::Permutation => {
+                    let sub_base = param_re_bits as u16;
+                    let t = if tq == 0 {
+                        backend.num_qubits(handle)? - 1
+                    } else {
+                        tq
+                    };
+                    let sub_dim = 1usize << t;
+                    for k in 0..sub_dim {
+                        let addr = sub_base.wrapping_add(k as u16);
+                        data.push(ctx.cmem.load(addr));
+                    }
+                }
+                _ => {}
+            }
+
+            Ok(data)
+        }
+        KernelId::DiagonalUnitary => {
+            // R[ctx0] = CMEM base, R[ctx1] = dimension
+            let base = param0 as u16;
+            let dim = param1 as usize;
+            let mut data = Vec::with_capacity(dim * 2);
+            for k in 0..dim {
+                let addr = base.wrapping_add((2 * k) as u16);
+                data.push(ctx.cmem.load(addr));
+                data.push(ctx.cmem.load(addr.wrapping_add(1)));
+            }
+            Ok(data)
+        }
+        KernelId::Permutation => {
+            // R[ctx0] = CMEM base
+            let base = param0 as u16;
+            let dim = backend.dimension(handle)?;
+            let mut data = Vec::with_capacity(dim);
+            for k in 0..dim {
+                let addr = base.wrapping_add(k as u16);
+                data.push(ctx.cmem.load(addr));
+            }
+            Ok(data)
+        }
+        _ => Ok(vec![]),
     }
 }

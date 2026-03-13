@@ -245,11 +245,11 @@ fn test_qasm_complex_memory() {
 #[test]
 fn test_qasm_quantum_flow() {
     let program = vec![
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         Instruction::QKernel {
-            dst: 0, src: 0, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 0,
+            dst: 0, src: 0, kernel: KernelId::Fourier, ctx0: 0, ctx1: 0,
         },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
     let config = EmitConfig {
         expand_templates: false,
@@ -271,10 +271,10 @@ fn test_qasm_quantum_flow() {
 #[test]
 fn test_qasm_qprep_all_distributions() {
     for (dist, name) in [
-        (dist_id::UNIFORM, "uniform"),
-        (dist_id::ZERO, "zero"),
-        (dist_id::BELL, "bell"),
-        (dist_id::GHZ, "ghz"),
+        (DistId::Uniform, "uniform"),
+        (DistId::Zero, "zero"),
+        (DistId::Bell, "bell"),
+        (DistId::Ghz, "ghz"),
     ] {
         let instr = Instruction::QPrep { dst: 0, dist };
         let lines = instr.to_qasm(&EmitConfig::fragment());
@@ -285,7 +285,7 @@ fn test_qasm_qprep_all_distributions() {
 
 #[test]
 fn test_qasm_qobserve_uses_lowercase_q() {
-    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     let lines = instr.to_qasm(&EmitConfig::fragment());
     assert!(lines[0].contains("measure q1"));
     assert!(!lines[0].contains("measure Q1"));
@@ -299,8 +299,8 @@ fn test_qasm_qobserve_uses_lowercase_q() {
 fn test_qasm_standalone_vs_fragment() {
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 42 },
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
     let standalone = emit_qasm_program(&program, &EmitConfig::standalone());
     let fragment = emit_qasm_program(&program, &EmitConfig::fragment());
@@ -383,8 +383,8 @@ fn test_qasm_control_flow() {
 fn test_qasm_hybrid_annotations() {
     let program = vec![
         Instruction::HFork,
-        Instruction::JmpF { flag: flag_id::QF, target: "QBRANCH".into() },
-        Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::MEAN },
+        Instruction::JmpF { flag: FlagId::Qf, target: "QBRANCH".into() },
+        Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Mean },
         Instruction::HMerge,
     ];
     let config = EmitConfig::fragment();
@@ -401,13 +401,13 @@ fn test_qasm_hybrid_annotations() {
 #[test]
 fn test_qasm_hreduce_int_vs_float_file() {
     // Round (func 0) -> int register (R)
-    let reduce_int = Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ROUND };
+    let reduce_int = Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Round };
     let lines_int = reduce_int.to_qasm(&EmitConfig::fragment());
     assert!(lines_int[0].contains("R1"));
     assert!(lines_int[0].contains("round"));
 
     // Magnitude (func 6) -> float register (F)
-    let reduce_float = Instruction::HReduce { src: 0, dst: 2, func: reduce_fn::MAGNITUDE };
+    let reduce_float = Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::Magnitude };
     let lines_float = reduce_float.to_qasm(&EmitConfig::fragment());
     assert!(lines_float[0].contains("F2"));
     assert!(lines_float[0].contains("magnitude"));
@@ -450,7 +450,7 @@ fn test_qasm_kernel_expansion() {
     // When expand_templates is true and template does NOT exist,
     // we get the fallback comment.
     let instr = Instruction::QKernel {
-        dst: 0, src: 1, kernel: kernel_id::FOURIER, ctx0: 2, ctx1: 3,
+        dst: 0, src: 1, kernel: KernelId::Fourier, ctx0: 2, ctx1: 3,
     };
     let config = EmitConfig {
         expand_templates: true,
@@ -464,7 +464,7 @@ fn test_qasm_kernel_expansion() {
 #[test]
 fn test_qasm_kernel_no_expansion() {
     let instr = Instruction::QKernel {
-        dst: 0, src: 1, kernel: kernel_id::ENTANGLE, ctx0: 2, ctx1: 3,
+        dst: 0, src: 1, kernel: KernelId::Entangle, ctx0: 2, ctx1: 3,
     };
     let config = EmitConfig {
         expand_templates: false,
@@ -492,8 +492,8 @@ fn test_qasm_all_register_files_declared() {
         Instruction::ILdi { dst: 0, imm: 1 },         // int
         Instruction::FLdi { dst: 0, imm: 1 },         // float
         Instruction::ZLdi { dst: 0, imm_re: 1, imm_im: 0 }, // complex
-        Instruction::QPrep { dst: 0, dist: 0 },       // quantum
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 }, // hybrid
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },       // quantum
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, // hybrid
         Instruction::ILdm { dst: 1, addr: 0 },        // cmem
     ];
     let config = EmitConfig::standalone();

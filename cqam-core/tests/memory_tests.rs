@@ -1,8 +1,7 @@
-//! Tests for `CMem` and `QMem<DensityMatrix>` covering store/load,
+//! Tests for `CMem` and `QMem` covering store/load,
 //! boundary addresses, take, overwrite, and emptiness checks.
 
 use cqam_core::memory::{CMem, QMem};
-use cqam_sim::density_matrix::DensityMatrix;
 
 // --- CMem --------------------------------------------------------------------
 
@@ -84,10 +83,17 @@ fn test_cmem_default() {
 }
 
 // --- QMem --------------------------------------------------------------------
+// Use a lightweight mock instead of DensityMatrix to avoid a circular
+// dev-dependency from cqam-core → cqam-sim.
+
+#[derive(Debug, Clone, PartialEq)]
+struct MockQState {
+    num_qubits: u8,
+}
 
 #[test]
 fn test_qmem_new_all_empty() {
-    let qmem: QMem<DensityMatrix> = QMem::new();
+    let qmem: QMem<MockQState> = QMem::new();
     for addr in 0..=255u8 {
         assert!(qmem.load(addr).is_none());
     }
@@ -95,24 +101,17 @@ fn test_qmem_new_all_empty() {
 
 #[test]
 fn test_qmem_store_and_load() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
-    let dm = DensityMatrix::new_zero_state(2);
-
-    qmem.store(10, dm);
-
+    let mut qmem: QMem<MockQState> = QMem::new();
+    let state = MockQState { num_qubits: 2 };
+    qmem.store(10, state.clone());
     let loaded = qmem.load(10).unwrap();
-    assert_eq!(loaded.num_qubits(), 2);
-    assert_eq!(loaded.dimension(), 4);
-    // Zero state: rho[0][0] = 1.0
-    assert!((loaded.get(0, 0).0 - 1.0).abs() < 1e-10);
+    assert_eq!(loaded.num_qubits, 2);
 }
 
 #[test]
 fn test_qmem_take_removes_slot() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
-    let dm = DensityMatrix::new_uniform(2);
-    qmem.store(5, dm);
-
+    let mut qmem: QMem<MockQState> = QMem::new();
+    qmem.store(5, MockQState { num_qubits: 2 });
     assert!(qmem.is_occupied(5));
     let taken = qmem.take(5);
     assert!(taken.is_some());
@@ -122,52 +121,47 @@ fn test_qmem_take_removes_slot() {
 
 #[test]
 fn test_qmem_take_returns_correct_value() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
-    let dm = DensityMatrix::new_bell();
-    qmem.store(42, dm);
-
+    let mut qmem: QMem<MockQState> = QMem::new();
+    qmem.store(42, MockQState { num_qubits: 3 });
     let taken = qmem.take(42).unwrap();
-    assert_eq!(taken.num_qubits(), 2);
-    // Bell state: rho[0][0] = 0.5
-    assert!((taken.get(0, 0).0 - 0.5).abs() < 1e-10);
+    assert_eq!(taken.num_qubits, 3);
 }
 
 #[test]
 fn test_qmem_take_empty_slot_returns_none() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
+    let mut qmem: QMem<MockQState> = QMem::new();
     assert!(qmem.take(100).is_none());
 }
 
 #[test]
 fn test_qmem_is_occupied() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
+    let mut qmem: QMem<MockQState> = QMem::new();
     assert!(!qmem.is_occupied(0));
-    qmem.store(0, DensityMatrix::new_zero_state(1));
+    qmem.store(0, MockQState { num_qubits: 1 });
     assert!(qmem.is_occupied(0));
 }
 
 #[test]
 fn test_qmem_overwrite() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
-    qmem.store(0, DensityMatrix::new_zero_state(1));
-    qmem.store(0, DensityMatrix::new_uniform(2));
-
+    let mut qmem: QMem<MockQState> = QMem::new();
+    qmem.store(0, MockQState { num_qubits: 1 });
+    qmem.store(0, MockQState { num_qubits: 2 });
     let loaded = qmem.load(0).unwrap();
-    assert_eq!(loaded.num_qubits(), 2);
+    assert_eq!(loaded.num_qubits, 2);
 }
 
 #[test]
 fn test_qmem_max_address() {
-    let mut qmem: QMem<DensityMatrix> = QMem::new();
-    qmem.store(255, DensityMatrix::new_zero_state(1));
+    let mut qmem: QMem<MockQState> = QMem::new();
+    qmem.store(255, MockQState { num_qubits: 1 });
     assert!(qmem.is_occupied(255));
     let loaded = qmem.load(255).unwrap();
-    assert_eq!(loaded.num_qubits(), 1);
+    assert_eq!(loaded.num_qubits, 1);
 }
 
 #[test]
 fn test_qmem_default() {
-    let qmem: QMem<DensityMatrix> = QMem::default();
+    let qmem: QMem<MockQState> = QMem::default();
     assert!(!qmem.is_occupied(0));
     assert!(!qmem.is_occupied(255));
 }

@@ -28,7 +28,10 @@ pub trait Kernel {
     /// Default implementation returns an error indicating the kernel does not
     /// support statevector mode. Kernels that can operate on pure states
     /// should override this.
-    fn apply_sv(&self, _input: &Statevector) -> Result<Statevector, String> {
-        Err("kernel does not support statevector mode".to_string())
+    fn apply_sv(&self, _input: &Statevector) -> Result<Statevector, CqamError> {
+        Err(CqamError::TypeMismatch {
+            instruction: "Kernel::apply_sv".to_string(),
+            detail: "kernel does not support statevector mode".to_string(),
+        })
     }
 }

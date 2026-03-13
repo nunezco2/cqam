@@ -8,7 +8,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Inverse Quantum Fourier Transform kernel (kernel_id = 7).
 ///
@@ -68,7 +68,7 @@ impl Kernel for FourierInv {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         // Factored inverse QFT: reverse of the QFT circuit.
         // IQFT = bit-reversal, then for j = n-1..0: inverse CR gates, then H.
         // O(n^2 * 2^n) time, O(2^n) memory.

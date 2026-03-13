@@ -39,10 +39,13 @@ impl Kernel for Entangle {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let n = input.num_qubits();
         if n < 2 {
-            return Err("Entangle kernel requires at least 2 qubits".to_string());
+            return Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/ENTANGLE".to_string(),
+                detail: format!("Entangle requires >= 2 qubits, got {}", n),
+            });
         }
 
         // CNOT is a permutation: swap amplitudes where control qubit (q0) is 1

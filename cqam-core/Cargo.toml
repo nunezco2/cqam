@@ -6,4 +6,3 @@ edition = "2024"
 [dependencies]
 
 [dev-dependencies]
-cqam-sim = { path = "../cqam-sim" }

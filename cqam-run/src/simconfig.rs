@@ -17,7 +17,9 @@
 
 use std::fs;
 use serde::Deserialize;
+use cqam_core::config::VmConfig;
 use cqam_core::error::CqamError;
+use cqam_core::parser::ProgramMetadata;
 
 /// Simulator configuration loaded from a TOML file or built from defaults.
 ///
@@ -66,6 +68,10 @@ pub struct SimConfig {
     /// Overrides the `#! threads N` pragma when set.
     /// Default: None (use pragma or 1).
     pub default_threads: Option<u16>,
+
+    /// RNG seed for reproducible quantum measurements.
+    /// Default: None (use entropy-based RNG).
+    pub rng_seed: Option<u64>,
 }
 
 impl Default for SimConfig {
@@ -77,6 +83,7 @@ impl Default for SimConfig {
             default_qubits: None, // use VM default (2 qubits)
             force_density_matrix: false,
             default_threads: None,
+            rng_seed: None,
         }
     }
 }
@@ -93,5 +100,33 @@ impl SimConfig {
         toml::from_str(&content).map_err(|e| CqamError::ConfigError(
             format!("Failed to parse config TOML: {}", e)
         ))
+    }
+
+    /// Convert this runner config into a [`VmConfig`], applying metadata
+    /// overrides with the standard precedence: CLI > pragma > default.
+    pub fn to_vm_config(&self, metadata: &ProgramMetadata) -> VmConfig {
+        let mut vm = VmConfig::default();
+
+        if let Some(threshold) = self.fidelity_threshold {
+            vm.min_purity = threshold;
+        }
+
+        // Qubit count precedence: CLI (SimConfig) > pragma > VmConfig default
+        if let Some(qubits) = self.default_qubits {
+            vm.default_qubits = qubits;
+        } else if let Some(pragma_qubits) = metadata.qubits {
+            vm.default_qubits = pragma_qubits;
+        }
+
+        vm.force_density_matrix = self.force_density_matrix;
+
+        // Thread count precedence: CLI (SimConfig) > pragma > VmConfig default
+        if let Some(threads) = self.default_threads {
+            vm.default_threads = threads;
+        } else if let Some(pragma_threads) = metadata.threads {
+            vm.default_threads = pragma_threads;
+        }
+
+        vm
     }
 }

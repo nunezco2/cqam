@@ -1,7 +1,7 @@
 //! ECALL interceptor: captures ECALL output for the debugger OUTPUT pane
 //! instead of writing to stdout/stderr.
 
-use cqam_core::instruction::proc_id;
+use cqam_core::instruction::ProcId;
 use cqam_vm::context::ExecutionContext;
 
 /// Source of an output line.
@@ -55,17 +55,17 @@ impl EcallInterceptor {
         };
 
         let text = match ecall_proc_id {
-            proc_id::PRINT_INT => {
+            ProcId::PrintInt => {
                 format!("{}", ctx.iregs.regs[0])
             }
-            proc_id::PRINT_FLOAT => {
+            ProcId::PrintFloat => {
                 format!("{}", ctx.fregs.regs[0])
             }
-            proc_id::PRINT_CHAR => {
+            ProcId::PrintChar => {
                 let ch = ctx.iregs.regs[0] as u8 as char;
                 format!("{}", ch)
             }
-            proc_id::PRINT_STR => {
+            ProcId::PrintStr => {
                 // Simplified: just indicate a string print occurred.
                 let base = ctx.iregs.regs[0] as u16;
                 let len = ctx.iregs.regs[1] as u16;
@@ -78,7 +78,7 @@ impl EcallInterceptor {
                 }
                 s
             }
-            proc_id::DUMP_REGS => {
+            ProcId::DumpRegs => {
                 // Simplified dump.
                 let mut lines = Vec::new();
                 for i in 0..16u8 {
@@ -93,7 +93,7 @@ impl EcallInterceptor {
                     format!("DUMP_REGS: {}", lines.join(" "))
                 }
             }
-            _ => format!("ECALL proc_id={} (unknown)", ecall_proc_id),
+            // All ProcId variants are exhaustively matched above.
         };
 
         self.buffer.push(OutputLine {

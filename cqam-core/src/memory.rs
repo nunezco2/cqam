@@ -5,7 +5,7 @@
 //! `Q: QuantumState` so that `cqam-core` has no compile-time dependency on the
 //! concrete simulation backend in `cqam-sim`.
 
-use crate::quantum_state::QuantumState;
+use crate::constants::{CMEM_SIZE, QMEM_SLOTS};
 
 /// Classical memory: 65536 cells of i64, addressed by u16.
 ///
@@ -21,7 +21,7 @@ pub struct CMem {
 impl Default for CMem {
     fn default() -> Self {
         Self {
-            cells: vec![0i64; 65536],
+            cells: vec![0i64; CMEM_SIZE],
         }
     }
 }
@@ -81,26 +81,26 @@ impl CMem {
 
 /// Quantum memory: 256 slots of quantum state, addressed by u8.
 ///
-/// Generic over `Q: QuantumState` so that cqam-core has zero dependency
+/// Generic over `Q: Clone + Debug` so that cqam-core has zero dependency
 /// on the concrete simulation backend (cqam-sim).
 ///
 /// Each slot is initially unoccupied (None). Slots are populated by QStore
 /// and read by QLoad. This is separate from the quantum register file
 /// (Q0-Q7 in ExecutionContext).
 #[derive(Debug, Clone)]
-pub struct QMem<Q: QuantumState> {
+pub struct QMem<Q: Clone + std::fmt::Debug> {
     slots: Vec<Option<Q>>,
 }
 
-impl<Q: QuantumState> Default for QMem<Q> {
+impl<Q: Clone + std::fmt::Debug> Default for QMem<Q> {
     fn default() -> Self {
         Self {
-            slots: (0..256).map(|_| None).collect(),
+            slots: (0..QMEM_SLOTS).map(|_| None).collect(),
         }
     }
 }
 
-impl<Q: QuantumState> QMem<Q> {
+impl<Q: Clone + std::fmt::Debug> QMem<Q> {
     /// Create a new quantum memory with 256 empty slots.
     pub fn new() -> Self {
         Self::default()

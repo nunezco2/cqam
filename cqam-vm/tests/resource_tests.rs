@@ -1,7 +1,7 @@
 //! Tests for `ResourceTracker` and `resource_cost` accuracy
 //! across all instruction categories.
 
-use cqam_core::instruction::Instruction;
+use cqam_core::instruction::*;
 use cqam_vm::resource::{ResourceTracker, resource_cost};
 
 fn accumulate_resources(instructions: &[Instruction]) -> ResourceTracker {
@@ -40,9 +40,9 @@ fn test_resource_int_arithmetic_sequence() {
 #[test]
 fn test_resource_quantum_pipeline() {
     let instrs = [
-        Instruction::QPrep { dst: 0, dist: 0 },
-        Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 0 },
-        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
     let t = accumulate_resources(&instrs);
     assert_eq!(t.total_time, 6); // 2+3+1
@@ -82,9 +82,9 @@ fn test_resource_control_flow() {
 fn test_resource_hybrid_operations() {
     let instrs = [
         Instruction::HFork,
-        Instruction::JmpF { flag: 0, target: "T".into() },
+        Instruction::JmpF { flag: FlagId::Zf, target: "T".into() },
         Instruction::HMerge,
-        Instruction::HReduce { src: 0, dst: 0, func: 0 },
+        Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Round },
     ];
     let t = accumulate_resources(&instrs);
     assert_eq!(t.total_time, 5); // 1+1+1+2
@@ -96,9 +96,9 @@ fn test_resource_mixed_program() {
     let instrs = [
         Instruction::ILdi { dst: 0, imm: 1 },                           // t=1, s=1
         Instruction::FAdd { dst: 0, lhs: 1, rhs: 2 },                   // t=1, s=1
-        Instruction::QPrep { dst: 0, dist: 0 },                         // t=2, s=2, sup=1.0
-        Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 }, // t=3, s=2, sup=0.5, ent=0.7
-        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },                   // t=1, s=1, int=0.3
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },                         // t=2, s=2, sup=1.0
+        Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 0, ctx1: 1 }, // t=3, s=2, sup=0.5, ent=0.7
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },                   // t=1, s=1, int=0.3
         Instruction::HFork,                                              // t=1, s=0
         Instruction::HMerge,                                             // t=1, s=0
         Instruction::Nop,                                                // t=0, s=0
@@ -129,7 +129,7 @@ fn test_resource_qload_qstore() {
 #[test]
 fn test_resource_setiv_reti() {
     let instrs = [
-        Instruction::SetIV { trap_id: 0, target: "HANDLER".into() },
+        Instruction::SetIV { trap_id: TrapId::Arithmetic, target: "HANDLER".into() },
         Instruction::Reti,
     ];
     let t = accumulate_resources(&instrs);

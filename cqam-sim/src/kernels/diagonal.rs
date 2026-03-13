@@ -16,7 +16,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Diagonal unitary kernel (kernel_id = 9).
 ///
@@ -52,13 +52,16 @@ impl Kernel for DiagonalUnitary {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let dim = input.dimension();
         if self.diagonal.len() != dim {
-            return Err(format!(
-                "diagonal has {} entries but register dimension is {}",
-                self.diagonal.len(), dim
-            ));
+            return Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/DIAGONAL_UNITARY".to_string(),
+                detail: format!(
+                    "diagonal has {} entries but register dimension is {}",
+                    self.diagonal.len(), dim
+                ),
+            });
         }
         let amps = input.amplitudes();
         let diag = &self.diagonal;

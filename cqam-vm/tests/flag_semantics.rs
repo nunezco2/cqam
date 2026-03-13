@@ -8,6 +8,7 @@ use cqam_vm::context::ExecutionContext;
 use cqam_vm::fork::ForkManager;
 use cqam_vm::hybrid::execute_hybrid;
 use cqam_vm::qop::execute_qop;
+use cqam_sim::backend::SimulationBackend;
 
 // =============================================================================
 // DF (flag_id=8, sticky): set by QOBSERVE/QMEAS, cleared by QPREP or clear()
@@ -16,10 +17,12 @@ use cqam_vm::qop::execute_qop;
 #[test]
 fn test_df_set_by_qobserve() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
 
@@ -29,7 +32,8 @@ fn test_df_set_by_qobserve() {
 
     execute_qop(
         &mut ctx,
-        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        &mut backend,
     )
     .unwrap();
 
@@ -40,10 +44,12 @@ fn test_df_set_by_qobserve() {
 #[test]
 fn test_df_set_by_qmeas() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::ZERO },
+        &Instruction::QPrep { dst: 0, dist: DistId::Zero },
+        &mut backend,
     )
     .unwrap();
 
@@ -52,6 +58,7 @@ fn test_df_set_by_qmeas() {
     execute_qop(
         &mut ctx,
         &Instruction::QMeas { dst_r: 1, src_q: 0, qubit_reg: 0 },
+        &mut backend,
     )
     .unwrap();
 
@@ -66,24 +73,28 @@ fn test_df_set_by_qmeas() {
 #[test]
 fn test_cf_cleared_by_update_from_qmeta() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     // Step 1: Prepare the register we will use for QKERNEL *before* setting DF/CF,
     // because QPREP clears DF.
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 1, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 1, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
 
     // Step 2: QPREP -> QOBSERVE on a different register to set both DF and CF.
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
     execute_qop(
         &mut ctx,
-        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        &mut backend,
     )
     .unwrap();
 
@@ -99,10 +110,11 @@ fn test_cf_cleared_by_update_from_qmeta() {
         &Instruction::QKernel {
             dst: 2,
             src: 1,
-            kernel: kernel_id::INIT,
+            kernel: KernelId::Init,
             ctx0: 0,
             ctx1: 1,
         },
+        &mut backend,
     )
     .unwrap();
 
@@ -119,16 +131,19 @@ fn test_cf_cleared_by_update_from_qmeta() {
 #[test]
 fn test_cf_cleared_by_hreduce() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     // QOBSERVE sets CF.
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
     execute_qop(
         &mut ctx,
-        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        &mut backend,
     )
     .unwrap();
     assert!(ctx.psw.cf, "CF should be true after QOBSERVE");
@@ -137,8 +152,9 @@ fn test_cf_cleared_by_hreduce() {
     let mut fm = ForkManager::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MODE },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Mode },
         &mut fm,
+        &mut backend,
     )
     .unwrap();
 
@@ -159,16 +175,19 @@ fn test_cf_cleared_by_hreduce() {
 #[test]
 fn test_df_cleared_by_qprep() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     // Set DF via QOBSERVE.
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
     execute_qop(
         &mut ctx,
-        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        &mut backend,
     )
     .unwrap();
     assert!(ctx.psw.df, "DF should be set after QOBSERVE");
@@ -176,7 +195,8 @@ fn test_df_cleared_by_qprep() {
     // A new QPREP clears DF (fresh quantum state, no decoherence).
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::ZERO },
+        &Instruction::QPrep { dst: 0, dist: DistId::Zero },
+        &mut backend,
     )
     .unwrap();
 
@@ -197,6 +217,7 @@ fn test_df_cleared_by_qprep() {
 #[test]
 fn test_fk_mg_lifecycle() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
     let mut fm = ForkManager::new();
 
     // Initially both should be false.
@@ -204,12 +225,12 @@ fn test_fk_mg_lifecycle() {
     assert!(!ctx.psw.merged, "MG should be false initially");
 
     // After HFORK: FK=true, MG=false.
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.forked, "FK should be true after HFORK");
     assert!(!ctx.psw.merged, "MG should be false after HFORK");
 
     // After HMERGE: FK=false, MG=true.
-    execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm, &mut backend).unwrap();
     assert!(!ctx.psw.forked, "FK should be false after HMERGE");
     assert!(ctx.psw.merged, "MG should be true after HMERGE");
 }
@@ -217,15 +238,16 @@ fn test_fk_mg_lifecycle() {
 #[test]
 fn test_mg_cleared_by_hfork() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
     let mut fm = ForkManager::new();
 
     // First establish MG=true via HFORK then HMERGE.
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
-    execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.merged, "MG should be true after HMERGE");
 
     // HFORK should clear MG and set FK.
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
     assert!(
         !ctx.psw.merged,
         "MG should be false after HFORK (HFORK clears MG)"
@@ -239,14 +261,15 @@ fn test_mg_cleared_by_hfork() {
 #[test]
 fn test_fk_cleared_by_hmerge() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
     let mut fm = ForkManager::new();
 
     // First establish FK=true via HFORK.
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.forked, "FK should be true after HFORK");
 
     // HMERGE should clear FK and set MG.
-    execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm, &mut backend).unwrap();
     assert!(
         !ctx.psw.forked,
         "FK should be false after HMERGE (HMERGE clears FK)"
@@ -264,40 +287,41 @@ fn test_fk_cleared_by_hmerge() {
 #[test]
 fn test_get_flag_ids_8_through_11() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     // All four flags start as false.
-    assert!(!ctx.psw.get_flag(flag_id::DF), "DF should be false initially");
-    assert!(!ctx.psw.get_flag(flag_id::CF), "CF should be false initially");
-    assert!(!ctx.psw.get_flag(flag_id::FK), "FK should be false initially");
-    assert!(!ctx.psw.get_flag(flag_id::MG), "MG should be false initially");
+    assert!(!ctx.psw.get_flag(FlagId::Df as u8), "DF should be false initially");
+    assert!(!ctx.psw.get_flag(FlagId::Cf as u8), "CF should be false initially");
+    assert!(!ctx.psw.get_flag(FlagId::Fk as u8), "FK should be false initially");
+    assert!(!ctx.psw.get_flag(FlagId::Mg as u8), "MG should be false initially");
 
     // Set DF only.
     ctx.psw.mark_decohered();
-    assert!(ctx.psw.get_flag(flag_id::DF), "get_flag(8) should return true for DF");
-    assert!(!ctx.psw.get_flag(flag_id::CF), "CF should remain false");
-    assert!(!ctx.psw.get_flag(flag_id::FK), "FK should remain false");
-    assert!(!ctx.psw.get_flag(flag_id::MG), "MG should remain false");
+    assert!(ctx.psw.get_flag(FlagId::Df as u8), "get_flag(8) should return true for DF");
+    assert!(!ctx.psw.get_flag(FlagId::Cf as u8), "CF should remain false");
+    assert!(!ctx.psw.get_flag(FlagId::Fk as u8), "FK should remain false");
+    assert!(!ctx.psw.get_flag(FlagId::Mg as u8), "MG should remain false");
 
     // Set CF only (additive).
     ctx.psw.mark_collapsed();
-    assert!(ctx.psw.get_flag(flag_id::DF), "DF should still be true");
-    assert!(ctx.psw.get_flag(flag_id::CF), "get_flag(9) should return true for CF");
+    assert!(ctx.psw.get_flag(FlagId::Df as u8), "DF should still be true");
+    assert!(ctx.psw.get_flag(FlagId::Cf as u8), "get_flag(9) should return true for CF");
 
     // Set FK only.
     ctx.psw.forked = true;
-    assert!(ctx.psw.get_flag(flag_id::FK), "get_flag(10) should return true for FK");
-    assert!(!ctx.psw.get_flag(flag_id::MG), "MG should still be false");
+    assert!(ctx.psw.get_flag(FlagId::Fk as u8), "get_flag(10) should return true for FK");
+    assert!(!ctx.psw.get_flag(FlagId::Mg as u8), "MG should still be false");
 
     // Set MG only.
     ctx.psw.merged = true;
-    assert!(ctx.psw.get_flag(flag_id::MG), "get_flag(11) should return true for MG");
+    assert!(ctx.psw.get_flag(FlagId::Mg as u8), "get_flag(11) should return true for MG");
 
     // Clear everything and verify all are false.
     ctx.psw.clear();
-    assert!(!ctx.psw.get_flag(flag_id::DF), "DF should be false after clear()");
-    assert!(!ctx.psw.get_flag(flag_id::CF), "CF should be false after clear()");
-    assert!(!ctx.psw.get_flag(flag_id::FK), "FK should be false after clear()");
-    assert!(!ctx.psw.get_flag(flag_id::MG), "MG should be false after clear()");
+    assert!(!ctx.psw.get_flag(FlagId::Df as u8), "DF should be false after clear()");
+    assert!(!ctx.psw.get_flag(FlagId::Cf as u8), "CF should be false after clear()");
+    assert!(!ctx.psw.get_flag(FlagId::Fk as u8), "FK should be false after clear()");
+    assert!(!ctx.psw.get_flag(FlagId::Mg as u8), "MG should be false after clear()");
 }
 
 // =============================================================================
@@ -307,11 +331,13 @@ fn test_get_flag_ids_8_through_11() {
 #[test]
 fn test_full_df_cf_lifecycle() {
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     // 1. QPREP: fresh state, DF=false, CF=false.
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 0, dist: dist_id::BELL },
+        &Instruction::QPrep { dst: 0, dist: DistId::Bell },
+        &mut backend,
     )
     .unwrap();
     assert!(!ctx.psw.df, "DF false after initial QPREP");
@@ -320,7 +346,8 @@ fn test_full_df_cf_lifecycle() {
     // 2. QOBSERVE: sets DF and CF.
     execute_qop(
         &mut ctx,
-        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        &Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        &mut backend,
     )
     .unwrap();
     assert!(ctx.psw.df, "DF true after QOBSERVE");
@@ -329,7 +356,8 @@ fn test_full_df_cf_lifecycle() {
     // 3. QKERNEL: CF is cleared (transient), DF remains (sticky).
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 1, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 1, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
     // Note: QPREP above also clears DF. To test the QKERNEL CF-clearing path
@@ -340,12 +368,14 @@ fn test_full_df_cf_lifecycle() {
     ctx.psw.clear();
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 2, dist: dist_id::UNIFORM },
+        &Instruction::QPrep { dst: 2, dist: DistId::Uniform },
+        &mut backend,
     )
     .unwrap();
     execute_qop(
         &mut ctx,
-        &Instruction::QObserve { dst_h: 1, src_q: 2, mode: 0, ctx0: 0, ctx1: 0 },
+        &Instruction::QObserve { dst_h: 1, src_q: 2, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        &mut backend,
     )
     .unwrap();
     assert!(ctx.psw.df, "DF set after second QOBSERVE");
@@ -359,10 +389,11 @@ fn test_full_df_cf_lifecycle() {
         &Instruction::QKernel {
             dst: 3,
             src: 1,  // Q1 was prepared above
-            kernel: kernel_id::INIT,
+            kernel: KernelId::Init,
             ctx0: 0,
             ctx1: 1,
         },
+        &mut backend,
     )
     .unwrap();
     assert!(ctx.psw.df, "DF must be sticky through QKERNEL");
@@ -371,7 +402,8 @@ fn test_full_df_cf_lifecycle() {
     // 4. QPREP clears DF.
     execute_qop(
         &mut ctx,
-        &Instruction::QPrep { dst: 4, dist: dist_id::ZERO },
+        &Instruction::QPrep { dst: 4, dist: DistId::Zero },
+        &mut backend,
     )
     .unwrap();
     assert!(!ctx.psw.df, "DF false after QPREP (re-initialisation)");

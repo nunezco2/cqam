@@ -14,6 +14,7 @@ use cqam_core::register::HybridValue;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
+use cqam_sim::backend::SimulationBackend;
 
 // =============================================================================
 // Helper: run a program to completion and return the final context
@@ -21,18 +22,20 @@ use cqam_vm::fork::ForkManager;
 
 /// Execute a sequence of instructions until HALT or end-of-program.
 /// Returns the final ExecutionContext for assertion.
-fn run_program(instrs: Vec<Instruction>) -> ExecutionContext {
+fn run_program(instrs: Vec<Instruction>) -> (ExecutionContext, SimulationBackend) {
     let mut ctx = ExecutionContext::new(instrs);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
-    while ctx.pc < ctx.program.len() {
-        let instr = ctx.program[ctx.pc].clone();
-        execute_instruction(&mut ctx, &instr, &mut fm).unwrap();
+    let program = std::sync::Arc::clone(&ctx.program);
+    while ctx.pc < program.len() {
+        let instr = &program[ctx.pc];
+        execute_instruction(&mut ctx, instr, &mut fm, &mut backend).unwrap();
         if ctx.psw.trap_halt {
             break;
         }
     }
-    ctx
+    (ctx, backend)
 }
 
 // =============================================================================
@@ -58,17 +61,17 @@ fn test_e2e_grover_r_file_round_trip() {
         // Set up Grover target in R0
         Instruction::ILdi { dst: 0, imm: target_state },
         // Prepare uniform superposition
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         // Apply Grover iteration (oracle + diffusion)
-        Instruction::QKernel { dst: 0, src: 0, kernel: kernel_id::GROVER_ITER, ctx0: 0, ctx1: 0 },
+        Instruction::QKernel { dst: 0, src: 0, kernel: KernelId::GroverIter, ctx0: 0, ctx1: 0 },
         // Observe with mode=DIST
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         // Reduce: get mode (most probable state)
-        Instruction::HReduce { src: 0, dst: 4, func: reduce_fn::MODE },
+        Instruction::HReduce { src: 0, dst: 4, func: ReduceFn::Mode },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // R4 should hold the mode of the distribution = the Grover target
     // For 4 states, one Grover iteration is optimal and should amplify target.
@@ -101,17 +104,17 @@ fn test_e2e_float_kernel_rotate() {
         // F1 = 0 (unused second context)
         Instruction::FLdi { dst: 1, imm: 0 },
         // Prepare uniform
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         // Apply ROTATE kernel with float params
-        Instruction::QKernelF { dst: 0, src: 0, kernel: kernel_id::ROTATE, fctx0: 0, fctx1: 1 },
+        Instruction::QKernelF { dst: 0, src: 0, kernel: KernelId::Rotate, fctx0: 0, fctx1: 1 },
         // Observe as DIST
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         // Reduce: mean of distribution -> F2
-        Instruction::HReduce { src: 0, dst: 2, func: reduce_fn::MEAN },
+        Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::Mean },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // F2 should be a finite, non-negative float
     let mean = ctx.fregs.get(2).unwrap();
@@ -144,17 +147,17 @@ fn test_e2e_complex_kernel_phase_shift_to_z_file() {
         Instruction::ILdi { dst: 0, imm: 0 },
         Instruction::ILdi { dst: 1, imm: 1 },
         // Prepare uniform
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         // Apply PHASE_SHIFT kernel with complex params
-        Instruction::QKernelZ { dst: 0, src: 0, kernel: kernel_id::PHASE_SHIFT, zctx0: 0, zctx1: 1 },
+        Instruction::QKernelZ { dst: 0, src: 0, kernel: KernelId::PhaseShift, zctx0: 0, zctx1: 1 },
         // Observe with AMP mode at (0,1)
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
         // Reduce: conjugate -> Z2
-        Instruction::HReduce { src: 0, dst: 2, func: reduce_fn::CONJ_Z },
+        Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::ConjZ },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // H0 should be Complex
     assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Complex(_, _)));
@@ -187,24 +190,24 @@ fn test_e2e_qsample_nondestructive_then_observe() {
     // We'll execute step by step to check intermediate states
     let instrs = vec![
         Instruction::ILdi { dst: 0, imm: 0 }, // R0 = 0 (for PROB mode)
-        Instruction::QPrep { dst: 0, dist: dist_id::BELL },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Bell },
+        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
 
     let mut ctx = ExecutionContext::new(instrs);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    let program = std::sync::Arc::clone(&ctx.program);
 
     // Execute ILDI and QPREP
-    let instr0 = ctx.program[0].clone();
-    execute_instruction(&mut ctx, &instr0, &mut fm).unwrap();
-    let instr1 = ctx.program[1].clone();
-    execute_instruction(&mut ctx, &instr1, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &program[0], &mut fm, &mut backend).unwrap();
+    execute_instruction(&mut ctx, &program[1], &mut fm, &mut backend).unwrap();
 
     assert!(ctx.qregs[0].is_some());
 
     // Execute QSAMPLE (DIST mode)
-    let instr2 = ctx.program[2].clone();
-    execute_instruction(&mut ctx, &instr2, &mut fm).unwrap();
+    execute_instruction(&mut ctx, &program[2], &mut fm, &mut backend).unwrap();
 
     // Q0 should still be alive
     assert!(ctx.qregs[0].is_some());
@@ -214,8 +217,8 @@ fn test_e2e_qsample_nondestructive_then_observe() {
     assert!(!ctx.psw.df);
 
     // Now do a second QSAMPLE with PROB mode
-    let qsample_prob = Instruction::QSample { dst_h: 1, src_q: 0, mode: observe_mode::PROB, ctx0: 0, ctx1: 0 };
-    execute_instruction(&mut ctx, &qsample_prob, &mut fm).unwrap();
+    let qsample_prob = Instruction::QSample { dst_h: 1, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 };
+    execute_instruction(&mut ctx, &qsample_prob, &mut fm, &mut backend).unwrap();
 
     // Q0 still alive
     assert!(ctx.qregs[0].is_some());
@@ -223,8 +226,8 @@ fn test_e2e_qsample_nondestructive_then_observe() {
     assert!(matches!(ctx.hregs.get(1).unwrap(), HybridValue::Complex(_, _)));
 
     // Now QOBSERVE to consume
-    let qobs = Instruction::QObserve { dst_h: 2, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 };
-    execute_instruction(&mut ctx, &qobs, &mut fm).unwrap();
+    let qobs = Instruction::QObserve { dst_h: 2, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
+    execute_instruction(&mut ctx, &qobs, &mut fm, &mut backend).unwrap();
 
     // Q0 should now be None
     assert!(ctx.qregs[0].is_none());
@@ -248,12 +251,12 @@ fn test_e2e_qsample_nondestructive_then_observe() {
 fn test_e2e_qobserve_prob_mode() {
     let instrs = vec![
         Instruction::ILdi { dst: 0, imm: 0 },  // R0 = 0
-        Instruction::QPrep { dst: 0, dist: dist_id::ZERO },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::PROB, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Zero },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // H0 should be Complex(1.0, 0.0) -- probability of |0> in the zero state
     if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
@@ -284,12 +287,12 @@ fn test_e2e_qobserve_amp_mode() {
     let instrs = vec![
         Instruction::ILdi { dst: 0, imm: 0 },  // R0 = row = 0
         Instruction::ILdi { dst: 1, imm: 3 },  // R1 = col = 3
-        Instruction::QPrep { dst: 0, dist: dist_id::BELL },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1 },
+        Instruction::QPrep { dst: 0, dist: DistId::Bell },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // Bell state rho[0][3] = 0.5 + 0.0i
     if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
@@ -319,11 +322,11 @@ fn test_e2e_qprepr_dynamic_dist() {
     let instrs = vec![
         Instruction::ILdi { dst: 0, imm: 1 },  // R0 = ZERO dist_id
         Instruction::QPrepR { dst: 0, dist_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // Q0 should still be alive (QSAMPLE is non-destructive)
     assert!(ctx.qregs[0].is_some());
@@ -360,12 +363,12 @@ fn test_e2e_qencode_f_file_bell_like() {
         Instruction::FLdi { dst: 1, imm: 0 },  // F1 = 0.0
         Instruction::FLdi { dst: 2, imm: 0 },  // F2 = 0.0
         Instruction::FLdi { dst: 3, imm: 1 },  // F3 = 1.0
-        Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: file_sel::F_FILE },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: FileSel::FFile },
+        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // Q0 should exist
     assert!(ctx.qregs[0].is_some());
@@ -406,13 +409,13 @@ fn test_e2e_qencode_z_file_with_phase() {
         Instruction::ZLdi { dst: 1, imm_re: 0, imm_im: 1 },  // Z1 = (0, 1) = i
         Instruction::ILdi { dst: 0, imm: 0 },  // R0 = 0 (row)
         Instruction::ILdi { dst: 1, imm: 1 },  // R1 = 1 (col)
-        Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: file_sel::Z_FILE },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
-        Instruction::QSample { dst_h: 1, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1 },
+        Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: FileSel::ZFile },
+        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 1, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // H0 should be Dist with two entries, each ~0.5
     if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
@@ -453,14 +456,14 @@ fn test_e2e_qencode_z_file_with_phase() {
 #[test]
 fn test_e2e_qhadm_selective_superposition() {
     let instrs = vec![
-        Instruction::QPrep { dst: 0, dist: dist_id::ZERO },
+        Instruction::QPrep { dst: 0, dist: DistId::Zero },
         Instruction::ILdi { dst: 0, imm: 1 },  // mask = 0b01 (qubit 0 = MSB)
         Instruction::QHadM { dst: 1, src: 0, mask_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
         let p0 = entries.iter().find(|(k, _)| *k == 0).map(|(_, p)| *p).unwrap_or(0.0);
@@ -493,14 +496,14 @@ fn test_e2e_qhadm_selective_superposition() {
 #[test]
 fn test_e2e_qflip_both_qubits() {
     let instrs = vec![
-        Instruction::QPrep { dst: 0, dist: dist_id::ZERO },
+        Instruction::QPrep { dst: 0, dist: DistId::Zero },
         Instruction::ILdi { dst: 0, imm: 3 },  // mask = 0b11 (both qubits)
         Instruction::QFlip { dst: 1, src: 0, mask_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
         let p3 = entries.iter().find(|(k, _)| *k == 3).map(|(_, p)| *p).unwrap_or(0.0);
@@ -533,18 +536,18 @@ fn test_e2e_qflip_both_qubits() {
 #[test]
 fn test_e2e_qphase_preserves_probabilities() {
     let instrs = vec![
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         Instruction::ILdi { dst: 0, imm: 1 },  // mask = 0b01 (qubit 0)
         Instruction::QPhase { dst: 1, src: 0, mask_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: observe_mode::DIST, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
         // All 4 states should have probability ~0.25
-        for state_idx in 0u16..4 {
+        for state_idx in 0u32..4 {
             let prob = entries.iter()
                 .find(|(k, _)| *k == state_idx)
                 .map(|(_, p)| *p)
@@ -578,16 +581,16 @@ fn test_e2e_conj_z_and_negate_z_reductions() {
     let instrs = vec![
         Instruction::ILdi { dst: 0, imm: 0 },  // R0 = row = 0
         Instruction::ILdi { dst: 1, imm: 3 },  // R1 = col = 3
-        Instruction::QPrep { dst: 0, dist: dist_id::BELL },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1 },
+        Instruction::QPrep { dst: 0, dist: DistId::Bell },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
         // CONJ_Z: Z0 = conj(H0)
-        Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CONJ_Z },
+        Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::ConjZ },
         // NEGATE_Z: Z1 = -H0
-        Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::NEGATE_Z },
+        Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::NegateZ },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // H0 should be Complex(0.5, 0.0) for Bell state rho[0][3]
     if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
@@ -634,16 +637,16 @@ fn test_e2e_qsample_feedback_loop() {
         Instruction::FLdi { dst: 1, imm: 0 },  // F1 = 0 (unused)
         Instruction::ILdi { dst: 0, imm: 0 },  // R0 = 0 (target state for PROB mode)
         // Prepare uniform
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         // Apply ROTATE kernel
-        Instruction::QKernelF { dst: 0, src: 0, kernel: kernel_id::ROTATE, fctx0: 0, fctx1: 1 },
+        Instruction::QKernelF { dst: 0, src: 0, kernel: KernelId::Rotate, fctx0: 0, fctx1: 1 },
         // Non-destructive sample: get probability of state 0
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: observe_mode::PROB, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 },
         // H0 is Complex(probability, 0.0). HREDUCE/REAL can extract the probability.
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, mut backend) = run_program(instrs);
 
     // Q0 should still be alive after QSAMPLE
     assert!(ctx.qregs[0].is_some());
@@ -660,9 +663,9 @@ fn test_e2e_qsample_feedback_loop() {
     let mut ctx2 = ctx;
     let mut fm = ForkManager::new();
     let second_kernel = Instruction::QKernelF {
-        dst: 0, src: 0, kernel: kernel_id::ROTATE, fctx0: 0, fctx1: 1,
+        dst: 0, src: 0, kernel: KernelId::Rotate, fctx0: 0, fctx1: 1,
     };
-    execute_instruction(&mut ctx2, &second_kernel, &mut fm).unwrap();
+    execute_instruction(&mut ctx2, &second_kernel, &mut fm, &mut backend).unwrap();
     // Q0 should still be alive after second kernel
     assert!(ctx2.qregs[0].is_some());
 }
@@ -694,17 +697,17 @@ fn test_e2e_full_z_pipeline() {
         Instruction::ILdi { dst: 0, imm: 0 },
         Instruction::ILdi { dst: 1, imm: 1 },
         // QENCODE from Z-file: uses Z0, Z1 as amplitudes for a 1-qubit state
-        Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: file_sel::Z_FILE },
+        Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: FileSel::ZFile },
         // Apply PHASE_SHIFT kernel with complex context Z0, Z1
-        Instruction::QKernelZ { dst: 0, src: 0, kernel: kernel_id::PHASE_SHIFT, zctx0: 0, zctx1: 1 },
+        Instruction::QKernelZ { dst: 0, src: 0, kernel: KernelId::PhaseShift, zctx0: 0, zctx1: 1 },
         // Observe AMP at (0,1)
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
         // Reduce: CONJ_Z -> Z2
-        Instruction::HReduce { src: 0, dst: 2, func: reduce_fn::CONJ_Z },
+        Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::ConjZ },
         Instruction::Halt,
     ];
 
-    let ctx = run_program(instrs);
+    let (ctx, _backend) = run_program(instrs);
 
     // H0 should be Complex
     assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Complex(_, _)));

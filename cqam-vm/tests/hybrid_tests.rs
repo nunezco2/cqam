@@ -7,12 +7,14 @@ use cqam_vm::context::ExecutionContext;
 use cqam_vm::fork::ForkManager;
 use cqam_vm::hybrid::execute_hybrid;
 use cqam_vm::executor::execute_instruction;
+use cqam_sim::backend::SimulationBackend;
 
 #[test]
 fn test_hfork_sets_flags() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
-    let jumped = execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    let jumped = execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
     assert!(!jumped);
     assert!(ctx.psw.hf);
     assert!(ctx.psw.forked);
@@ -22,9 +24,10 @@ fn test_hfork_sets_flags() {
 fn test_hmerge_sets_flag() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     // Must HFORK first before HMERGE
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
-    let jumped = execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
+    let jumped = execute_hybrid(&mut ctx, &Instruction::HMerge, &mut fm, &mut backend).unwrap();
     assert!(!jumped);
     assert!(ctx.psw.merged);
 }
@@ -40,10 +43,12 @@ fn test_jmpf_jump_on_qf() {
     ctx.pc = 1;
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let jumped = execute_hybrid(
         &mut ctx,
-        &Instruction::JmpF { flag: flag_id::QF, target: "THEN".into() },
+        &Instruction::JmpF { flag: FlagId::Qf, target: "THEN".into() },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert!(jumped);
@@ -61,10 +66,12 @@ fn test_jmpf_no_jump_on_false_flag() {
     ctx.pc = 1;
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let jumped = execute_hybrid(
         &mut ctx,
-        &Instruction::JmpF { flag: flag_id::QF, target: "THEN".into() },
+        &Instruction::JmpF { flag: FlagId::Qf, target: "THEN".into() },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert!(!jumped);
@@ -77,10 +84,12 @@ fn test_hreduce_round() {
     ctx.hregs.set(0, HybridValue::Float(2.7)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let jumped = execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ROUND },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Round },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert!(!jumped);
@@ -93,10 +102,12 @@ fn test_hreduce_floor() {
     ctx.hregs.set(0, HybridValue::Float(2.7)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::FLOOR },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Floor },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 2);
@@ -108,10 +119,12 @@ fn test_hreduce_ceil() {
     ctx.hregs.set(0, HybridValue::Float(2.1)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::CEIL },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Ceil },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 3);
@@ -123,10 +136,12 @@ fn test_hreduce_trunc() {
     ctx.hregs.set(0, HybridValue::Float(2.9)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::TRUNC },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Trunc },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 2);
@@ -138,10 +153,12 @@ fn test_hreduce_abs() {
     ctx.hregs.set(0, HybridValue::Float(-5.3)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ABS },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Abs },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 5);
@@ -153,10 +170,12 @@ fn test_hreduce_negate() {
     ctx.hregs.set(0, HybridValue::Float(3.0)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::NEGATE },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Negate },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), -3);
@@ -168,10 +187,12 @@ fn test_hreduce_magnitude() {
     ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MAGNITUDE },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Magnitude },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert!((ctx.fregs.get(0).unwrap() - 5.0).abs() < 1e-10);
@@ -183,17 +204,20 @@ fn test_hreduce_real_imag() {
     ctx.hregs.set(0, HybridValue::Complex(3.125, 2.625)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::REAL },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Real },
         &mut fm,
+        &mut backend,
     ).unwrap();
     assert!((ctx.fregs.get(0).unwrap() - 3.125).abs() < 1e-10);
 
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::IMAG },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Imag },
         &mut fm,
+        &mut backend,
     ).unwrap();
     assert!((ctx.fregs.get(1).unwrap() - 2.625).abs() < 1e-10);
 }
@@ -201,14 +225,16 @@ fn test_hreduce_real_imag() {
 #[test]
 fn test_hreduce_mean_of_distribution() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MEAN },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Mean },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert!((ctx.fregs.get(0).unwrap() - 1.5).abs() < 1e-10);
@@ -217,14 +243,16 @@ fn test_hreduce_mean_of_distribution() {
 #[test]
 fn test_hreduce_mode_of_distribution() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.1), (1, 0.7), (2, 0.2)];
+    let dist = vec![(0u32, 0.1), (1, 0.7), (2, 0.2)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MODE },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Mode },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 1);
@@ -240,16 +268,17 @@ fn test_hfork_merge_flow_simulation() {
 
     let mut ctx = ExecutionContext::new(program.clone());
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
     for instr in &program {
         match instr {
             Instruction::HFork | Instruction::HMerge | Instruction::JmpF { .. }
             | Instruction::HReduce { .. } => {
-                execute_hybrid(&mut ctx, instr, &mut fm).unwrap();
+                execute_hybrid(&mut ctx, instr, &mut fm, &mut backend).unwrap();
                 ctx.advance_pc();
             }
             _ => {
-                execute_instruction(&mut ctx, instr, &mut fm).unwrap();
+                execute_instruction(&mut ctx, instr, &mut fm, &mut backend).unwrap();
             }
         }
     }
@@ -268,29 +297,20 @@ fn test_hreduce_type_mismatch_returns_error() {
     ctx.hregs.set(0, HybridValue::Int(42)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let result = execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::CONJ_Z },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::ConjZ },
         &mut fm,
+        &mut backend,
     );
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
     assert!(msg.contains("Type mismatch"));
 }
 
-#[test]
-fn test_hreduce_unknown_function_returns_error() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(1.0)).unwrap();
-
-    let mut fm = ForkManager::new();
-    let result = execute_hybrid(
-        &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: 99 },
-        &mut fm,
-    );
-    assert!(result.is_err());
-}
+// test_hreduce_unknown_function_returns_error removed:
+// ReduceFn is now an enum, so unknown function IDs are caught at compile time.
 
 // ===========================================================================
 // NaN safety test (Fix 2.5)
@@ -299,14 +319,16 @@ fn test_hreduce_unknown_function_returns_error() {
 #[test]
 fn test_hreduce_mode_with_nan_does_not_panic() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, f64::NAN), (1, 0.5), (2, 0.5)];
+    let dist = vec![(0u32, f64::NAN), (1, 0.5), (2, 0.5)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::MODE },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Mode },
         &mut fm,
+        &mut backend,
     ).unwrap();
     // Should not panic; result is one of the non-NaN entries
 }
@@ -325,7 +347,8 @@ fn test_hfork_single_threaded_flag_management() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     assert!(!ctx.psw.forked);  // HMERGE clears forked
     assert!(ctx.psw.merged);
@@ -348,7 +371,8 @@ fn test_hfork_single_threaded_independence() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 10);
     assert_eq!(ctx.iregs.get(1).unwrap(), 20);
@@ -365,7 +389,8 @@ fn test_hmerge_without_fork_returns_error() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    let result = cqam_vm::executor::run_program(&mut ctx, &mut fm);
+    let mut backend = SimulationBackend::new();
+    let result = cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend);
     assert!(result.is_err());
 }
 
@@ -383,6 +408,7 @@ fn test_fork_depth_limit() {
 #[test]
 fn test_fork_manager_take_completed() {
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     assert_eq!(fm.take_completed().len(), 0);
 
     // In single-threaded mode, HFORK doesn't spawn threads
@@ -425,7 +451,8 @@ fn test_hfork_spmd_two_threads() {
     let mut ctx = ExecutionContext::new(program);
     ctx.thread_count = 2;
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     assert!(!ctx.psw.forked);
     assert!(ctx.psw.merged);
@@ -456,7 +483,8 @@ fn test_hfork_spmd_tid_divergence() {
     let mut ctx = ExecutionContext::new(program);
     ctx.thread_count = 2;
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     // Thread 0 (leader): R3 = 100
     assert_eq!(ctx.iregs.get(3).unwrap(), 100);
@@ -484,7 +512,8 @@ fn test_hfork_spmd_loop() {
     let mut ctx = ExecutionContext::new(program);
     ctx.thread_count = 2;
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 5);
 }
@@ -506,7 +535,8 @@ fn test_hfork_sequential_pairs() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 10);
     assert_eq!(ctx.iregs.get(1).unwrap(), 20);
@@ -530,8 +560,9 @@ fn test_fork_div_by_zero_sets_trap_flag() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
-    let result = cqam_vm::executor::run_program(&mut ctx, &mut fm);
+    let result = cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend);
     assert!(result.is_ok());
     assert!(ctx.psw.trap_arith);
 }
@@ -548,7 +579,8 @@ fn test_fork_thread_div_by_zero_completes_with_trap() {
 
     let fork_ctx = ExecutionContext::new(error_program);
     let mut fm = ForkManager::new();
-    fm.spawn_fork(fork_ctx).unwrap();
+    let mut backend = SimulationBackend::new();
+    fm.spawn_fork(fork_ctx, backend.clone()).unwrap();
 
     // join_all should succeed (trap is a flag, not an error)
     fm.join_all().unwrap();
@@ -565,13 +597,14 @@ fn test_fork_depth_limit_error_through_hybrid() {
     // Test the nested HFORK error instead:
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
     // First HFORK succeeds
-    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm).unwrap();
+    execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend).unwrap();
     assert!(ctx.psw.forked);
 
     // Second HFORK while already forked should fail
-    let result = execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm);
+    let result = execute_hybrid(&mut ctx, &Instruction::HFork, &mut fm, &mut backend);
     assert!(result.is_err());
     let msg = format!("{}", result.unwrap_err());
     assert!(msg.contains("nested HFORK"), "Expected nested HFORK error, got: {}", msg);
@@ -588,7 +621,8 @@ fn test_hfork_sets_flags_on_all_threads() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     // Main flags: after HMERGE, forked is cleared, merged is set
     assert!(ctx.psw.hf);
@@ -611,7 +645,8 @@ fn test_take_completed_is_idempotent_drain() {
 
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     // In single-threaded mode, no fork threads are spawned
     let first = fm.take_completed();
@@ -676,7 +711,8 @@ fn test_hfork_spmd_divergent_paths() {
     let mut ctx = ExecutionContext::new(program);
     ctx.thread_count = 2;
     let mut fm = ForkManager::new();
-    cqam_vm::executor::run_program(&mut ctx, &mut fm).unwrap();
+    let mut backend = SimulationBackend::new();
+    cqam_vm::executor::run_program(&mut ctx, &mut fm, &mut backend).unwrap();
 
     // Main: R5 should be 999 (set after merge)
     assert_eq!(ctx.iregs.get(5).unwrap(), 999);
@@ -693,7 +729,8 @@ fn test_hfork_one_branch_halts_early() {
 
     let fork_ctx = ExecutionContext::new(short_program);
     let mut fm = ForkManager::new();
-    fm.spawn_fork(fork_ctx).unwrap();
+    let mut backend = SimulationBackend::new();
+    fm.spawn_fork(fork_ctx, backend.clone()).unwrap();
     assert_eq!(fm.active_count(), 1);
 
     fm.join_all().unwrap();
@@ -712,10 +749,12 @@ fn test_hreduce_conj_z() {
     ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CONJ_Z },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::ConjZ },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     // conj(3+4i) = 3-4i -> written to Z[0]
@@ -730,10 +769,12 @@ fn test_hreduce_negate_z() {
     ctx.hregs.set(0, HybridValue::Complex(3.0, 4.0)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::NEGATE_Z },
+        &Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::NegateZ },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     // negate(3+4i) = -3-4i -> written to Z[1]
@@ -748,10 +789,12 @@ fn test_hreduce_conj_z_type_mismatch() {
     ctx.hregs.set(0, HybridValue::Float(1.0)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let result = execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CONJ_Z },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::ConjZ },
         &mut fm,
+        &mut backend,
     );
     assert!(result.is_err(), "CONJ_Z on Float should fail");
 }
@@ -762,10 +805,12 @@ fn test_hreduce_negate_z_type_mismatch() {
     ctx.hregs.set(0, HybridValue::Int(42)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     let result = execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::NEGATE_Z },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::NegateZ },
         &mut fm,
+        &mut backend,
     );
     assert!(result.is_err(), "NEGATE_Z on Int should fail");
 }
@@ -777,14 +822,16 @@ fn test_hreduce_negate_z_type_mismatch() {
 #[test]
 fn test_hreduce_round_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::ROUND },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Round },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 2, "round(1.5) = 2");
@@ -793,14 +840,16 @@ fn test_hreduce_round_dist_fallback() {
 #[test]
 fn test_hreduce_floor_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::FLOOR },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Floor },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 1, "floor(1.5) = 1");
@@ -809,14 +858,16 @@ fn test_hreduce_floor_dist_fallback() {
 #[test]
 fn test_hreduce_ceil_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::CEIL },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Ceil },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 2, "ceil(1.5) = 2");
@@ -825,14 +876,16 @@ fn test_hreduce_ceil_dist_fallback() {
 #[test]
 fn test_hreduce_negate_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::NEGATE },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Negate },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), -1, "negate(mean=1.5) = -1 as i64");
@@ -841,14 +894,16 @@ fn test_hreduce_negate_dist_fallback() {
 #[test]
 fn test_hreduce_trunc_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::TRUNC },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Trunc },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 1, "trunc(1.5) = 1");
@@ -857,14 +912,16 @@ fn test_hreduce_trunc_dist_fallback() {
 #[test]
 fn test_hreduce_abs_dist_fallback() {
     let mut ctx = ExecutionContext::new(vec![]);
-    let dist = vec![(0u16, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
+    let dist = vec![(0u32, 0.25), (1, 0.25), (2, 0.25), (3, 0.25)];
     ctx.hregs.set(0, HybridValue::Dist(dist)).unwrap();
 
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 0, func: reduce_fn::ABS },
+        &Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Abs },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 1, "abs(1.5) = 1 as i64");
@@ -875,16 +932,16 @@ fn test_hreduce_abs_dist_fallback() {
 #[test]
 fn test_hreduce_all_six_dist_fallback_skewed() {
     // Distribution: mean = 1*0.1 + 2*0.2 + 3*0.7 = 0.1 + 0.4 + 2.1 = 2.6
-    let dist = vec![(1u16, 0.1), (2, 0.2), (3, 0.7)];
+    let dist = vec![(1u32, 0.1), (2, 0.2), (3, 0.7)];
     let mean = 2.6_f64;
 
-    let funcs_and_expected: Vec<(u8, i64)> = vec![
-        (reduce_fn::ROUND,  mean.round() as i64),   // round(2.6) = 3
-        (reduce_fn::FLOOR,  mean.floor() as i64),    // floor(2.6) = 2
-        (reduce_fn::CEIL,   mean.ceil() as i64),     // ceil(2.6) = 3
-        (reduce_fn::TRUNC,  mean.trunc() as i64),    // trunc(2.6) = 2
-        (reduce_fn::ABS,    mean.abs() as i64),      // abs(2.6) = 2
-        (reduce_fn::NEGATE, (-mean) as i64),          // negate(2.6) = -2
+    let funcs_and_expected: Vec<(ReduceFn, i64)> = vec![
+        (ReduceFn::Round,  mean.round() as i64),   // round(2.6) = 3
+        (ReduceFn::Floor,  mean.floor() as i64),    // floor(2.6) = 2
+        (ReduceFn::Ceil,   mean.ceil() as i64),     // ceil(2.6) = 3
+        (ReduceFn::Trunc,  mean.trunc() as i64),    // trunc(2.6) = 2
+        (ReduceFn::Abs,    mean.abs() as i64),      // abs(2.6) = 2
+        (ReduceFn::Negate, (-mean) as i64),          // negate(2.6) = -2
     ];
 
     for (func, expected) in funcs_and_expected {
@@ -892,15 +949,17 @@ fn test_hreduce_all_six_dist_fallback_skewed() {
         ctx.hregs.set(0, HybridValue::Dist(dist.clone())).unwrap();
 
         let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
         execute_hybrid(
             &mut ctx,
             &Instruction::HReduce { src: 0, dst: 1, func },
             &mut fm,
-        ).unwrap();
+        &mut backend,
+    ).unwrap();
 
         assert_eq!(
             ctx.iregs.get(1).unwrap(), expected,
-            "Dist fallback for func {} (mean={}) should yield {}, got {}",
+            "Dist fallback for func {:?} (mean={}) should yield {}, got {}",
             func, mean, expected, ctx.iregs.get(1).unwrap()
         );
     }
@@ -912,17 +971,18 @@ fn test_e2e_observe_amp_then_negate_z() {
     use cqam_vm::qop::execute_qop;
 
     let mut ctx = ExecutionContext::new(vec![]);
+    let mut backend = SimulationBackend::new();
 
     // Bell state: rho[3][0] = 0.5 + 0i
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: dist_id::BELL }).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Bell }, &mut backend).unwrap();
 
     // Query rho[3][0]: row=3, col=0
     ctx.iregs.set(0, 3).unwrap();
     ctx.iregs.set(1, 0).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QObserve {
-        dst_h: 0, src_q: 0, mode: observe_mode::AMP, ctx0: 0, ctx1: 1,
-    }).unwrap();
+        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
+    }, &mut backend).unwrap();
 
     // H[0] = Complex(0.5, 0.0)
     if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
@@ -934,10 +994,12 @@ fn test_e2e_observe_amp_then_negate_z() {
 
     // HREDUCE NEGATE_Z: Z[3] = (-0.5, -0.0)
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
     execute_hybrid(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 3, func: reduce_fn::NEGATE_Z },
+        &Instruction::HReduce { src: 0, dst: 3, func: ReduceFn::NegateZ },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     let (re, im) = ctx.zregs.get(3).unwrap();
@@ -968,7 +1030,8 @@ HALT
     let program = parse_program(source).expect("Failed to parse").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    run_program(&mut ctx, &mut fm).expect("Program failed");
+    let mut backend = SimulationBackend::new();
+    run_program(&mut ctx, &mut fm, &mut backend).expect("Program failed");
 
     assert!(ctx.psw.trap_halt);
     assert_eq!(ctx.iregs.get(1).unwrap(), 0, "round(0.25) should be 0");
@@ -998,7 +1061,8 @@ HALT
     let program = parse_program(source).expect("Failed to parse").instructions;
     let mut ctx = ExecutionContext::new(program);
     let mut fm = ForkManager::new();
-    run_program(&mut ctx, &mut fm).expect("Program failed");
+    let mut backend = SimulationBackend::new();
+    run_program(&mut ctx, &mut fm, &mut backend).expect("Program failed");
 
     assert!(ctx.psw.trap_halt);
     let (re, im) = ctx.zregs.get(2).unwrap();
@@ -1014,6 +1078,7 @@ HALT
 fn test_hreduce_expect_simple() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
     // Set up a distribution in H0: outcomes (0, 0.6) and (1, 0.4)
     ctx.hregs.set(0, HybridValue::Dist(vec![(0, 0.6), (1, 0.4)])).unwrap();
@@ -1027,8 +1092,9 @@ fn test_hreduce_expect_simple() {
 
     execute_instruction(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 5, func: reduce_fn::EXPECT },
+        &Instruction::HReduce { src: 0, dst: 5, func: ReduceFn::Expect },
         &mut fm,
+        &mut backend,
     ).unwrap();
 
     // Expected: 0.6 * 2.0 + 0.4 * 5.0 = 1.2 + 2.0 = 3.2
@@ -1040,6 +1106,7 @@ fn test_hreduce_expect_simple() {
 fn test_hreduce_expect_type_error() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
 
     // Put a Float (not Dist) in H0
     ctx.hregs.set(0, HybridValue::Float(1.5)).unwrap();
@@ -1047,8 +1114,9 @@ fn test_hreduce_expect_type_error() {
 
     let result = execute_instruction(
         &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 5, func: reduce_fn::EXPECT },
+        &Instruction::HReduce { src: 0, dst: 5, func: ReduceFn::Expect },
         &mut fm,
+        &mut backend,
     );
     assert!(result.is_err(), "EXPECT on Float should fail with type mismatch");
 }

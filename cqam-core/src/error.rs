@@ -94,6 +94,9 @@ pub enum CqamError {
 
     /// Thread synchronization error (thread failed to reach barrier/merge).
     ThreadSyncError { thread_id: u16, detail: String },
+
+    /// Invalid numeric ID for a typed domain (e.g., kernel, distribution, flag).
+    InvalidId { domain: &'static str, value: u8 },
 }
 
 impl fmt::Display for CqamError {
@@ -207,6 +210,9 @@ impl fmt::Display for CqamError {
             }
             CqamError::ThreadSyncError { thread_id, detail } => {
                 write!(f, "Thread synchronization error (thread {}): {}", thread_id, detail)
+            }
+            CqamError::InvalidId { domain, value } => {
+                write!(f, "Invalid {} ID: {}", domain, value)
             }
         }
     }

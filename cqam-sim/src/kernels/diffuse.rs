@@ -7,7 +7,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Grover's diffusion kernel (kernel_id = 3).
 ///
@@ -33,7 +33,7 @@ impl Kernel for Diffuse {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let dim = input.dimension();
         let n_f64 = dim as f64;
 

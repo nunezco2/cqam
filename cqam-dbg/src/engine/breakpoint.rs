@@ -3,7 +3,7 @@
 //! Provides `BreakpointTable`, `Breakpoint`, and `BreakpointKind` for
 //! address-based, label-based, class-based, and conditional breakpoints.
 
-use cqam_core::instruction::Instruction;
+use cqam_core::instruction::*;
 use crate::engine::condition::Condition;
 use crate::format::instruction::instruction_class;
 
@@ -299,7 +299,7 @@ mod tests {
         let mut table = BreakpointTable::new();
         table.add_class(InstrClass::Quantum);
 
-        let quantum_instr = Instruction::QPrep { dst: 0, dist: 0 };
+        let quantum_instr = Instruction::QPrep { dst: 0, dist: DistId::Uniform };
         let hits = table.check(0, &quantum_instr);
         assert_eq!(hits.len(), 1);
 

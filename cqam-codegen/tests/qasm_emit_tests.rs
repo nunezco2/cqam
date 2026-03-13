@@ -76,9 +76,9 @@ fn test_scan_complex_regs() {
 #[test]
 fn test_scan_quantum_regs() {
     let program = vec![
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
-        Instruction::QKernel { dst: 1, src: 0, kernel: kernel_id::FOURIER, ctx0: 2, ctx1: 3 },
-        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Fourier, ctx0: 2, ctx1: 3 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
     let used = scan_registers(&program);
     assert!(used.quantum_regs.contains(&0));
@@ -89,7 +89,7 @@ fn test_scan_quantum_regs() {
 #[test]
 fn test_scan_hybrid_regs() {
     let program = vec![
-        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
     let used = scan_registers(&program);
     assert!(used.hybrid_regs.contains(&0));
@@ -149,12 +149,12 @@ fn test_scan_qmem_flag_from_qstore() {
 #[test]
 fn test_scan_kernel_ids() {
     let program = vec![
-        Instruction::QKernel { dst: 0, src: 1, kernel: kernel_id::ENTANGLE, ctx0: 0, ctx1: 0 },
-        Instruction::QKernel { dst: 2, src: 3, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 0 },
+        Instruction::QKernel { dst: 0, src: 1, kernel: KernelId::Entangle, ctx0: 0, ctx1: 0 },
+        Instruction::QKernel { dst: 2, src: 3, kernel: KernelId::Fourier, ctx0: 0, ctx1: 0 },
     ];
     let used = scan_registers(&program);
-    assert!(used.kernel_ids.contains(&kernel_id::ENTANGLE));
-    assert!(used.kernel_ids.contains(&kernel_id::FOURIER));
+    assert!(used.kernel_ids.contains(&KernelId::Entangle));
+    assert!(used.kernel_ids.contains(&KernelId::Fourier));
     assert_eq!(used.kernel_ids.len(), 2);
 }
 
@@ -253,7 +253,7 @@ fn test_scan_cross_file_ops() {
 #[test]
 fn test_scan_hreduce_int_target() {
     let program = vec![
-        Instruction::HReduce { src: 0, dst: 3, func: reduce_fn::ROUND },
+        Instruction::HReduce { src: 0, dst: 3, func: ReduceFn::Round },
     ];
     let used = scan_registers(&program);
     assert!(used.hybrid_regs.contains(&0));
@@ -263,7 +263,7 @@ fn test_scan_hreduce_int_target() {
 #[test]
 fn test_scan_hreduce_float_target() {
     let program = vec![
-        Instruction::HReduce { src: 1, dst: 4, func: reduce_fn::MAGNITUDE },
+        Instruction::HReduce { src: 1, dst: 4, func: ReduceFn::Magnitude },
     ];
     let used = scan_registers(&program);
     assert!(used.hybrid_regs.contains(&1));
@@ -333,7 +333,7 @@ fn test_scan_jif_registers_pred() {
 #[test]
 fn test_scan_qkernel_registers_ctx() {
     let program = vec![
-        Instruction::QKernel { dst: 0, src: 1, kernel: kernel_id::FOURIER, ctx0: 7, ctx1: 8 },
+        Instruction::QKernel { dst: 0, src: 1, kernel: KernelId::Fourier, ctx0: 7, ctx1: 8 },
     ];
     let used = scan_registers(&program);
     assert!(used.int_regs.contains(&7));
@@ -862,7 +862,7 @@ fn test_emit_halt() {
 
 #[test]
 fn test_emit_qprep() {
-    let instr = Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM };
+    let instr = Instruction::QPrep { dst: 0, dist: DistId::Uniform };
     let lines = instr.to_qasm(&fragment_config());
     assert!(lines.len() >= 2);
     assert_eq!(lines[0], "reset q0;");
@@ -871,7 +871,7 @@ fn test_emit_qprep() {
 
 #[test]
 fn test_emit_qprep_zero_dist() {
-    let instr = Instruction::QPrep { dst: 1, dist: dist_id::ZERO };
+    let instr = Instruction::QPrep { dst: 1, dist: DistId::Zero };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines[0], "reset q1;");
     assert!(lines[1].contains("zero"));
@@ -884,7 +884,7 @@ fn test_emit_qkernel_no_expand() {
         ..EmitConfig::default()
     };
     let instr = Instruction::QKernel {
-        dst: 0, src: 1, kernel: kernel_id::FOURIER, ctx0: 2, ctx1: 3,
+        dst: 0, src: 1, kernel: KernelId::Fourier, ctx0: 2, ctx1: 3,
     };
     let lines = instr.to_qasm(&config);
     assert!(lines.len() >= 2);
@@ -901,7 +901,7 @@ fn test_emit_qkernel_with_expand_missing_template() {
         ..EmitConfig::default()
     };
     let instr = Instruction::QKernel {
-        dst: 0, src: 1, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 0,
+        dst: 0, src: 1, kernel: KernelId::Fourier, ctx0: 0, ctx1: 0,
     };
     let lines = instr.to_qasm(&config);
     assert!(lines.len() >= 2);
@@ -910,7 +910,7 @@ fn test_emit_qkernel_with_expand_missing_template() {
 
 #[test]
 fn test_emit_qobserve() {
-    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines[0], "H0 = measure q1;");
 }
@@ -953,7 +953,7 @@ fn test_emit_hmerge() {
 
 #[test]
 fn test_emit_jmpf() {
-    let instr = Instruction::JmpF { flag: flag_id::QF, target: "LBL".into() };
+    let instr = Instruction::JmpF { flag: FlagId::Qf, target: "LBL".into() };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
     assert!(lines[0].contains("@cqam.jmpf"));
@@ -963,7 +963,7 @@ fn test_emit_jmpf() {
 
 #[test]
 fn test_emit_hreduce_int() {
-    let instr = Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ROUND };
+    let instr = Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Round };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
     assert!(lines[0].contains("@cqam.hreduce"));
@@ -973,7 +973,7 @@ fn test_emit_hreduce_int() {
 
 #[test]
 fn test_emit_hreduce_float() {
-    let instr = Instruction::HReduce { src: 0, dst: 2, func: reduce_fn::MAGNITUDE };
+    let instr = Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::Magnitude };
     let lines = instr.to_qasm(&fragment_config());
     assert_eq!(lines.len(), 1);
     assert!(lines[0].contains("@cqam.hreduce"));
@@ -1100,7 +1100,7 @@ fn test_fragment_body_only() {
 fn test_kernel_stubs_emitted() {
     let program = vec![
         Instruction::QKernel {
-            dst: 0, src: 1, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 0,
+            dst: 0, src: 1, kernel: KernelId::Fourier, ctx0: 0, ctx1: 0,
         },
     ];
     let config = EmitConfig {
@@ -1115,10 +1115,10 @@ fn test_kernel_stubs_emitted() {
 fn test_kernel_stubs_deduplicated() {
     let program = vec![
         Instruction::QKernel {
-            dst: 0, src: 1, kernel: kernel_id::ENTANGLE, ctx0: 0, ctx1: 0,
+            dst: 0, src: 1, kernel: KernelId::Entangle, ctx0: 0, ctx1: 0,
         },
         Instruction::QKernel {
-            dst: 2, src: 3, kernel: kernel_id::ENTANGLE, ctx0: 0, ctx1: 0,
+            dst: 2, src: 3, kernel: KernelId::Entangle, ctx0: 0, ctx1: 0,
         },
     ];
     let config = EmitConfig {
@@ -1134,7 +1134,7 @@ fn test_kernel_stubs_deduplicated() {
 fn test_kernel_stubs_not_emitted_when_expanding() {
     let program = vec![
         Instruction::QKernel {
-            dst: 0, src: 1, kernel: kernel_id::FOURIER, ctx0: 0, ctx1: 0,
+            dst: 0, src: 1, kernel: KernelId::Fourier, ctx0: 0, ctx1: 0,
         },
     ];
     let config = EmitConfig::standalone(); // expand_templates = true
@@ -1148,8 +1148,8 @@ fn test_mixed_program() {
     let program = vec![
         Instruction::ILdi { dst: 0, imm: 5 },
         Instruction::FLdi { dst: 0, imm: 314 },
-        Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
     ];
     let config = EmitConfig::standalone();
     let output = emit_qasm_program(&program, &config);

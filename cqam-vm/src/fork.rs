@@ -11,6 +11,7 @@ use crate::context::ExecutionContext;
 use crate::executor::run_program;
 use crate::thread_pool::{SharedQuantumFile, SharedMemory, ThreadBarrier};
 use cqam_core::error::CqamError;
+use cqam_core::quantum_backend::QuantumBackend;
 
 /// Maximum fork nesting depth. Prevents exponential thread spawning.
 pub const DEFAULT_MAX_FORK_DEPTH: u8 = 4;
@@ -90,9 +91,13 @@ impl ForkManager {
 
     /// Spawn a fork thread running the given context to completion.
     ///
-    /// The context is moved into the spawned thread. The thread creates
-    /// its own nested ForkManager and calls `run_program`.
-    pub fn spawn_fork(&mut self, fork_ctx: ExecutionContext) -> Result<(), CqamError> {
+    /// The context and a clone of the backend are moved into the spawned thread.
+    /// The thread creates its own nested ForkManager and calls `run_program`.
+    pub fn spawn_fork<B: QuantumBackend + Clone + Send + 'static>(
+        &mut self,
+        fork_ctx: ExecutionContext,
+        mut backend: B,
+    ) -> Result<(), CqamError> {
         if !self.can_fork() {
             return Err(CqamError::ForkError(format!(
                 "Fork depth limit exceeded (max: {})",
@@ -108,7 +113,7 @@ impl ForkManager {
             .spawn(move || {
                 let mut ctx = fork_ctx;
                 let mut fm = ForkManager::nested(depth, max_depth);
-                run_program(&mut ctx, &mut fm)?;
+                run_program(&mut ctx, &mut fm, &mut backend)?;
                 Ok(ctx)
             })
             .map_err(CqamError::IoError)?;

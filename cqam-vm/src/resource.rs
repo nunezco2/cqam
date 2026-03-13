@@ -238,7 +238,7 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
-        // Quantum kernel: 3 cycles, may create entanglement
+        // Quantum kernel: KernelId::Diffuse cycles, may create entanglement
         Instruction::QKernel { .. }
         | Instruction::QKernelF { .. }
         | Instruction::QKernelZ { .. } => ResourceDelta {

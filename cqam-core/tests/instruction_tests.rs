@@ -21,7 +21,7 @@ fn test_ildi_construction() {
 #[test]
 fn test_instruction_clone_and_eq() {
     let instr = Instruction::QKernel {
-        dst: 1, src: 0, kernel: kernel_id::ENTANGLE, ctx0: 2, ctx1: 3,
+        dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 2, ctx1: 3,
     };
     let cloned = instr.clone();
     assert_eq!(instr, cloned);
@@ -125,9 +125,9 @@ fn test_all_control_flow_variants() {
 
 #[test]
 fn test_all_quantum_variants() {
-    let _prep = Instruction::QPrep { dst: 0, dist: dist_id::UNIFORM };
-    let _kernel = Instruction::QKernel { dst: 1, src: 0, kernel: kernel_id::ENTANGLE, ctx0: 2, ctx1: 3 };
-    let _observe = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
+    let _prep = Instruction::QPrep { dst: 0, dist: DistId::Uniform };
+    let _kernel = Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 2, ctx1: 3 };
+    let _observe = Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     let _load = Instruction::QLoad { dst_q: 2, addr: 10 };
     let _store = Instruction::QStore { src_q: 2, addr: 10 };
 }
@@ -136,66 +136,62 @@ fn test_all_quantum_variants() {
 fn test_all_hybrid_variants() {
     let _fork = Instruction::HFork;
     let _merge = Instruction::HMerge;
-    let _cexec = Instruction::JmpF { flag: flag_id::QF, target: "THEN".into() };
-    let _reduce = Instruction::HReduce { src: 0, dst: 1, func: reduce_fn::ROUND };
+    let _cexec = Instruction::JmpF { flag: FlagId::Qf, target: "THEN".into() };
+    let _reduce = Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Round };
 }
 
 #[test]
 fn test_qobserve_replaces_qmeas() {
     // QObserve is the sole measurement instruction.
-    let observe = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 };
-    assert!(matches!(observe, Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }));
+    let observe = Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
+    assert!(matches!(observe, Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }));
 }
 
 #[test]
 fn test_dist_name_lookup() {
-    assert_eq!(dist_name(dist_id::UNIFORM), "uniform");
-    assert_eq!(dist_name(dist_id::ZERO), "zero");
-    assert_eq!(dist_name(dist_id::BELL), "bell");
-    assert_eq!(dist_name(dist_id::GHZ), "ghz");
-    assert_eq!(dist_name(255), "unknown");
+    assert_eq!(DistId::Uniform.name(), "uniform");
+    assert_eq!(DistId::Zero.name(), "zero");
+    assert_eq!(DistId::Bell.name(), "bell");
+    assert_eq!(DistId::Ghz.name(), "ghz");
 }
 
 #[test]
 fn test_kernel_name_lookup() {
-    assert_eq!(kernel_name(kernel_id::INIT), "init");
-    assert_eq!(kernel_name(kernel_id::ENTANGLE), "entangle");
-    assert_eq!(kernel_name(kernel_id::FOURIER), "fourier");
-    assert_eq!(kernel_name(kernel_id::DIFFUSE), "diffuse");
-    assert_eq!(kernel_name(kernel_id::GROVER_ITER), "grover_iter");
-    assert_eq!(kernel_name(255), "unknown");
+    assert_eq!(KernelId::Init.name(), "init");
+    assert_eq!(KernelId::Entangle.name(), "entangle");
+    assert_eq!(KernelId::Fourier.name(), "fourier");
+    assert_eq!(KernelId::Diffuse.name(), "diffuse");
+    assert_eq!(KernelId::GroverIter.name(), "grover_iter");
 }
 
 #[test]
 fn test_flag_name_lookup() {
-    assert_eq!(flag_name(flag_id::ZF), "ZF");
-    assert_eq!(flag_name(flag_id::NF), "NF");
-    assert_eq!(flag_name(flag_id::OF), "OF");
-    assert_eq!(flag_name(flag_id::PF), "PF");
-    assert_eq!(flag_name(flag_id::QF), "QF");
-    assert_eq!(flag_name(flag_id::SF), "SF");
-    assert_eq!(flag_name(flag_id::EF), "EF");
-    assert_eq!(flag_name(flag_id::HF), "HF");
-    assert_eq!(flag_name(255), "unknown");
+    assert_eq!(FlagId::Zf.mnemonic(), "ZF");
+    assert_eq!(FlagId::Nf.mnemonic(), "NF");
+    assert_eq!(FlagId::Of.mnemonic(), "OF");
+    assert_eq!(FlagId::Pf.mnemonic(), "PF");
+    assert_eq!(FlagId::Qf.mnemonic(), "QF");
+    assert_eq!(FlagId::Sf.mnemonic(), "SF");
+    assert_eq!(FlagId::Ef.mnemonic(), "EF");
+    assert_eq!(FlagId::Hf.mnemonic(), "HF");
 }
 
 #[test]
 fn test_reduce_fn_name_lookup() {
-    assert_eq!(reduce_fn_name(reduce_fn::ROUND), "round");
-    assert_eq!(reduce_fn_name(reduce_fn::FLOOR), "floor");
-    assert_eq!(reduce_fn_name(reduce_fn::CEIL), "ceil");
-    assert_eq!(reduce_fn_name(reduce_fn::TRUNC), "trunc");
-    assert_eq!(reduce_fn_name(reduce_fn::ABS), "abs");
-    assert_eq!(reduce_fn_name(reduce_fn::NEGATE), "negate");
-    assert_eq!(reduce_fn_name(reduce_fn::MAGNITUDE), "magnitude");
-    assert_eq!(reduce_fn_name(reduce_fn::PHASE), "phase");
-    assert_eq!(reduce_fn_name(reduce_fn::REAL), "real");
-    assert_eq!(reduce_fn_name(reduce_fn::IMAG), "imag");
-    assert_eq!(reduce_fn_name(reduce_fn::MEAN), "mean");
-    assert_eq!(reduce_fn_name(reduce_fn::MODE), "mode");
-    assert_eq!(reduce_fn_name(reduce_fn::ARGMAX), "argmax");
-    assert_eq!(reduce_fn_name(reduce_fn::VARIANCE), "variance");
-    assert_eq!(reduce_fn_name(255), "unknown");
+    assert_eq!(ReduceFn::Round.name(), "round");
+    assert_eq!(ReduceFn::Floor.name(), "floor");
+    assert_eq!(ReduceFn::Ceil.name(), "ceil");
+    assert_eq!(ReduceFn::Trunc.name(), "trunc");
+    assert_eq!(ReduceFn::Abs.name(), "abs");
+    assert_eq!(ReduceFn::Negate.name(), "negate");
+    assert_eq!(ReduceFn::Magnitude.name(), "magnitude");
+    assert_eq!(ReduceFn::Phase.name(), "phase");
+    assert_eq!(ReduceFn::Real.name(), "real");
+    assert_eq!(ReduceFn::Imag.name(), "imag");
+    assert_eq!(ReduceFn::Mean.name(), "mean");
+    assert_eq!(ReduceFn::Mode.name(), "mode");
+    assert_eq!(ReduceFn::Argmax.name(), "argmax");
+    assert_eq!(ReduceFn::Variance.name(), "variance");
 }
 
 #[test]
@@ -221,49 +217,49 @@ fn test_qload_qstore_variants() {
 
 #[test]
 fn test_dist_id_constants() {
-    assert_eq!(dist_id::UNIFORM, 0);
-    assert_eq!(dist_id::ZERO, 1);
-    assert_eq!(dist_id::BELL, 2);
-    assert_eq!(dist_id::GHZ, 3);
+    assert_eq!(u8::from(DistId::Uniform), 0);
+    assert_eq!(u8::from(DistId::Zero), 1);
+    assert_eq!(u8::from(DistId::Bell), 2);
+    assert_eq!(u8::from(DistId::Ghz), 3);
 }
 
 #[test]
 fn test_kernel_id_constants() {
-    assert_eq!(kernel_id::INIT, 0);
-    assert_eq!(kernel_id::ENTANGLE, 1);
-    assert_eq!(kernel_id::FOURIER, 2);
-    assert_eq!(kernel_id::DIFFUSE, 3);
-    assert_eq!(kernel_id::GROVER_ITER, 4);
+    assert_eq!(u8::from(KernelId::Init), 0);
+    assert_eq!(u8::from(KernelId::Entangle), 1);
+    assert_eq!(u8::from(KernelId::Fourier), 2);
+    assert_eq!(u8::from(KernelId::Diffuse), 3);
+    assert_eq!(u8::from(KernelId::GroverIter), 4);
 }
 
 #[test]
 fn test_flag_id_constants() {
-    assert_eq!(flag_id::ZF, 0);
-    assert_eq!(flag_id::NF, 1);
-    assert_eq!(flag_id::OF, 2);
-    assert_eq!(flag_id::PF, 3);
-    assert_eq!(flag_id::QF, 4);
-    assert_eq!(flag_id::SF, 5);
-    assert_eq!(flag_id::EF, 6);
-    assert_eq!(flag_id::HF, 7);
+    assert_eq!(u8::from(FlagId::Zf), 0);
+    assert_eq!(u8::from(FlagId::Nf), 1);
+    assert_eq!(u8::from(FlagId::Of), 2);
+    assert_eq!(u8::from(FlagId::Pf), 3);
+    assert_eq!(u8::from(FlagId::Qf), 4);
+    assert_eq!(u8::from(FlagId::Sf), 5);
+    assert_eq!(u8::from(FlagId::Ef), 6);
+    assert_eq!(u8::from(FlagId::Hf), 7);
 }
 
 #[test]
 fn test_reduce_fn_constants() {
-    assert_eq!(reduce_fn::ROUND, 0);
-    assert_eq!(reduce_fn::FLOOR, 1);
-    assert_eq!(reduce_fn::CEIL, 2);
-    assert_eq!(reduce_fn::TRUNC, 3);
-    assert_eq!(reduce_fn::ABS, 4);
-    assert_eq!(reduce_fn::NEGATE, 5);
-    assert_eq!(reduce_fn::MAGNITUDE, 6);
-    assert_eq!(reduce_fn::PHASE, 7);
-    assert_eq!(reduce_fn::REAL, 8);
-    assert_eq!(reduce_fn::IMAG, 9);
-    assert_eq!(reduce_fn::MEAN, 10);
-    assert_eq!(reduce_fn::MODE, 11);
-    assert_eq!(reduce_fn::ARGMAX, 12);
-    assert_eq!(reduce_fn::VARIANCE, 13);
+    assert_eq!(u8::from(ReduceFn::Round), 0);
+    assert_eq!(u8::from(ReduceFn::Floor), 1);
+    assert_eq!(u8::from(ReduceFn::Ceil), 2);
+    assert_eq!(u8::from(ReduceFn::Trunc), 3);
+    assert_eq!(u8::from(ReduceFn::Abs), 4);
+    assert_eq!(u8::from(ReduceFn::Negate), 5);
+    assert_eq!(u8::from(ReduceFn::Magnitude), 6);
+    assert_eq!(u8::from(ReduceFn::Phase), 7);
+    assert_eq!(u8::from(ReduceFn::Real), 8);
+    assert_eq!(u8::from(ReduceFn::Imag), 9);
+    assert_eq!(u8::from(ReduceFn::Mean), 10);
+    assert_eq!(u8::from(ReduceFn::Mode), 11);
+    assert_eq!(u8::from(ReduceFn::Argmax), 12);
+    assert_eq!(u8::from(ReduceFn::Variance), 13);
 }
 
 #[test]

@@ -15,7 +15,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Phase shift kernel parameterized by a complex amplitude.
 ///
@@ -42,7 +42,7 @@ impl Kernel for PhaseShift {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let dim = input.dimension();
         let rate = cx_norm(self.amplitude);
         let amps = input.amplitudes();

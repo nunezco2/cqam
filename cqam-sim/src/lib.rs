@@ -42,7 +42,9 @@
 //! assert!((evolved.purity() - 1.0).abs() < 1e-9);
 //! ```
 
+pub mod backend;
 pub mod complex;
+pub mod constants;
 pub mod density_matrix;
 pub mod statevector;
 pub mod quantum_register;

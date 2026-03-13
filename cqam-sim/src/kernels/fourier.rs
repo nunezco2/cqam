@@ -8,7 +8,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Quantum Fourier Transform kernel (kernel_id = 2).
 ///
@@ -70,7 +70,7 @@ impl Kernel for Fourier {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         // Factored QFT via Hadamard + controlled phase rotations.
         // O(n^2 * 2^n) time, O(2^n) memory -- no unitary matrix needed.
         let n = input.num_qubits() as usize;

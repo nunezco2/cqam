@@ -1,7 +1,7 @@
 //! Integration tests for the CQAM runner: error propagation, simulation
 //! configuration enforcement, and ISR wiring with interrupt completion.
 
-use cqam_core::instruction::Instruction;
+use cqam_core::instruction::*;
 use cqam_run::runner::{run_program, run_program_with_config};
 use cqam_run::simconfig::SimConfig;
 
@@ -137,6 +137,7 @@ fn test_max_cycles_enforcement() {
         default_qubits: None,
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -164,6 +165,7 @@ fn test_max_cycles_allows_short_programs() {
         default_qubits: None,
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -192,7 +194,7 @@ fn test_setiv_div_by_zero_handler_executes_and_reti_resumes() {
     // SETIV registers a handler for Arithmetic trap (trap_id=0).
     // Div by zero fires the trap, handler runs, RETI resumes after the div.
     let program = vec![
-        Instruction::SetIV { trap_id: 0, target: "ARITH_HANDLER".into() },
+        Instruction::SetIV { trap_id: TrapId::Arithmetic, target: "ARITH_HANDLER".into() },
         Instruction::ILdi { dst: 0, imm: 42 },
         Instruction::ILdi { dst: 1, imm: 0 },
         Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // trap_arith fires
@@ -246,6 +248,7 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         default_qubits: None,
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -271,14 +274,8 @@ fn test_reti_with_empty_call_stack_halts() {
 
 #[test]
 fn test_setiv_invalid_trap_id_returns_error() {
-    let program = vec![
-        Instruction::SetIV { trap_id: 5, target: "HANDLER".into() },
-        Instruction::Label("HANDLER".into()),
-        Instruction::Halt,
-    ];
-
-    let result = run_program(program);
-    assert!(result.is_err(), "Invalid trap_id should return error");
+    // With type-safe enums, invalid trap IDs are caught at TryFrom time
+    assert!(TrapId::try_from(5u8).is_err(), "Invalid trap_id should return error");
 }
 
 #[test]
@@ -296,6 +293,7 @@ fn test_fidelity_threshold_wiring() {
         default_qubits: None,
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     };
 
     let ctx = run_program_with_config(program, &config).unwrap();
@@ -307,7 +305,7 @@ fn test_fidelity_threshold_wiring() {
 fn test_setiv_unresolved_label_returns_error() {
     // SetIV referencing a label that does not exist should return UnresolvedLabel error
     let program = vec![
-        Instruction::SetIV { trap_id: 0, target: "NONEXISTENT".into() },
+        Instruction::SetIV { trap_id: TrapId::Arithmetic, target: "NONEXISTENT".into() },
         Instruction::Halt,
     ];
 
@@ -334,8 +332,8 @@ fn test_setiv_overwrites_previous_handler() {
     // Registering a second handler for the same trap_id should overwrite the first.
     // First handler sets R15=11, second handler sets R15=22.
     let program = vec![
-        Instruction::SetIV { trap_id: 0, target: "HANDLER_A".into() },
-        Instruction::SetIV { trap_id: 0, target: "HANDLER_B".into() }, // overwrite
+        Instruction::SetIV { trap_id: TrapId::Arithmetic, target: "HANDLER_A".into() },
+        Instruction::SetIV { trap_id: TrapId::Arithmetic, target: "HANDLER_B".into() }, // overwrite
         Instruction::ILdi { dst: 0, imm: 42 },
         Instruction::ILdi { dst: 1, imm: 0 },
         Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 }, // trigger trap
@@ -357,7 +355,7 @@ fn test_setiv_overwrites_previous_handler() {
 fn test_imod_by_zero_with_handler_resumes() {
     // Like the IDiv handler test, but for IMod
     let program = vec![
-        Instruction::SetIV { trap_id: 0, target: "ARITH_HANDLER".into() },
+        Instruction::SetIV { trap_id: TrapId::Arithmetic, target: "ARITH_HANDLER".into() },
         Instruction::ILdi { dst: 0, imm: 42 },
         Instruction::ILdi { dst: 1, imm: 0 },
         Instruction::IMod { dst: 2, lhs: 0, rhs: 1 }, // trap_arith fires
@@ -390,6 +388,7 @@ fn test_pragma_qubits_applied() {
         default_qubits: None, // no CLI override
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     };
 
     let ctx = run_program_with_config_and_metadata(
@@ -397,9 +396,8 @@ fn test_pragma_qubits_applied() {
     ).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
-    let dm = ctx.qregs[0].as_ref().expect("Q0 should be prepared");
-    assert_eq!(dm.num_qubits(), 4, "Pragma should set 4 qubits");
-    assert_eq!(dm.dimension(), 16, "4 qubits => dimension 16");
+    assert!(ctx.qregs[0].is_some(), "Q0 should be prepared");
+    assert_eq!(ctx.config.default_qubits, 4, "Pragma should set 4 qubits");
 }
 
 #[test]
@@ -417,6 +415,7 @@ fn test_cli_overrides_pragma() {
         default_qubits: Some(3), // CLI override: 3 qubits
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     };
 
     let ctx = run_program_with_config_and_metadata(
@@ -424,7 +423,6 @@ fn test_cli_overrides_pragma() {
     ).unwrap();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
-    let dm = ctx.qregs[0].as_ref().expect("Q0 should be prepared");
-    assert_eq!(dm.num_qubits(), 3, "CLI should override pragma: 3 qubits");
-    assert_eq!(dm.dimension(), 8, "3 qubits => dimension 8");
+    assert!(ctx.qregs[0].is_some(), "Q0 should be prepared");
+    assert_eq!(ctx.config.default_qubits, 3, "CLI should override pragma: 3 qubits");
 }

@@ -2,7 +2,7 @@
 //! coherence summary formatting for the QUANTUM pane.
 #![allow(dead_code)]
 
-use cqam_sim::quantum_register::QuantumRegister;
+use cqam_core::quantum_backend::{QRegHandle, QuantumBackend};
 
 // =============================================================================
 // Unicode block characters for bar chart rendering
@@ -60,20 +60,21 @@ pub struct TopKResult {
 // Top-K extraction
 // =============================================================================
 
-/// Extract the top-K basis states by probability from a quantum register.
+/// Extract the top-K basis states by probability from a quantum register handle.
 ///
 /// # Arguments
 ///
-/// * `qreg` - The quantum register to inspect.
+/// * `backend` - The quantum backend to query state from.
+/// * `handle` - The quantum register handle to inspect.
 /// * `topk` - Maximum number of entries to return.
 /// * `threshold` - Minimum probability to include (entries below are suppressed).
-pub fn extract_top_k(qreg: &QuantumRegister, topk: usize, threshold: f64) -> TopKResult {
-    let is_pure = matches!(qreg, QuantumRegister::Pure(_));
-    let num_qubits = qreg.num_qubits();
-    let dimension = qreg.dimension();
-    let purity = qreg.purity();
+pub fn extract_top_k(backend: &dyn QuantumBackend, handle: QRegHandle, topk: usize, threshold: f64) -> TopKResult {
+    let is_pure = backend.is_pure(handle).unwrap_or(false);
+    let num_qubits = backend.num_qubits(handle).unwrap_or(0);
+    let dimension = backend.dimension(handle).unwrap_or(0);
+    let purity = backend.purity(handle).unwrap_or(0.0);
 
-    let probs = qreg.diagonal_probabilities();
+    let probs = backend.diagonal_probabilities(handle).unwrap_or_default();
 
     // Collect entries above threshold.
     let mut entries: Vec<(usize, f64)> = probs
@@ -95,15 +96,10 @@ pub fn extract_top_k(qreg: &QuantumRegister, topk: usize, threshold: f64) -> Top
         .into_iter()
         .map(|(k, p)| {
             let (amplitude, phase) = if is_pure {
-                // For Pure states, extract the actual amplitude from the statevector.
-                if let QuantumRegister::Pure(sv) = qreg {
-                    let amp = sv.amplitude(k);
-                    let ph = amp.1.atan2(amp.0);
-                    (amp, Some(ph))
-                } else {
-                    // Unreachable given is_pure check, but handle gracefully.
-                    ((p.sqrt(), 0.0), None)
-                }
+                // For Pure states, extract the actual amplitude from the backend.
+                let amp = backend.amplitude(handle, k).unwrap_or((p.sqrt(), 0.0));
+                let ph = amp.1.atan2(amp.0);
+                (amp, Some(ph))
             } else {
                 // For Mixed states, amplitude is not directly available.
                 // Show sqrt(p) + 0i as a placeholder; phase is not meaningful.
@@ -184,47 +180,46 @@ pub struct CoherenceSummary {
     pub purity: f64,
 }
 
-/// Compute the coherence summary for a quantum register.
+/// Compute the coherence summary for a quantum register handle.
 ///
 /// For pure states, returns `None` (coherence summary is only meaningful for
 /// mixed states). For mixed states, computes the max off-diagonal magnitude
 /// using exact computation for small matrices (<= 8 qubits) and sampling for
 /// larger ones.
-pub fn coherence_summary(qreg: &QuantumRegister) -> Option<CoherenceSummary> {
-    match qreg {
-        QuantumRegister::Pure(_) => None,
-        QuantumRegister::Mixed(_) => {
-            let dim = qreg.dimension();
-            let max_off_diag = max_off_diagonal(qreg, dim);
-            Some(CoherenceSummary {
-                max_off_diagonal: max_off_diag,
-                purity: qreg.purity(),
-            })
-        }
+pub fn coherence_summary(backend: &dyn QuantumBackend, handle: QRegHandle) -> Option<CoherenceSummary> {
+    let is_pure = backend.is_pure(handle).unwrap_or(true);
+    if is_pure {
+        return None;
     }
+    let dim = backend.dimension(handle).unwrap_or(0);
+    let max_off_diag = max_off_diagonal(backend, handle, dim);
+    Some(CoherenceSummary {
+        max_off_diagonal: max_off_diag,
+        purity: backend.purity(handle).unwrap_or(0.0),
+    })
 }
 
 /// Compute (or sample) the maximum off-diagonal magnitude.
 ///
 /// For small matrices (dim^2 <= MAX_EXACT_ELEMENTS), computes exactly.
 /// For larger matrices, uses random sampling.
-fn max_off_diagonal(qreg: &QuantumRegister, dim: usize) -> f64 {
+fn max_off_diagonal(backend: &dyn QuantumBackend, handle: QRegHandle, dim: usize) -> f64 {
     const MAX_EXACT_ELEMENTS: usize = 65_536; // up to 8 qubits (256x256)
 
     if dim * dim <= MAX_EXACT_ELEMENTS {
-        max_off_diagonal_exact(qreg, dim)
+        max_off_diagonal_exact(backend, handle, dim)
     } else {
-        max_off_diagonal_sampled(qreg, dim, 100_000)
+        max_off_diagonal_sampled(backend, handle, dim, 100_000)
     }
 }
 
 /// Exact max off-diagonal computation for small matrices.
-fn max_off_diagonal_exact(qreg: &QuantumRegister, dim: usize) -> f64 {
+fn max_off_diagonal_exact(backend: &dyn QuantumBackend, handle: QRegHandle, dim: usize) -> f64 {
     let mut max_val: f64 = 0.0;
     for i in 0..dim {
         for j in 0..dim {
             if i != j {
-                let (re, im) = qreg.get_element(i, j);
+                let (re, im) = backend.get_element(handle, i, j).unwrap_or((0.0, 0.0));
                 let mag = (re * re + im * im).sqrt();
                 if mag > max_val {
                     max_val = mag;
@@ -239,7 +234,7 @@ fn max_off_diagonal_exact(qreg: &QuantumRegister, dim: usize) -> f64 {
 ///
 /// Uses a simple deterministic sampling pattern rather than random sampling
 /// to avoid adding a rand dependency. Samples stride-based off-diagonal pairs.
-fn max_off_diagonal_sampled(qreg: &QuantumRegister, dim: usize, max_samples: usize) -> f64 {
+fn max_off_diagonal_sampled(backend: &dyn QuantumBackend, handle: QRegHandle, dim: usize, max_samples: usize) -> f64 {
     let mut max_val: f64 = 0.0;
     let mut count = 0usize;
 
@@ -253,7 +248,7 @@ fn max_off_diagonal_sampled(qreg: &QuantumRegister, dim: usize, max_samples: usi
             if i == j {
                 continue;
             }
-            let (re, im) = qreg.get_element(i, j);
+            let (re, im) = backend.get_element(handle, i, j).unwrap_or((0.0, 0.0));
             let mag = (re * re + im * im).sqrt();
             if mag > max_val {
                 max_val = mag;

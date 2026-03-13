@@ -7,7 +7,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// One Grover iteration kernel (kernel_id = 4).
 ///
@@ -80,14 +80,17 @@ impl Kernel for GroverIter {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let dim = input.dimension();
         let n_f64 = dim as f64;
 
         // Validate targets
         for &t in &self.targets {
             if (t as usize) >= dim {
-                return Err(format!("Grover target {} exceeds dimension {}", t, dim));
+                return Err(CqamError::TypeMismatch {
+                    instruction: "QKERNEL/GROVER".to_string(),
+                    detail: format!("Grover target {} exceeds dimension {}", t, dim),
+                });
             }
         }
         let target_set = &self.target_set;

@@ -5,6 +5,7 @@
 //! and hybrid (H). Also defines `HybridValue`, the tagged union stored in the
 //! H-file.
 
+use crate::constants::{INT_REG_COUNT, FLOAT_REG_COUNT, COMPLEX_REG_COUNT, H_REG_COUNT};
 use crate::error::CqamError;
 
 // =============================================================================
@@ -17,7 +18,7 @@ use crate::error::CqamError;
 /// the comparison result target for FEq/FLt/FGt.
 #[derive(Debug, Clone, PartialEq, Default)]
 pub struct IntRegFile {
-    pub regs: [i64; 16],
+    pub regs: [i64; INT_REG_COUNT],
 }
 
 impl IntRegFile {
@@ -38,6 +39,16 @@ impl IntRegFile {
                 index: idx,
             })
         }
+    }
+
+    /// Return the backing array as an immutable slice.
+    pub fn as_slice(&self) -> &[i64] {
+        &self.regs
+    }
+
+    /// Return the backing array as a mutable slice.
+    pub fn as_slice_mut(&mut self) -> &mut [i64] {
+        &mut self.regs
     }
 
     /// Write integer register R[idx].
@@ -65,12 +76,12 @@ impl IntRegFile {
 /// Used by all F-prefix instructions (FADD, FSUB, FLDI, etc.).
 #[derive(Debug, Clone, PartialEq)]
 pub struct FloatRegFile {
-    pub regs: [f64; 16],
+    pub regs: [f64; FLOAT_REG_COUNT],
 }
 
 impl Default for FloatRegFile {
     fn default() -> Self {
-        Self { regs: [0.0; 16] }
+        Self { regs: [0.0; FLOAT_REG_COUNT] }
     }
 }
 
@@ -92,6 +103,16 @@ impl FloatRegFile {
                 index: idx,
             })
         }
+    }
+
+    /// Return the backing array as an immutable slice.
+    pub fn as_slice(&self) -> &[f64] {
+        &self.regs
+    }
+
+    /// Return the backing array as a mutable slice.
+    pub fn as_slice_mut(&mut self) -> &mut [f64] {
+        &mut self.regs
     }
 
     /// Write float register F[idx].
@@ -119,12 +140,12 @@ impl FloatRegFile {
 /// Used by all Z-prefix instructions (ZADD, ZSUB, ZLDI, etc.).
 #[derive(Debug, Clone, PartialEq)]
 pub struct ComplexRegFile {
-    pub regs: [(f64, f64); 16],
+    pub regs: [(f64, f64); COMPLEX_REG_COUNT],
 }
 
 impl Default for ComplexRegFile {
     fn default() -> Self {
-        Self { regs: [(0.0, 0.0); 16] }
+        Self { regs: [(0.0, 0.0); COMPLEX_REG_COUNT] }
     }
 }
 
@@ -146,6 +167,16 @@ impl ComplexRegFile {
                 index: idx,
             })
         }
+    }
+
+    /// Return the backing array as an immutable slice.
+    pub fn as_slice(&self) -> &[(f64, f64)] {
+        &self.regs
+    }
+
+    /// Return the backing array as a mutable slice.
+    pub fn as_slice_mut(&mut self) -> &mut [(f64, f64)] {
+        &mut self.regs
     }
 
     /// Write complex register Z[idx].
@@ -186,9 +217,9 @@ pub enum HybridValue {
     Complex(f64, f64),
 
     /// Probability distribution over basis states.
-    /// Each entry is (basis_state: u16, probability: f64).
+    /// Each entry is (basis_state: u32, probability: f64).
     /// This is the primary output of QObserve.
-    Dist(Vec<(u16, f64)>),
+    Dist(Vec<(u32, f64)>),
 }
 
 
@@ -202,7 +233,7 @@ pub enum HybridValue {
 /// classical reduction).
 #[derive(Debug, Clone, PartialEq)]
 pub struct HybridRegFile {
-    pub regs: [HybridValue; 8],
+    pub regs: [HybridValue; H_REG_COUNT],
 }
 
 impl Default for HybridRegFile {
@@ -231,6 +262,16 @@ impl HybridRegFile {
                 index: idx,
             })
         }
+    }
+
+    /// Return the backing array as an immutable slice.
+    pub fn as_slice(&self) -> &[HybridValue] {
+        &self.regs
+    }
+
+    /// Return the backing array as a mutable slice.
+    pub fn as_slice_mut(&mut self) -> &mut [HybridValue] {
+        &mut self.regs
     }
 
     /// Write hybrid register H[idx].

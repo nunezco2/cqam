@@ -5,6 +5,8 @@
 //! and hybrid fork/merge operations to `hybrid.rs`. PC advancement is the
 //! exclusive responsibility of this module.
 
+use std::sync::Arc;
+
 use crate::context::ExecutionContext;
 use crate::fork::ForkManager;
 use crate::resource::resource_cost;
@@ -12,6 +14,7 @@ use crate::qop::execute_qop;
 use crate::hybrid::execute_hybrid;
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
+use cqam_core::quantum_backend::QuantumBackend;
 use crate::isr::{Trap, MaskableTrap};
 
 /// Execute a single instruction in the given context.
@@ -23,10 +26,11 @@ use crate::isr::{Trap, MaskableTrap};
 ///
 /// This function is the SOLE authority on PC advancement. The runner loop
 /// must NOT call `ctx.advance_pc()` independently.
-pub fn execute_instruction(
+pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
     ctx: &mut ExecutionContext,
     instr: &Instruction,
     fork_mgr: &mut ForkManager,
+    backend: &mut B,
 ) -> Result<(), CqamError> {
     // SPMD skip: non-leader threads skip instructions until HATME
     if ctx.skip_to_hatme {
@@ -140,38 +144,14 @@ pub fn execute_instruction(
         }
 
         Instruction::ILdm { dst, addr } => {
-            let result = if let Some(ref sm) = ctx.shared_memory {
-                if let Some(val) = sm.read(*addr, ctx.in_atomic_section) {
-                    val
-                } else {
-                    ctx.cmem.load(*addr)
-                }
-            } else {
-                ctx.cmem.load(*addr)
-            };
+            let result = ctx.cmem_load(*addr);
             ctx.iregs.set(*dst, result)?;
             ctx.psw.zf = result == 0;
         }
 
         Instruction::IStr { src, addr } => {
             let val = ctx.iregs.get(*src)?;
-            if let Some(ref sm) = ctx.shared_memory {
-                if sm.contains(*addr) {
-                    if ctx.in_atomic_section {
-                        sm.write(*addr, val).ok_or(CqamError::SharedMemoryViolation {
-                            address: *addr, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        return Err(CqamError::SharedMemoryViolation {
-                            address: *addr, thread_id: ctx.thread_id,
-                        });
-                    }
-                } else {
-                    ctx.cmem.store(*addr, val);
-                }
-            } else {
-                ctx.cmem.store(*addr, val);
-            }
+            ctx.cmem_store(*addr, val)?;
         }
 
         // =====================================================================
@@ -249,39 +229,14 @@ pub fn execute_instruction(
         }
 
         Instruction::FLdm { dst, addr } => {
-            let raw = if let Some(ref sm) = ctx.shared_memory {
-                if let Some(val) = sm.read(*addr, ctx.in_atomic_section) {
-                    val
-                } else {
-                    ctx.cmem.load(*addr)
-                }
-            } else {
-                ctx.cmem.load(*addr)
-            };
-            let result = f64::from_bits(raw as u64);
+            let result = ctx.cmem_load_f64(*addr);
             ctx.fregs.set(*dst, result)?;
             ctx.psw.zf = result == 0.0;
         }
 
         Instruction::FStr { src, addr } => {
-            let bits = ctx.fregs.get(*src)?.to_bits() as i64;
-            if let Some(ref sm) = ctx.shared_memory {
-                if sm.contains(*addr) {
-                    if ctx.in_atomic_section {
-                        sm.write(*addr, bits).ok_or(CqamError::SharedMemoryViolation {
-                            address: *addr, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        return Err(CqamError::SharedMemoryViolation {
-                            address: *addr, thread_id: ctx.thread_id,
-                        });
-                    }
-                } else {
-                    ctx.cmem.store(*addr, bits);
-                }
-            } else {
-                ctx.cmem.store(*addr, bits);
-            }
+            let val = ctx.fregs.get(*src)?;
+            ctx.cmem_store_f64(*addr, val)?;
         }
 
         Instruction::FEq { dst, lhs, rhs } => {
@@ -364,56 +319,14 @@ pub fn execute_instruction(
         }
 
         Instruction::ZLdm { dst, addr } => {
-            let load_cell = |a: u16| -> i64 {
-                if let Some(ref sm) = ctx.shared_memory {
-                    if let Some(val) = sm.read(a, ctx.in_atomic_section) {
-                        return val;
-                    }
-                }
-                ctx.cmem.load(a)
-            };
-            let re = f64::from_bits(load_cell(*addr) as u64);
-            let im = f64::from_bits(load_cell(addr.wrapping_add(1)) as u64);
+            let (re, im) = ctx.cmem_load_c64(*addr);
             ctx.zregs.set(*dst, (re, im))?;
             ctx.psw.zf = re == 0.0 && im == 0.0;
         }
 
         Instruction::ZStr { src, addr } => {
-            let (re, im) = ctx.zregs.get(*src)?;
-            let re_bits = re.to_bits() as i64;
-            let im_bits = im.to_bits() as i64;
-            if let Some(ref sm) = ctx.shared_memory {
-                let addr2 = addr.wrapping_add(1);
-                let re_shared = sm.contains(*addr);
-                let im_shared = sm.contains(addr2);
-                if re_shared || im_shared {
-                    if !ctx.in_atomic_section {
-                        return Err(CqamError::SharedMemoryViolation {
-                            address: *addr, thread_id: ctx.thread_id,
-                        });
-                    }
-                    if re_shared {
-                        sm.write(*addr, re_bits).ok_or(CqamError::SharedMemoryViolation {
-                            address: *addr, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        ctx.cmem.store(*addr, re_bits);
-                    }
-                    if im_shared {
-                        sm.write(addr2, im_bits).ok_or(CqamError::SharedMemoryViolation {
-                            address: addr2, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        ctx.cmem.store(addr2, im_bits);
-                    }
-                } else {
-                    ctx.cmem.store(*addr, re_bits);
-                    ctx.cmem.store(addr2, im_bits);
-                }
-            } else {
-                ctx.cmem.store(*addr, re_bits);
-                ctx.cmem.store(addr.wrapping_add(1), im_bits);
-            }
+            let val = ctx.zregs.get(*src)?;
+            ctx.cmem_store_c64(*addr, val)?;
         }
 
         // =====================================================================
@@ -423,15 +336,7 @@ pub fn execute_instruction(
         Instruction::ILdx { dst, addr_reg } => {
             let raw_addr = ctx.iregs.get(*addr_reg)?;
             let addr = validate_indirect_addr(raw_addr, 0xFFFF, "ILDX")?;
-            let result = if let Some(ref sm) = ctx.shared_memory {
-                if let Some(val) = sm.read(addr, ctx.in_atomic_section) {
-                    val
-                } else {
-                    ctx.cmem.load(addr)
-                }
-            } else {
-                ctx.cmem.load(addr)
-            };
+            let result = ctx.cmem_load(addr);
             ctx.iregs.set(*dst, result)?;
             ctx.psw.zf = result == 0;
         }
@@ -440,38 +345,13 @@ pub fn execute_instruction(
             let raw_addr = ctx.iregs.get(*addr_reg)?;
             let addr = validate_indirect_addr(raw_addr, 0xFFFF, "ISTRX")?;
             let val = ctx.iregs.get(*src)?;
-            if let Some(ref sm) = ctx.shared_memory {
-                if sm.contains(addr) {
-                    if ctx.in_atomic_section {
-                        sm.write(addr, val).ok_or(CqamError::SharedMemoryViolation {
-                            address: addr, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        return Err(CqamError::SharedMemoryViolation {
-                            address: addr, thread_id: ctx.thread_id,
-                        });
-                    }
-                } else {
-                    ctx.cmem.store(addr, val);
-                }
-            } else {
-                ctx.cmem.store(addr, val);
-            }
+            ctx.cmem_store(addr, val)?;
         }
 
         Instruction::FLdx { dst, addr_reg } => {
             let raw_addr = ctx.iregs.get(*addr_reg)?;
             let addr = validate_indirect_addr(raw_addr, 0xFFFF, "FLDX")?;
-            let raw = if let Some(ref sm) = ctx.shared_memory {
-                if let Some(val) = sm.read(addr, ctx.in_atomic_section) {
-                    val
-                } else {
-                    ctx.cmem.load(addr)
-                }
-            } else {
-                ctx.cmem.load(addr)
-            };
-            let result = f64::from_bits(raw as u64);
+            let result = ctx.cmem_load_f64(addr);
             ctx.fregs.set(*dst, result)?;
             ctx.psw.zf = result == 0.0;
         }
@@ -479,39 +359,14 @@ pub fn execute_instruction(
         Instruction::FStrx { src, addr_reg } => {
             let raw_addr = ctx.iregs.get(*addr_reg)?;
             let addr = validate_indirect_addr(raw_addr, 0xFFFF, "FSTRX")?;
-            let bits = ctx.fregs.get(*src)?.to_bits() as i64;
-            if let Some(ref sm) = ctx.shared_memory {
-                if sm.contains(addr) {
-                    if ctx.in_atomic_section {
-                        sm.write(addr, bits).ok_or(CqamError::SharedMemoryViolation {
-                            address: addr, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        return Err(CqamError::SharedMemoryViolation {
-                            address: addr, thread_id: ctx.thread_id,
-                        });
-                    }
-                } else {
-                    ctx.cmem.store(addr, bits);
-                }
-            } else {
-                ctx.cmem.store(addr, bits);
-            }
+            let val = ctx.fregs.get(*src)?;
+            ctx.cmem_store_f64(addr, val)?;
         }
 
         Instruction::ZLdx { dst, addr_reg } => {
             let raw_addr = ctx.iregs.get(*addr_reg)?;
             let addr = validate_indirect_addr(raw_addr, 0xFFFE, "ZLDX")?;
-            let load_cell = |a: u16| -> i64 {
-                if let Some(ref sm) = ctx.shared_memory {
-                    if let Some(val) = sm.read(a, ctx.in_atomic_section) {
-                        return val;
-                    }
-                }
-                ctx.cmem.load(a)
-            };
-            let re = f64::from_bits(load_cell(addr) as u64);
-            let im = f64::from_bits(load_cell(addr.wrapping_add(1)) as u64);
+            let (re, im) = ctx.cmem_load_c64(addr);
             ctx.zregs.set(*dst, (re, im))?;
             ctx.psw.zf = re == 0.0 && im == 0.0;
         }
@@ -519,41 +374,8 @@ pub fn execute_instruction(
         Instruction::ZStrx { src, addr_reg } => {
             let raw_addr = ctx.iregs.get(*addr_reg)?;
             let addr = validate_indirect_addr(raw_addr, 0xFFFE, "ZSTRX")?;
-            let (re, im) = ctx.zregs.get(*src)?;
-            let re_bits = re.to_bits() as i64;
-            let im_bits = im.to_bits() as i64;
-            if let Some(ref sm) = ctx.shared_memory {
-                let addr2 = addr.wrapping_add(1);
-                let re_shared = sm.contains(addr);
-                let im_shared = sm.contains(addr2);
-                if re_shared || im_shared {
-                    if !ctx.in_atomic_section {
-                        return Err(CqamError::SharedMemoryViolation {
-                            address: addr, thread_id: ctx.thread_id,
-                        });
-                    }
-                    if re_shared {
-                        sm.write(addr, re_bits).ok_or(CqamError::SharedMemoryViolation {
-                            address: addr, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        ctx.cmem.store(addr, re_bits);
-                    }
-                    if im_shared {
-                        sm.write(addr2, im_bits).ok_or(CqamError::SharedMemoryViolation {
-                            address: addr2, thread_id: ctx.thread_id,
-                        })?;
-                    } else {
-                        ctx.cmem.store(addr2, im_bits);
-                    }
-                } else {
-                    ctx.cmem.store(addr, re_bits);
-                    ctx.cmem.store(addr2, im_bits);
-                }
-            } else {
-                ctx.cmem.store(addr, re_bits);
-                ctx.cmem.store(addr.wrapping_add(1), im_bits);
-            }
+            let val = ctx.zregs.get(*src)?;
+            ctx.cmem_store_c64(addr, val)?;
         }
 
         // =====================================================================
@@ -609,11 +431,7 @@ pub fn execute_instruction(
 
         Instruction::IQCfg { dst } => {
             let n = ctx.config.default_qubits;
-            let max_allowed = if ctx.config.force_density_matrix {
-                cqam_sim::density_matrix::MAX_QUBITS
-            } else {
-                cqam_sim::statevector::MAX_SV_QUBITS
-            };
+            let max_allowed = backend.max_qubits();
             if n == 0 || n > max_allowed {
                 ctx.psw.trap_arith = true;
                 ctx.iregs.set(*dst, 0)?;
@@ -629,21 +447,21 @@ pub fn execute_instruction(
         // =====================================================================
 
         Instruction::Ecall { proc_id } => {
-            use cqam_core::instruction::proc_id as pid;
+            use cqam_core::instruction::ProcId;
             match *proc_id {
-                pid::PRINT_INT => {
+                ProcId::PrintInt => {
                     let val = ctx.iregs.get(0)?;
                     println!("{}", val);
                 }
-                pid::PRINT_FLOAT => {
+                ProcId::PrintFloat => {
                     let val = ctx.fregs.get(0)?;
                     println!("{}", val);
                 }
-                pid::PRINT_CHAR => {
+                ProcId::PrintChar => {
                     let code = ctx.iregs.get(0)? as u8;
                     print!("{}", code as char);
                 }
-                pid::PRINT_STR => {
+                ProcId::PrintStr => {
                     let base = ctx.iregs.get(0)? as u16;
                     let len = ctx.iregs.get(1)? as usize;
                     let fmt: Vec<u8> = (0..len)
@@ -687,7 +505,7 @@ pub fn execute_instruction(
                     }
                     print!("{}", output);
                 }
-                pid::DUMP_REGS => {
+                ProcId::DumpRegs => {
                     for r in 0..16u8 {
                         if let Ok(v) = ctx.iregs.get(r) {
                             if v != 0 { eprintln!("  R{:2} = {}", r, v); }
@@ -698,9 +516,6 @@ pub fn execute_instruction(
                             if v != 0.0 { eprintln!("  F{:2} = {}", r, v); }
                         }
                     }
-                }
-                _ => {
-                    return Err(CqamError::InvalidProcedure(*proc_id));
                 }
             }
         }
@@ -755,7 +570,7 @@ pub fn execute_instruction(
         }
 
         Instruction::SetIV { trap_id, target } => {
-            let mt = trap_id_to_maskable(*trap_id)?;
+            let mt = trap_id_to_maskable(*trap_id);
             let addr = *ctx.labels.get(target.as_str())
                 .ok_or_else(|| CqamError::UnresolvedLabel(target.clone()))?;
             ctx.isr_table.set_handler(&Trap::Maskable(mt), addr);
@@ -825,7 +640,7 @@ pub fn execute_instruction(
         | Instruction::QPrepN { .. }
         | Instruction::QPtrace { .. }
         | Instruction::QReset { .. } => {
-            execute_qop(ctx, instr)?;
+            execute_qop(ctx, instr, backend)?;
         }
 
         // =====================================================================
@@ -838,7 +653,7 @@ pub fn execute_instruction(
         | Instruction::HReduce { .. }
         | Instruction::HAtmS
         | Instruction::HAtmE => {
-            let jumped = execute_hybrid(ctx, instr, fork_mgr)?;
+            let jumped = execute_hybrid(ctx, instr, fork_mgr, backend)?;
             if jumped {
                 return Ok(()); // JmpF took a jump: do NOT advance PC
             }
@@ -858,16 +673,12 @@ pub fn execute_instruction(
     Ok(())
 }
 
-/// Convert a trap_id (u8) to a MaskableTrap variant.
-fn trap_id_to_maskable(trap_id: u8) -> Result<MaskableTrap, CqamError> {
+/// Convert a TrapId enum to a MaskableTrap variant.
+fn trap_id_to_maskable(trap_id: cqam_core::instruction::TrapId) -> MaskableTrap {
     match trap_id {
-        0 => Ok(MaskableTrap::Arithmetic),
-        1 => Ok(MaskableTrap::QuantumError),
-        2 => Ok(MaskableTrap::SyncFailure),
-        _ => Err(CqamError::TypeMismatch {
-            instruction: "SETIV".to_string(),
-            detail: format!("Invalid trap ID: {} (must be 0-2)", trap_id),
-        }),
+        cqam_core::instruction::TrapId::Arithmetic => MaskableTrap::Arithmetic,
+        cqam_core::instruction::TrapId::QuantumError => MaskableTrap::QuantumError,
+        cqam_core::instruction::TrapId::SyncFailure => MaskableTrap::SyncFailure,
     }
 }
 
@@ -891,16 +702,15 @@ fn validate_indirect_addr(val: i64, max_addr: u16, instruction: &str) -> Result<
 ///
 /// This is also the execution loop used by fork threads (with their own
 /// nested ForkManager).
-pub fn run_program(ctx: &mut ExecutionContext, fork_mgr: &mut ForkManager) -> Result<(), CqamError> {
-    while ctx.current_line().is_some() {
-        // Clone is required here due to Rust's borrow rules: ctx.program[pc]
-        // borrows ctx immutably, but execute_instruction needs &mut ctx.
-        // The cost is O(1) for most variants; only String-containing variants
-        // (Label, Jmp, Jif, Call, JmpF) allocate, and these are a small
-        // fraction of typical execution. Eliminating this clone would require
-        // splitting ExecutionContext into separate immutable/mutable parts.
-        let instr = ctx.program[ctx.pc].clone();
-        execute_instruction(ctx, &instr, fork_mgr)?;
+pub fn run_program<B: QuantumBackend + Clone + Send + 'static>(
+    ctx: &mut ExecutionContext,
+    fork_mgr: &mut ForkManager,
+    backend: &mut B,
+) -> Result<(), CqamError> {
+    let program = Arc::clone(&ctx.program);
+    while ctx.pc < program.len() {
+        let instr = &program[ctx.pc];
+        execute_instruction(ctx, instr, fork_mgr, backend)?;
 
         if ctx.psw.trap_halt {
             break;

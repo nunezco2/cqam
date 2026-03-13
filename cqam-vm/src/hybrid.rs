@@ -5,25 +5,26 @@
 
 use std::sync::Arc;
 use cqam_core::error::CqamError;
-use cqam_core::instruction::{Instruction, reduce_fn};
+use cqam_core::instruction::{Instruction, ReduceFn};
+use cqam_core::quantum_backend::QuantumBackend;
 use cqam_core::register::HybridValue;
 use crate::context::ExecutionContext;
 use crate::fork::ForkManager;
 use crate::thread_pool::{SharedQuantumFile, SharedMemory, SharedRegionConfig, ThreadBarrier};
 use rayon::prelude::*;
 
-/// Minimum distribution size to use parallel iteration.
-const PAR_THRESHOLD: usize = 256;
+use cqam_core::constants::PAR_THRESHOLD;
 
 /// Execute a hybrid instruction with fork/merge support.
 ///
 /// Returns `Ok(true)` if a jump was taken (JmpF with condition true), in which
 /// case the caller should NOT advance the PC. Returns `Ok(false)` otherwise.
 /// Returns `Err(CqamError)` on runtime errors (unknown reduce function, type mismatch).
-pub fn execute_hybrid(
+pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
     ctx: &mut ExecutionContext,
     instr: &Instruction,
     fork_mgr: &mut ForkManager,
+    backend: &mut B,
 ) -> Result<bool, CqamError> {
     match instr {
         Instruction::HFork => {
@@ -97,13 +98,14 @@ pub fn execute_hybrid(
                 let b = Arc::clone(&barrier);
                 let depth = fork_mgr.depth();
                 let max_depth = fork_mgr.max_depth();
+                let mut worker_backend = backend.clone();
 
                 let handle = std::thread::Builder::new()
                     .name(format!("cqam-spmd-t{}", tid))
                     .spawn(move || {
                         let mut fm = ForkManager::nested(depth, max_depth);
                         fm.set_shared_resources(sqf, sm, b);
-                        run_spmd_thread(&mut worker_ctx, &mut fm)?;
+                        run_spmd_thread(&mut worker_ctx, &mut fm, &mut worker_backend)?;
                         Ok(worker_ctx)
                     })
                     .map_err(CqamError::IoError)?;
@@ -180,7 +182,7 @@ pub fn execute_hybrid(
         }
 
         Instruction::JmpF { flag, target } => {
-            let cond = ctx.psw.get_flag(*flag);
+            let cond = ctx.psw.get_flag(u8::from(*flag));
             ctx.psw.update_from_predicate(cond);
 
             if cond {
@@ -201,8 +203,6 @@ pub fn execute_hybrid(
                             $ctx.iregs.set($dst, ($body)(x))?;
                         }
                         HybridValue::Complex(re, _im) => {
-                            // Complex with im~=0.0 is treated as a real float
-                            // (e.g., from QSAMPLE/PROB which returns Complex(prob, 0.0))
                             $ctx.iregs.set($dst, ($body)(re))?;
                         }
                         HybridValue::Dist(ref entries) => {
@@ -218,7 +218,6 @@ pub fn execute_hybrid(
                             $ctx.iregs.set($dst, ($body)(mean))?;
                         }
                         HybridValue::Int(v) => {
-                            // Int pass-through (e.g., from QOBSERVE/SAMPLE)
                             $ctx.iregs.set($dst, ($body)(v as f64))?;
                         }
                         _ => {
@@ -251,7 +250,6 @@ pub fn execute_hybrid(
                             $ctx.fregs.set($dst, ($body)(entries))?;
                         }
                         HybridValue::Int(v) => {
-                            // Int pass-through (e.g., from QOBSERVE/SAMPLE)
                             $ctx.fregs.set($dst, v as f64)?;
                         }
                         _ => {
@@ -271,7 +269,6 @@ pub fn execute_hybrid(
                             $ctx.iregs.set($dst, ($body)(entries))?;
                         }
                         HybridValue::Int(v) => {
-                            // Int pass-through (e.g., from QOBSERVE/SAMPLE)
                             $ctx.iregs.set($dst, v)?;
                         }
                         _ => {
@@ -285,19 +282,19 @@ pub fn execute_hybrid(
             }
 
             match *func {
-                reduce_fn::ROUND   => hreduce_float_to_int!(hybrid_val, "ROUND",   |x: f64| x.round() as i64,  ctx, *dst),
-                reduce_fn::FLOOR   => hreduce_float_to_int!(hybrid_val, "FLOOR",   |x: f64| x.floor() as i64,  ctx, *dst),
-                reduce_fn::CEIL    => hreduce_float_to_int!(hybrid_val, "CEIL",    |x: f64| x.ceil() as i64,   ctx, *dst),
-                reduce_fn::TRUNC   => hreduce_float_to_int!(hybrid_val, "TRUNC",   |x: f64| x.trunc() as i64,  ctx, *dst),
-                reduce_fn::ABS     => hreduce_float_to_int!(hybrid_val, "ABS",     |x: f64| x.abs() as i64,    ctx, *dst),
-                reduce_fn::NEGATE  => hreduce_float_to_int!(hybrid_val, "NEGATE",  |x: f64| (-x) as i64,       ctx, *dst),
+                ReduceFn::Round   => hreduce_float_to_int!(hybrid_val, "ROUND",   |x: f64| x.round() as i64,  ctx, *dst),
+                ReduceFn::Floor   => hreduce_float_to_int!(hybrid_val, "FLOOR",   |x: f64| x.floor() as i64,  ctx, *dst),
+                ReduceFn::Ceil    => hreduce_float_to_int!(hybrid_val, "CEIL",    |x: f64| x.ceil() as i64,   ctx, *dst),
+                ReduceFn::Trunc   => hreduce_float_to_int!(hybrid_val, "TRUNC",   |x: f64| x.trunc() as i64,  ctx, *dst),
+                ReduceFn::Abs     => hreduce_float_to_int!(hybrid_val, "ABS",     |x: f64| x.abs() as i64,    ctx, *dst),
+                ReduceFn::Negate  => hreduce_float_to_int!(hybrid_val, "NEGATE",  |x: f64| (-x) as i64,       ctx, *dst),
 
-                reduce_fn::MAGNITUDE => hreduce_complex_to_float!(hybrid_val, "MAGNITUDE", |re: f64, im: f64| (re * re + im * im).sqrt(), ctx, *dst),
-                reduce_fn::PHASE     => hreduce_complex_to_float!(hybrid_val, "PHASE",     |re: f64, im: f64| im.atan2(re),               ctx, *dst),
-                reduce_fn::REAL      => hreduce_complex_to_float!(hybrid_val, "REAL",      |re: f64, _im: f64| re,                        ctx, *dst),
-                reduce_fn::IMAG      => hreduce_complex_to_float!(hybrid_val, "IMAG",      |_re: f64, im: f64| im,                        ctx, *dst),
+                ReduceFn::Magnitude => hreduce_complex_to_float!(hybrid_val, "MAGNITUDE", |re: f64, im: f64| (re * re + im * im).sqrt(), ctx, *dst),
+                ReduceFn::Phase     => hreduce_complex_to_float!(hybrid_val, "PHASE",     |re: f64, im: f64| im.atan2(re),               ctx, *dst),
+                ReduceFn::Real      => hreduce_complex_to_float!(hybrid_val, "REAL",      |re: f64, _im: f64| re,                        ctx, *dst),
+                ReduceFn::Imag      => hreduce_complex_to_float!(hybrid_val, "IMAG",      |_re: f64, im: f64| im,                        ctx, *dst),
 
-                reduce_fn::MEAN => hreduce_dist_to_float!(hybrid_val, "MEAN", |e: &[(u16, f64)]| {
+                ReduceFn::Mean => hreduce_dist_to_float!(hybrid_val, "MEAN", |e: &[(u32, f64)]| {
                     if e.len() >= PAR_THRESHOLD {
                         e.par_iter().map(|(val, prob)| *val as f64 * prob).sum::<f64>()
                     } else {
@@ -305,7 +302,7 @@ pub fn execute_hybrid(
                     }
                 }, ctx, *dst),
 
-                reduce_fn::VARIANCE => hreduce_dist_to_float!(hybrid_val, "VARIANCE", |e: &[(u16, f64)]| {
+                ReduceFn::Variance => hreduce_dist_to_float!(hybrid_val, "VARIANCE", |e: &[(u32, f64)]| {
                     if e.len() >= PAR_THRESHOLD {
                         let mean: f64 = e.par_iter().map(|(val, prob)| *val as f64 * prob).sum();
                         e.par_iter().map(|(val, prob)| { let d = *val as f64 - mean; d * d * prob }).sum::<f64>()
@@ -315,7 +312,7 @@ pub fn execute_hybrid(
                     }
                 }, ctx, *dst),
 
-                reduce_fn::MODE => hreduce_dist_to_int!(hybrid_val, "MODE", |e: &[(u16, f64)]| {
+                ReduceFn::Mode => hreduce_dist_to_int!(hybrid_val, "MODE", |e: &[(u32, f64)]| {
                     if e.len() >= PAR_THRESHOLD {
                         e.par_iter().max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
                             .map(|(val, _)| *val as i64).unwrap_or(0)
@@ -325,7 +322,7 @@ pub fn execute_hybrid(
                     }
                 }, ctx, *dst),
 
-                reduce_fn::ARGMAX => hreduce_dist_to_int!(hybrid_val, "ARGMAX", |e: &[(u16, f64)]| {
+                ReduceFn::Argmax => hreduce_dist_to_int!(hybrid_val, "ARGMAX", |e: &[(u32, f64)]| {
                     if e.len() >= PAR_THRESHOLD {
                         e.par_iter().enumerate()
                             .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
@@ -337,7 +334,7 @@ pub fn execute_hybrid(
                     }
                 }, ctx, *dst),
 
-                reduce_fn::CONJ_Z => {
+                ReduceFn::ConjZ => {
                     if let HybridValue::Complex(re, im) = hybrid_val {
                         ctx.zregs.set(*dst, (re, -im))?;
                     } else {
@@ -348,7 +345,7 @@ pub fn execute_hybrid(
                     }
                 }
 
-                reduce_fn::NEGATE_Z => {
+                ReduceFn::NegateZ => {
                     if let HybridValue::Complex(re, im) = hybrid_val {
                         ctx.zregs.set(*dst, (-re, -im))?;
                     } else {
@@ -359,21 +356,21 @@ pub fn execute_hybrid(
                     }
                 }
 
-                reduce_fn::EXPECT => {
+                ReduceFn::Expect => {
                     if let HybridValue::Dist(ref entries) = hybrid_val {
                         let base_addr = ctx.iregs.get(*dst)? as u16;
 
                         let expectation = if entries.len() >= PAR_THRESHOLD {
                             let cmem = &ctx.cmem;
                             entries.par_iter().map(|(val, prob)| {
-                                let eigenvalue_addr = base_addr.wrapping_add(*val);
+                                let eigenvalue_addr = base_addr.wrapping_add(*val as u16);
                                 let eigenvalue = f64::from_bits(cmem.load(eigenvalue_addr) as u64);
                                 eigenvalue * prob
                             }).sum::<f64>()
                         } else {
                             let mut exp = 0.0f64;
                             for (val, prob) in entries {
-                                let eigenvalue_addr = base_addr.wrapping_add(*val);
+                                let eigenvalue_addr = base_addr.wrapping_add(*val as u16);
                                 let eigenvalue = f64::from_bits(ctx.cmem.load(eigenvalue_addr) as u64);
                                 exp += eigenvalue * prob;
                             }
@@ -388,12 +385,6 @@ pub fn execute_hybrid(
                         });
                     }
                 }
-
-                _ => {
-                    return Err(CqamError::UnknownKernel(
-                        format!("Unknown reduction function ID: {}", func),
-                    ));
-                }
             }
 
             // Consuming a measurement result clears the collapsed signal.
@@ -401,28 +392,27 @@ pub fn execute_hybrid(
 
             // Update PSW flags from the reduction result
             match *func {
-                reduce_fn::ROUND | reduce_fn::FLOOR | reduce_fn::CEIL
-                | reduce_fn::TRUNC | reduce_fn::ABS | reduce_fn::NEGATE
-                | reduce_fn::MODE | reduce_fn::ARGMAX => {
+                ReduceFn::Round | ReduceFn::Floor | ReduceFn::Ceil
+                | ReduceFn::Trunc | ReduceFn::Abs | ReduceFn::Negate
+                | ReduceFn::Mode | ReduceFn::Argmax => {
                     if let Ok(val) = ctx.iregs.get(*dst) {
                         ctx.psw.zf = val == 0;
                         ctx.psw.nf = val < 0;
                     }
                 }
-                reduce_fn::MAGNITUDE | reduce_fn::PHASE | reduce_fn::REAL
-                | reduce_fn::IMAG | reduce_fn::MEAN | reduce_fn::VARIANCE
-                | reduce_fn::EXPECT => {
+                ReduceFn::Magnitude | ReduceFn::Phase | ReduceFn::Real
+                | ReduceFn::Imag | ReduceFn::Mean | ReduceFn::Variance
+                | ReduceFn::Expect => {
                     if let Ok(val) = ctx.fregs.get(*dst) {
                         ctx.psw.zf = val == 0.0;
                         ctx.psw.nf = val < 0.0;
                     }
                 }
-                reduce_fn::CONJ_Z | reduce_fn::NEGATE_Z => {
+                ReduceFn::ConjZ | ReduceFn::NegateZ => {
                     if let Ok((re, im)) = ctx.zregs.get(*dst) {
                         ctx.psw.zf = re == 0.0 && im == 0.0;
                     }
                 }
-                _ => {}
             }
 
             Ok(false)
@@ -496,15 +486,18 @@ pub fn execute_hybrid(
 /// Similar to `run_program` but stops when `merged` is set (at HMERGE)
 /// rather than only on HALT. Worker threads exit their loop when HMERGE
 /// sets `psw.merged = true`.
-pub fn run_spmd_thread(
+pub fn run_spmd_thread<B: QuantumBackend + Clone + Send + 'static>(
     ctx: &mut ExecutionContext,
     fork_mgr: &mut ForkManager,
+    backend: &mut B,
 ) -> Result<(), CqamError> {
+    use std::sync::Arc;
     use crate::executor::execute_instruction;
 
-    while ctx.current_line().is_some() {
-        let instr = ctx.program[ctx.pc].clone();
-        execute_instruction(ctx, &instr, fork_mgr)?;
+    let program = Arc::clone(&ctx.program);
+    while ctx.pc < program.len() {
+        let instr = &program[ctx.pc];
+        execute_instruction(ctx, instr, fork_mgr, backend)?;
 
         if ctx.psw.trap_halt || ctx.psw.merged {
             break;

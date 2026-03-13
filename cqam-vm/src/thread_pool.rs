@@ -8,7 +8,7 @@
 
 use std::sync::{Arc, Condvar, Mutex, MutexGuard, RwLock};
 
-use cqam_sim::quantum_register::QuantumRegister;
+use cqam_core::quantum_backend::QRegHandle;
 
 // =============================================================================
 // SharedQuantumFile
@@ -19,12 +19,12 @@ use cqam_sim::quantum_register::QuantumRegister;
 /// Each Q register is independently locked. Threads block on contention
 /// for the same register but can operate on different registers concurrently.
 pub struct SharedQuantumFile {
-    registers: [Arc<Mutex<Option<QuantumRegister>>>; 8],
+    registers: [Arc<Mutex<Option<QRegHandle>>>; 8],
 }
 
 impl SharedQuantumFile {
     /// Create from an existing quantum register array (at HFORK time).
-    pub fn from_qregs(mut qregs: [Option<QuantumRegister>; 8]) -> Self {
+    pub fn from_qregs(mut qregs: [Option<QRegHandle>; 8]) -> Self {
         Self {
             registers: std::array::from_fn(|i| {
                 Arc::new(Mutex::new(qregs[i].take()))
@@ -33,23 +33,23 @@ impl SharedQuantumFile {
     }
 
     /// Acquire exclusive access to Q[idx]. Blocks if another thread holds it.
-    pub fn lock(&self, idx: u8) -> MutexGuard<'_, Option<QuantumRegister>> {
+    pub fn lock(&self, idx: u8) -> MutexGuard<'_, Option<QRegHandle>> {
         self.registers[idx as usize].lock().unwrap()
     }
 
     /// Get an Arc clone for sharing with worker threads.
-    pub fn arc_register(&self, idx: usize) -> Arc<Mutex<Option<QuantumRegister>>> {
+    pub fn arc_register(&self, idx: usize) -> Arc<Mutex<Option<QRegHandle>>> {
         Arc::clone(&self.registers[idx])
     }
 
     /// Extract registers back into a plain array (at HMERGE time).
     /// Should only be called after all threads have joined.
-    pub fn into_qregs(self) -> [Option<QuantumRegister>; 8] {
+    pub fn into_qregs(self) -> [Option<QRegHandle>; 8] {
         std::array::from_fn(|i| {
             Arc::try_unwrap(self.registers[i].clone())
                 .unwrap_or_else(|arc| {
                     // Fallback: lock and clone if unwrap fails
-                    Mutex::new(arc.lock().unwrap().clone())
+                    Mutex::new(*arc.lock().unwrap())
                 })
                 .into_inner()
                 .unwrap()

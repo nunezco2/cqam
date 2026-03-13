@@ -16,6 +16,8 @@
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::parser::{DataSection, ProgramMetadata, SharedSection, PrivateSection};
+use cqam_core::quantum_backend::QuantumBackend;
+use cqam_sim::backend::SimulationBackend;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
@@ -101,32 +103,26 @@ fn run_program_with_config_metadata_and_data(
         ctx.shared_region = Some((shared.base, end));
     }
 
+    // Create the simulation backend
+    let mut backend = SimulationBackend::new();
+
     let mut fork_mgr = ForkManager::new();
     let max_cycles = config.max_cycles.unwrap_or(1000);
     let enable_interrupts = config.enable_interrupts.unwrap_or(true);
     let mut cycle_count: usize = 0;
 
-    // Wire fidelity_threshold from SimConfig to QuantumFidelityThreshold
-    if let Some(threshold) = config.fidelity_threshold {
-        ctx.config.min_purity = threshold;
-    }
-
-    // Apply qubit count with precedence: CLI > pragma > default
-    if let Some(qubits) = config.default_qubits {
-        ctx.config.default_qubits = qubits;
-    } else if let Some(pragma_qubits) = metadata.qubits {
-        ctx.config.default_qubits = pragma_qubits;
-    }
-
-    // Apply thread count with precedence: CLI > pragma > default(1)
-    if let Some(threads) = config.default_threads {
-        ctx.thread_count = threads;
-    } else if let Some(pragma_threads) = metadata.threads {
-        ctx.thread_count = pragma_threads;
-    }
+    // Build unified VmConfig from SimConfig + metadata (CLI > pragma > default)
+    let vm_config = config.to_vm_config(metadata);
+    ctx.thread_count = vm_config.default_threads;
+    ctx.config = vm_config;
 
     // Wire density-matrix backend flag
-    ctx.config.force_density_matrix = config.force_density_matrix;
+    backend.set_force_density_matrix(config.force_density_matrix);
+
+    // Set RNG seed on backend if configured
+    if let Some(seed) = config.rng_seed {
+        backend.set_rng_seed(seed);
+    }
 
     // Store private section size
     let _ = private;
@@ -139,7 +135,7 @@ fn run_program_with_config_metadata_and_data(
         }
 
         let instr = ctx.program[ctx.pc].clone();
-        execute_instruction(&mut ctx, &instr, &mut fork_mgr)?;
+        execute_instruction(&mut ctx, &instr, &mut fork_mgr, &mut backend)?;
         cycle_count += 1;
 
         // ISR dispatch: check for pending traps and route through ISR table

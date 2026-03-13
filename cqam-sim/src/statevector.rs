@@ -14,22 +14,12 @@
 
 use crate::complex::{self, C64, cx_add, cx_mul, cx_scale, cx_norm_sq};
 use crate::density_matrix::DensityMatrix;
+use cqam_core::error::CqamError;
 use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
 use rayon::prelude::*;
 
-/// Minimum dimension to use parallel iteration.
-const PAR_THRESHOLD: usize = 256;
-
-/// Tolerance for entanglement detection via single-qubit reduced purity.
-const EF_EPSILON: f64 = 1e-10;
-
-/// Tolerance for superposition detection: amplitudes with |ψ|² below this are
-/// treated as zero (not contributing to the computational basis decomposition).
-const SF_EPSILON: f64 = 1e-12;
-
-/// Maximum qubits for statevector backend.
-pub const MAX_SV_QUBITS: u8 = 24;
+use crate::constants::{PAR_THRESHOLD, EF_EPSILON, SF_EPSILON, MAX_SV_QUBITS};
 
 /// Pure-state quantum register represented as a statevector.
 #[derive(Debug, Clone)]
@@ -84,12 +74,13 @@ impl Statevector {
     /// Create a GHZ state (|0...0> + |1...1>)/sqrt(2).
     ///
     /// Returns Err if num_qubits < 2 or > MAX_SV_QUBITS.
-    pub fn new_ghz(num_qubits: u8) -> Result<Self, String> {
+    pub fn new_ghz(num_qubits: u8) -> Result<Self, CqamError> {
         if !(2..=MAX_SV_QUBITS).contains(&num_qubits) {
-            return Err(format!(
-                "GHZ state requires 2..={} qubits, got {}",
-                MAX_SV_QUBITS, num_qubits
-            ));
+            return Err(CqamError::QubitLimitExceeded {
+                instruction: "Statevector::new_ghz".to_string(),
+                required: num_qubits,
+                max: MAX_SV_QUBITS,
+            });
         }
         let dim = 1usize << num_qubits;
         let inv_sqrt2 = 1.0 / 2.0_f64.sqrt();
@@ -102,19 +93,21 @@ impl Statevector {
     /// Construct from an explicit amplitude vector.
     ///
     /// The length must be a power of 2 and the vector will be normalized.
-    pub fn from_amplitudes(amplitudes: Vec<C64>) -> Result<Self, String> {
+    pub fn from_amplitudes(amplitudes: Vec<C64>) -> Result<Self, CqamError> {
         let len = amplitudes.len();
         if len == 0 || (len & (len - 1)) != 0 {
-            return Err(format!(
-                "Amplitude vector length {} is not a power of 2", len
-            ));
+            return Err(CqamError::TypeMismatch {
+                instruction: "Statevector::from_amplitudes".to_string(),
+                detail: format!("amplitude vector length {} is not a power of 2", len),
+            });
         }
         let num_qubits = len.trailing_zeros() as u8;
         if num_qubits > MAX_SV_QUBITS {
-            return Err(format!(
-                "Amplitude vector implies {} qubits, max is {}",
-                num_qubits, MAX_SV_QUBITS
-            ));
+            return Err(CqamError::QubitLimitExceeded {
+                instruction: "Statevector::from_amplitudes".to_string(),
+                required: num_qubits,
+                max: MAX_SV_QUBITS,
+            });
         }
 
         // Normalize
@@ -469,13 +462,14 @@ impl Statevector {
     /// Tensor product: |psi_A> tensor |psi_B>.
     ///
     /// Returns Err if the combined qubit count exceeds MAX_SV_QUBITS.
-    pub fn tensor_product(&self, other: &Statevector) -> Result<Statevector, String> {
+    pub fn tensor_product(&self, other: &Statevector) -> Result<Statevector, CqamError> {
         let n_total = self.num_qubits + other.num_qubits;
         if n_total > MAX_SV_QUBITS {
-            return Err(format!(
-                "tensor product: {} + {} = {} qubits exceeds maximum {}",
-                self.num_qubits, other.num_qubits, n_total, MAX_SV_QUBITS
-            ));
+            return Err(CqamError::QubitLimitExceeded {
+                instruction: "Statevector::tensor_product".to_string(),
+                required: n_total,
+                max: MAX_SV_QUBITS,
+            });
         }
 
         let dim_a = self.dimension();
@@ -513,12 +507,15 @@ impl Statevector {
     /// ρ_A[i,j] = Σ_k ψ[i·dim_b + k] · conj(ψ[j·dim_b + k])
     ///
     /// This is O(dim_a² × dim_b) and does NOT require building the full density matrix.
-    pub fn partial_trace_b(&self, num_qubits_a: u8) -> Result<DensityMatrix, String> {
+    pub fn partial_trace_b(&self, num_qubits_a: u8) -> Result<DensityMatrix, CqamError> {
         if num_qubits_a == 0 || num_qubits_a >= self.num_qubits {
-            return Err(format!(
-                "partial_trace_b: num_qubits_a must be 1..{}, got {}",
-                self.num_qubits, num_qubits_a
-            ));
+            return Err(CqamError::TypeMismatch {
+                instruction: "Statevector::partial_trace_b".to_string(),
+                detail: format!(
+                    "num_qubits_a must be 1..{}, got {}",
+                    self.num_qubits, num_qubits_a
+                ),
+            });
         }
 
         let dim_a = 1usize << num_qubits_a;
@@ -683,7 +680,7 @@ impl Statevector {
     /// Convert to a DensityMatrix: rho = |psi><psi|.
     ///
     /// Returns Err if the qubit count exceeds the DensityMatrix limit.
-    pub fn try_to_density_matrix(&self) -> Result<DensityMatrix, String> {
+    pub fn try_to_density_matrix(&self) -> Result<DensityMatrix, CqamError> {
         DensityMatrix::from_statevector(&self.amplitudes)
     }
 }

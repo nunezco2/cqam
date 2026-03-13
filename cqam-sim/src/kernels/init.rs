@@ -16,7 +16,7 @@ impl Kernel for Init {
         Ok(DensityMatrix::new_uniform(input.num_qubits()))
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         Ok(Statevector::new_uniform(input.num_qubits()))
     }
 }

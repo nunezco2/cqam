@@ -7,6 +7,7 @@
 
 use std::path::PathBuf;
 
+use cqam_core::instruction::*;
 use cqam_core::parser::ParsedProgram;
 use cqam_dbg::engine::{DebuggerEngine, StopReason};
 use cqam_run::loader::load_program;
@@ -282,7 +283,7 @@ fn ghz_stepping_with_breakpoints() {
         .ctx
         .program
         .iter()
-        .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: 3 }))
+        .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: DistId::Ghz }))
         .expect("Should find QPREP Q0, 3 in GHZ program");
 
     // Set a breakpoint right after QPREP (to inspect the freshly prepared GHZ state).
@@ -299,48 +300,43 @@ fn ghz_stepping_with_breakpoints() {
     }
 
     // At this point, Q0 should contain the GHZ state.
-    // Verify Q0 is allocated and is a pure state.
-    let q0 = engine.ctx.qregs[0]
-        .as_ref()
+    // Verify Q0 is allocated and is a pure state via the backend.
+    use cqam_core::quantum_backend::QuantumBackend;
+
+    let handle = engine.ctx.qregs[0]
         .expect("Q0 should be allocated after QPREP");
 
-    match q0 {
-        cqam_sim::quantum_register::QuantumRegister::Pure(sv) => {
-            let n = sv.num_qubits();
-            let dim = 1 << n;
-            let amps = sv.amplitudes();
+    let is_pure = engine.backend.is_pure(handle).expect("should be able to query state");
+    assert!(is_pure, "GHZ state should be pure, got density matrix");
 
-            // GHZ state: only |0...0> and |1...1> have non-zero amplitudes.
-            let prob = |a: &(f64, f64)| a.0 * a.0 + a.1 * a.1;
-            let p_zero = prob(&amps[0]);
-            let p_ones = prob(&amps[dim - 1]);
-            let p_others: f64 = (1..dim - 1).map(|i| prob(&amps[i])).sum();
+    let n = engine.backend.num_qubits(handle).unwrap();
+    let dim = engine.backend.dimension(handle).unwrap();
+    let probs = engine.backend.diagonal_probabilities(handle).unwrap();
 
-            println!(
-                "GHZ mid-step: n={}, P(|0..0>)={:.6}, P(|1..1>)={:.6}, P(others)={:.6}",
-                n, p_zero, p_ones, p_others
-            );
+    let p_zero = probs[0];
+    let p_ones = probs[dim - 1];
+    let p_others: f64 = (1..dim - 1).map(|i| probs[i]).sum();
 
-            assert!(
-                (p_zero - 0.5).abs() < 1e-10,
-                "P(|0...0>) should be exactly 0.5, got {}",
-                p_zero
-            );
-            assert!(
-                (p_ones - 0.5).abs() < 1e-10,
-                "P(|1...1>) should be exactly 0.5, got {}",
-                p_ones
-            );
-            assert!(
-                p_others < 1e-20,
-                "All other amplitudes should be zero, got total P={}",
-                p_others
-            );
-        }
-        cqam_sim::quantum_register::QuantumRegister::Mixed(_) => {
-            panic!("GHZ state should be pure, got density matrix");
-        }
-    }
+    println!(
+        "GHZ mid-step: n={}, P(|0..0>)={:.6}, P(|1..1>)={:.6}, P(others)={:.6}",
+        n, p_zero, p_ones, p_others
+    );
+
+    assert!(
+        (p_zero - 0.5).abs() < 1e-10,
+        "P(|0...0>) should be exactly 0.5, got {}",
+        p_zero
+    );
+    assert!(
+        (p_ones - 0.5).abs() < 1e-10,
+        "P(|1...1>) should be exactly 0.5, got {}",
+        p_ones
+    );
+    assert!(
+        p_others < 1e-20,
+        "All other amplitudes should be zero, got total P={}",
+        p_others
+    );
 
     // Now continue to completion.
     engine.breakpoints.remove(bp_id);
@@ -435,7 +431,7 @@ fn test_df_sticky_across_kernels() {
         .ctx
         .program
         .iter()
-        .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: 3 }))
+        .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: DistId::Ghz }))
         .expect("Should find QPREP Q0, 3 in GHZ program");
 
     // Set a breakpoint right after QPREP (to inspect flags post-preparation).

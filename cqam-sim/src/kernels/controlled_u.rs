@@ -16,7 +16,7 @@
 //! not be affected by the sub-kernel.
 
 use cqam_core::error::CqamError;
-use cqam_core::instruction::kernel_id;
+use cqam_core::instruction::KernelId;
 use crate::complex;
 use crate::density_matrix::DensityMatrix;
 use crate::statevector::Statevector;
@@ -34,7 +34,7 @@ use crate::kernels::fourier_inv::FourierInv;
 /// and optional target qubit count.
 pub struct ControlledU {
     pub control_qubit: u8,
-    pub sub_kernel_id: u8,
+    pub sub_kernel_id: KernelId,
     pub power: u32,
     pub param_re: f64,
     pub param_im: f64,
@@ -51,30 +51,33 @@ impl ControlledU {
     /// Build the sub-kernel from scalar parameters, with power-folded params
     /// where possible. For CMEM-dependent kernels (DIAGONAL_UNITARY,
     /// PERMUTATION), `sub_kernel_override` must be set instead.
-    fn build_sub_kernel_owned(&self) -> Result<Box<dyn Kernel>, String> {
+    fn build_sub_kernel_owned(&self) -> Result<Box<dyn Kernel>, CqamError> {
         let scale = if self.power == 0 { 1.0 } else { (1u64 << self.power) as f64 };
         match self.sub_kernel_id {
-            kernel_id::INIT => Ok(Box::new(Init)),
-            kernel_id::ENTANGLE => Ok(Box::new(Entangle)),
-            kernel_id::FOURIER => Ok(Box::new(Fourier)),
-            kernel_id::DIFFUSE => Ok(Box::new(Diffuse)),
-            kernel_id::GROVER_ITER => Ok(Box::new(GroverIter::single(self.param_re as u16))),
-            kernel_id::ROTATE => Ok(Box::new(Rotate { theta: self.param_re * scale })),
-            kernel_id::PHASE_SHIFT => Ok(Box::new(PhaseShift {
+            KernelId::Init => Ok(Box::new(Init)),
+            KernelId::Entangle => Ok(Box::new(Entangle)),
+            KernelId::Fourier => Ok(Box::new(Fourier)),
+            KernelId::Diffuse => Ok(Box::new(Diffuse)),
+            KernelId::GroverIter => Ok(Box::new(GroverIter::single(self.param_re as u16))),
+            KernelId::Rotate => Ok(Box::new(Rotate { theta: self.param_re * scale })),
+            KernelId::PhaseShift => Ok(Box::new(PhaseShift {
                 amplitude: (self.param_re * scale, self.param_im * scale),
             })),
-            kernel_id::FOURIER_INV => Ok(Box::new(FourierInv)),
-            _ => Err(format!(
-                "Controlled-U: unsupported sub-kernel ID {} without sub_kernel_override",
-                self.sub_kernel_id
-            )),
+            KernelId::FourierInv => Ok(Box::new(FourierInv)),
+            _ => Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                detail: format!(
+                    "unsupported sub-kernel ID {} without sub_kernel_override",
+                    self.sub_kernel_id
+                ),
+            }),
         }
     }
 
     /// Build the target-qubit sub-unitary matrix by probing the sub-kernel
     /// with basis states. Uses `sub_kernel_override` if set, otherwise builds
     /// the sub-kernel from scalar parameters.
-    fn build_target_unitary(&self, target_dim: usize) -> Result<Vec<(f64, f64)>, String> {
+    fn build_target_unitary(&self, target_dim: usize) -> Result<Vec<(f64, f64)>, CqamError> {
         // Resolve the sub-kernel: prefer override, fall back to building from params.
         let owned_kernel = if self.sub_kernel_override.is_none() {
             Some(self.build_sub_kernel_owned()?)
@@ -93,8 +96,7 @@ impl ControlledU {
         for col in 0..target_dim {
             let mut basis = vec![complex::ZERO; target_dim];
             basis[col] = complex::ONE;
-            let sv = Statevector::from_amplitudes(basis)
-                .map_err(|e| format!("ControlledU sub-state error: {}", e))?;
+            let sv = Statevector::from_amplitudes(basis)?;
             let mut result_sv = sv;
             for _ in 0..loop_count {
                 result_sv = sub_ref.apply_sv(&result_sv)?;
@@ -109,7 +111,7 @@ impl ControlledU {
 
     /// Whether the power can be folded into the parameter.
     fn is_power_foldable(&self) -> bool {
-        matches!(self.sub_kernel_id, kernel_id::ROTATE | kernel_id::PHASE_SHIFT)
+        matches!(self.sub_kernel_id, KernelId::Rotate | KernelId::PhaseShift)
     }
 
     /// Effective number of target qubits for the sub-kernel, given register size n.
@@ -168,11 +170,7 @@ impl Kernel for ControlledU {
         let ctrl_bit_pos = (n - 1 - self.control_qubit) as usize;
 
         // Build sub-unitary for the target qubits only (t-qubit system).
-        let target_u = self.build_target_unitary(target_dim)
-            .map_err(|e| CqamError::TypeMismatch {
-                instruction: "QKERNEL/CONTROLLED_U".to_string(),
-                detail: e,
-            })?;
+        let target_u = self.build_target_unitary(target_dim)?;
 
         // Build full C_U matrix.
         // For |ctrl=0⟩: identity.
@@ -215,21 +213,27 @@ impl Kernel for ControlledU {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let n = input.num_qubits();
         if n < 2 {
-            return Err(format!("Controlled-U requires >= 2 qubits, got {}", n));
+            return Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                detail: format!("Controlled-U requires >= 2 qubits, got {}", n),
+            });
         }
         if self.control_qubit >= n {
-            return Err(format!(
-                "Control qubit {} out of range for {}-qubit register",
-                self.control_qubit, n
-            ));
+            return Err(CqamError::AddressOutOfRange {
+                instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                address: self.control_qubit as i64,
+            });
         }
 
         let t = self.effective_target_qubits(n);
         if t >= n {
-            return Err(format!("target_qubits {} >= register size {}", t, n));
+            return Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/CONTROLLED_U".to_string(),
+                detail: format!("target_qubits {} >= register size {}", t, n),
+            });
         }
 
         let target_dim = 1usize << t;
@@ -311,7 +315,7 @@ mod tests {
         let sv = Statevector::new_zero_state(2);
         let cu = ControlledU {
             control_qubit: 0,
-            sub_kernel_id: kernel_id::ROTATE,
+            sub_kernel_id: KernelId::Rotate,
             power: 0,
             param_re: 1.0,
             param_im: 0.0,
@@ -333,7 +337,7 @@ mod tests {
         ]).unwrap();
         let cu = ControlledU {
             control_qubit: 0,
-            sub_kernel_id: kernel_id::ROTATE,
+            sub_kernel_id: KernelId::Rotate,
             power: 0,
             param_re: std::f64::consts::PI,
             param_im: 0.0,
@@ -353,7 +357,7 @@ mod tests {
         let dm = sv.to_density_matrix();
         let cu = ControlledU {
             control_qubit: 0,
-            sub_kernel_id: kernel_id::ROTATE,
+            sub_kernel_id: KernelId::Rotate,
             power: 0,
             param_re: 1.0,
             param_im: 0.0,
@@ -388,7 +392,7 @@ mod tests {
 
         let cu = ControlledU {
             control_qubit: 0,
-            sub_kernel_id: kernel_id::ROTATE,
+            sub_kernel_id: KernelId::Rotate,
             power: 0,
             param_re: std::f64::consts::PI,
             param_im: 0.0,
@@ -418,7 +422,7 @@ mod tests {
 
         let cu = ControlledU {
             control_qubit: 0,
-            sub_kernel_id: kernel_id::ROTATE,
+            sub_kernel_id: KernelId::Rotate,
             power: 0,
             param_re: std::f64::consts::PI,
             param_im: 0.0,
@@ -446,7 +450,7 @@ mod tests {
         let dm = sv.to_density_matrix();
         let cu = ControlledU {
             control_qubit: 0,
-            sub_kernel_id: kernel_id::ROTATE,
+            sub_kernel_id: KernelId::Rotate,
             power: 0,
             param_re: 1.0,
             param_im: 0.0,

@@ -51,9 +51,9 @@ pub fn render(frame: &mut Frame, area: Rect, app: &AppState) {
                 theme::style_dimmed(),
             ))));
         }
-        Some(qr) => {
-            // Extract top-K results.
-            let result = extract_top_k(qr, app.display.topk, app.display.threshold);
+        Some(handle) => {
+            // Extract top-K results via the backend.
+            let result = extract_top_k(&app.engine.backend, *handle, app.display.topk, app.display.threshold);
 
             // Header line: "Q0: Pure, 3 qubits, dim=8, purity=1.000"
             let header_text = format_quantum_header(&result, qreg_idx);
@@ -134,7 +134,7 @@ pub fn render(frame: &mut Frame, area: Rect, app: &AppState) {
 
             // Coherence summary for mixed states.
             if !result.is_pure {
-                if let Some(coherence) = coherence_summary(qr) {
+                if let Some(coherence) = coherence_summary(&app.engine.backend, *handle) {
                     lines.push(ListItem::new(Line::from("")));
                     let coherence_text = format_coherence(&coherence);
                     lines.push(ListItem::new(Line::from(Span::styled(

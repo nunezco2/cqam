@@ -17,14 +17,15 @@
 //! | [`qop`] | `execute_qop` | Quantum instruction handler |
 //! | [`hybrid`] | `execute_hybrid` | Hybrid fork/merge handler |
 //! | [`fork`] | [`ForkManager`](fork::ForkManager) | Thread pool for HFORK/HMERGE |
-//! | [`simconfig`] | [`QuantumFidelityThreshold`](simconfig::QuantumFidelityThreshold) | Fidelity thresholds |
+//! | `cqam_core::config` | [`VmConfig`](cqam_core::config::VmConfig) | Unified VM configuration |
 //!
 //! # Execution model
 //!
 //! The VM is a register machine with five register files (R, F, Z, Q, H),
-//! classical memory (CMEM: 64K x i64), quantum memory (QMEM: 256 x DensityMatrix),
+//! classical memory (CMEM: 64K x i64), quantum memory (QMEM: 256 x `QRegHandle`),
 //! a call stack, a PSW, and an ISR table. The quantum register file (Q0-Q7)
-//! holds live `DensityMatrix` states operated on by QPREP, QKERNEL, and QOBSERVE.
+//! holds `Option<QRegHandle>` handles into the [`QuantumBackend`](cqam_core::quantum_backend::QuantumBackend),
+//! operated on by QPREP, QKERNEL, and QOBSERVE.
 //! HFORK spawns parallel execution threads; HMERGE joins them.
 //!
 //! # PC ownership contract
@@ -60,7 +61,6 @@ pub mod fork;
 pub mod resource;
 pub mod qop;
 pub mod psw;
-pub mod simconfig;
 pub mod isr;
 pub mod hybrid;
 pub mod thread_pool;

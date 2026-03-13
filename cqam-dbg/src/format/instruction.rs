@@ -4,9 +4,7 @@
 //! human-readable assembly mnemonics for the debugger's CODE pane.
 #![allow(dead_code)]
 
-use cqam_core::instruction::{
-    self, Instruction,
-};
+use cqam_core::instruction::Instruction;
 
 /// Format an instruction for display in the CODE pane.
 ///
@@ -94,7 +92,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
 
         // ECALL
         Instruction::Ecall { proc_id } => {
-            format!("ECALL {}", instruction::proc_id_name(*proc_id))
+            format!("ECALL {}", proc_id.name())
         }
 
         // Control flow
@@ -106,40 +104,40 @@ pub fn format_instruction(instr: &Instruction) -> String {
 
         // Quantum operations
         Instruction::QPrep { dst, dist } => {
-            format!("QPREP Q{}, {}", dst, instruction::dist_name(*dist))
+            format!("QPREP Q{}, {}", dst, dist.name())
         }
         Instruction::QPrepR { dst, dist_reg } => format!("QPREPR Q{}, R{}", dst, dist_reg),
         Instruction::QPrepN { dst, dist, qubit_count_reg } => {
-            format!("QPREPN Q{}, {}, R{}", dst, instruction::dist_name(*dist), qubit_count_reg)
+            format!("QPREPN Q{}, {}, R{}", dst, dist.name(), qubit_count_reg)
         }
         Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
             format!(
                 "QKERNEL {}, Q{}, Q{}, R{}, R{}",
-                instruction::kernel_mnemonic(*kernel), dst, src, ctx0, ctx1
+                kernel.mnemonic(), dst, src, ctx0, ctx1
             )
         }
         Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
             format!(
                 "QKERNELF {}, Q{}, Q{}, F{}, F{}",
-                instruction::kernel_mnemonic(*kernel), dst, src, fctx0, fctx1
+                kernel.mnemonic(), dst, src, fctx0, fctx1
             )
         }
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
             format!(
                 "QKERNELZ {}, Q{}, Q{}, Z{}, Z{}",
-                instruction::kernel_mnemonic(*kernel), dst, src, zctx0, zctx1
+                kernel.mnemonic(), dst, src, zctx0, zctx1
             )
         }
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
             format!(
                 "QOBSERVE H{}, Q{}, {}, R{}, R{}",
-                dst_h, src_q, instruction::observe_mode_name(*mode), ctx0, ctx1
+                dst_h, src_q, mode.name(), ctx0, ctx1
             )
         }
         Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
             format!(
                 "QSAMPLE H{}, Q{}, {}, R{}, R{}",
-                dst_h, src_q, instruction::observe_mode_name(*mode), ctx0, ctx1
+                dst_h, src_q, mode.name(), ctx0, ctx1
             )
         }
         Instruction::QLoad { dst_q, addr } => format!("QLOAD Q{}, {}", dst_q, addr),
@@ -147,7 +145,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::QEncode { dst, src_base, count, file_sel } => {
             format!(
                 "QENCODE Q{}, {}[{}..+{}]",
-                dst, instruction::file_sel_name(*file_sel), src_base, count
+                dst, file_sel.name(), src_base, count
             )
         }
         Instruction::QHadM { dst, src, mask_reg } => {
@@ -171,7 +169,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::QRot { dst, src, qubit_reg, axis, angle_freg } => {
             format!(
                 "QROT Q{}, Q{}, R{}, {}, F{}",
-                dst, src, qubit_reg, instruction::rot_axis_name(*axis), angle_freg
+                dst, src, qubit_reg, axis.name(), angle_freg
             )
         }
         Instruction::QMeas { dst_r, src_q, qubit_reg } => {
@@ -199,16 +197,16 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::HAtmS => "HATMS".to_string(),
         Instruction::HAtmE => "HATME".to_string(),
         Instruction::JmpF { flag, target } => {
-            format!("JMPF {}, {}", instruction::flag_name(*flag), target)
+            format!("JMPF {}, {}", flag.mnemonic(), target)
         }
         Instruction::HReduce { src, dst, func } => {
-            format!("HREDUCE {}, H{}, R{}", instruction::reduce_fn_mnemonic(*func), src, dst)
+            format!("HREDUCE {}, H{}, R{}", func.mnemonic(), src, dst)
         }
 
         // Interrupt handling
         Instruction::Reti => "RETI".to_string(),
         Instruction::SetIV { trap_id, target } => {
-            format!("SETIV {}, {}", instruction::trap_id_name(*trap_id), target)
+            format!("SETIV {}, {}", trap_id.name(), target)
         }
     }
 }
@@ -327,7 +325,7 @@ mod tests {
 
     #[test]
     fn test_instruction_class_quantum() {
-        let instr = Instruction::QPrep { dst: 0, dist: 0 };
+        let instr = Instruction::QPrep { dst: 0, dist: cqam_core::instruction::DistId::Uniform };
         assert_eq!(instruction_class(&instr), Some("quantum"));
     }
 
@@ -338,7 +336,7 @@ mod tests {
 
     #[test]
     fn test_instruction_class_ecall() {
-        let instr = Instruction::Ecall { proc_id: 0 };
+        let instr = Instruction::Ecall { proc_id: cqam_core::instruction::ProcId::PrintInt };
         assert_eq!(instruction_class(&instr), Some("ecall"));
     }
 }

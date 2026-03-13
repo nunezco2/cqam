@@ -10,9 +10,11 @@ use std::path::PathBuf;
 
 use cqam_core::instruction::Instruction;
 use cqam_core::parser::{DataSection, ProgramMetadata};
+use cqam_core::quantum_backend::QuantumBackend;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::fork::ForkManager;
 use cqam_vm::isr::{self, MaskableTrap, Trap};
+use cqam_sim::backend::SimulationBackend;
 use crate::ecall::EcallInterceptor;
 use crate::engine::breakpoint::BreakpointTable;
 use crate::engine::snapshot::RegisterSnapshot;
@@ -52,6 +54,8 @@ pub struct DebuggerEngine {
     pub ctx: ExecutionContext,
     /// Fork manager for HFORK/HMERGE.
     pub fork_mgr: ForkManager,
+    /// Quantum simulation backend.
+    pub backend: SimulationBackend,
     /// Breakpoint table.
     pub breakpoints: BreakpointTable,
     /// Watchpoint table.
@@ -70,6 +74,8 @@ pub struct DebuggerEngine {
     pub program_path: PathBuf,
     /// Simulator configuration.
     pub sim_config: SimConfig,
+    /// Program metadata (pragmas) stored for restart.
+    pub metadata: ProgramMetadata,
 }
 
 impl DebuggerEngine {
@@ -110,24 +116,24 @@ impl DebuggerEngine {
             }
         }
 
-        // Wire fidelity_threshold from SimConfig.
-        if let Some(threshold) = sim_config.fidelity_threshold {
-            ctx.config.min_purity = threshold;
+        // Build unified VmConfig from SimConfig + metadata (CLI > pragma > default)
+        let vm_config = sim_config.to_vm_config(metadata);
+        ctx.thread_count = vm_config.default_threads;
+        ctx.config = vm_config;
+
+        // Create simulation backend with matching config.
+        let mut backend = SimulationBackend::new();
+        backend.set_force_density_matrix(sim_config.force_density_matrix);
+        if let Some(seed) = sim_config.rng_seed {
+            backend.set_rng_seed(seed);
         }
-        // Apply qubit count: CLI override > pragma > default.
-        if let Some(qubits) = sim_config.default_qubits {
-            ctx.config.default_qubits = qubits;
-        } else if let Some(pragma_qubits) = metadata.qubits {
-            ctx.config.default_qubits = pragma_qubits;
-        }
-        // Wire density-matrix backend flag.
-        ctx.config.force_density_matrix = sim_config.force_density_matrix;
 
         let prev_snapshot = RegisterSnapshot::capture(&ctx);
 
         Self {
             ctx,
             fork_mgr: ForkManager::new(),
+            backend,
             breakpoints: BreakpointTable::new(),
             watchpoints: WatchpointTable::new(),
             prev_snapshot,
@@ -137,6 +143,7 @@ impl DebuggerEngine {
             ecall_interceptor: EcallInterceptor::new(),
             program_path,
             sim_config,
+            metadata: metadata.clone(),
         }
     }
 
@@ -210,6 +217,7 @@ impl DebuggerEngine {
             &mut self.ctx,
             &instr,
             &mut self.fork_mgr,
+            &mut self.backend,
         ) {
             return StepResult {
                 stopped_reason: Some(StopReason::Error(format!("{}", e))),
@@ -277,17 +285,20 @@ impl DebuggerEngine {
     pub fn restart(&mut self, program: Vec<Instruction>) {
         let mut ctx = ExecutionContext::new(program);
 
-        // Re-apply config.
-        if let Some(threshold) = self.sim_config.fidelity_threshold {
-            ctx.config.min_purity = threshold;
-        }
-        if let Some(qubits) = self.sim_config.default_qubits {
-            ctx.config.default_qubits = qubits;
-        }
-        ctx.config.force_density_matrix = self.sim_config.force_density_matrix;
+        // Re-apply config from SimConfig + stored metadata.
+        let vm_config = self.sim_config.to_vm_config(&self.metadata);
+        ctx.thread_count = vm_config.default_threads;
+        ctx.config = vm_config;
 
         self.ctx = ctx;
         self.fork_mgr = ForkManager::new();
+        // Reset backend with matching config.
+        let mut backend = SimulationBackend::new();
+        backend.set_force_density_matrix(self.sim_config.force_density_matrix);
+        if let Some(seed) = self.sim_config.rng_seed {
+            backend.set_rng_seed(seed);
+        }
+        self.backend = backend;
         self.prev_snapshot = RegisterSnapshot::capture(&self.ctx);
         self.cycle_count = 0;
         self.ecall_interceptor.clear();
@@ -299,7 +310,7 @@ impl DebuggerEngine {
 mod tests {
     use super::*;
     use cqam_core::instruction::Instruction;
-    use cqam_core::instruction::proc_id;
+    use cqam_core::instruction::ProcId;
     use std::path::PathBuf;
 
     /// Helper: create a DebuggerEngine from a program slice with default config.
@@ -544,7 +555,7 @@ mod tests {
     fn ecall_print_int_captured_in_interceptor() {
         let mut engine = make_engine(vec![
             Instruction::ILdi { dst: 0, imm: 77 },
-            Instruction::Ecall { proc_id: proc_id::PRINT_INT },
+            Instruction::Ecall { proc_id: ProcId::PrintInt },
             Instruction::Halt,
         ]);
 
@@ -563,7 +574,7 @@ mod tests {
     #[test]
     fn ecall_advances_pc_and_cycle() {
         let mut engine = make_engine(vec![
-            Instruction::Ecall { proc_id: proc_id::PRINT_INT },
+            Instruction::Ecall { proc_id: ProcId::PrintInt },
             Instruction::Halt,
         ]);
 

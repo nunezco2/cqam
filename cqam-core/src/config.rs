@@ -1,21 +1,24 @@
-//! Quantum fidelity thresholds for interrupt generation.
+//! Unified VM configuration for the CQAM virtual machine.
 //!
-//! `QuantumFidelityThreshold` configures the minimum purity value below which
-//! a quantum-error interrupt is raised, and the default number of qubits per
-//! quantum register.
+//! [`VmConfig`] holds all runtime-tunable parameters that control quantum
+//! fidelity thresholds, default qubit counts, backend selection, and
+//! threading. It lives in `cqam-core` so that both the VM (`cqam-vm`) and
+//! the runner (`cqam-run`) can share a single type without manual field
+//! copying.
 
-/// Fidelity thresholds that govern quantum-error interrupt generation.
+/// Unified configuration for the CQAM virtual machine.
 ///
-/// After each `QKERNEL` or `QOBSERVE`, the VM computes the purity Tr(rho^2)
-/// of the affected register. If purity falls below `min_purity`,
-/// `int_quantum_err` is set in the PSW.
+/// Controls quantum fidelity thresholds, default register sizes,
+/// backend selection, and parallelism settings. The runner deserializes
+/// TOML into its own wrapper and converts to `VmConfig` before handing
+/// it to the VM.
 #[derive(Debug, Clone)]
-pub struct QuantumFidelityThreshold {
+pub struct VmConfig {
     /// Minimum acceptable purity Tr(rho^2).
     ///
     /// When purity drops below this value after a quantum operation, the VM
     /// raises int_quantum_err. A value of 0.0 disables the check.
-    /// Default: 0.0 (disabled; the runner wires SimConfig::fidelity_threshold).
+    /// Default: 0.0 (disabled; the runner wires the configured threshold).
     pub min_purity: f64,
 
     /// Default number of qubits per quantum register for `QPREP`.
@@ -35,7 +38,7 @@ pub struct QuantumFidelityThreshold {
     pub default_threads: u16,
 }
 
-impl Default for QuantumFidelityThreshold {
+impl Default for VmConfig {
     fn default() -> Self {
         Self {
             min_purity: 0.0,

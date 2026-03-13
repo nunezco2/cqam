@@ -27,6 +27,7 @@ fn test_config() -> SimConfig {
         default_qubits: Some(2),
         force_density_matrix: false,
         default_threads: None,
+        rng_seed: None,
     }
 }
 

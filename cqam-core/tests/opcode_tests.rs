@@ -6,7 +6,7 @@
 
 use std::collections::HashMap;
 
-use cqam_core::instruction::Instruction;
+use cqam_core::instruction::*;
 use cqam_core::opcode::{decode, decode_with_debug, encode, mnemonic, op};
 
 // =============================================================================
@@ -463,12 +463,12 @@ fn roundtrip_jif_max_address() {
 #[test]
 fn roundtrip_jmpf() {
     let labels = test_labels();
-    let instr = Instruction::JmpF { flag: 5, target: "end".to_string() };
+    let instr = Instruction::JmpF { flag: FlagId::Sf, target: "end".to_string() };
     let decoded = roundtrip_with_labels(&instr, &labels);
     assert_eq!(
         decoded,
         Instruction::JmpF {
-            flag: 5,
+            flag: FlagId::Sf,
             target: "@42".to_string()
         }
     );
@@ -480,19 +480,19 @@ fn roundtrip_jmpf() {
 
 #[test]
 fn roundtrip_qprep_uniform() {
-    let instr = Instruction::QPrep { dst: 0, dist: 0 };
+    let instr = Instruction::QPrep { dst: 0, dist: DistId::Uniform };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qprep_ghz() {
-    let instr = Instruction::QPrep { dst: 7, dist: 3 };
+    let instr = Instruction::QPrep { dst: 7, dist: DistId::Ghz };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qprep_max_dist() {
-    let instr = Instruction::QPrep { dst: 4, dist: 7 };
+    let instr = Instruction::QPrep { dst: 4, dist: DistId::Ghz };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -505,7 +505,7 @@ fn roundtrip_qkernel() {
     let instr = Instruction::QKernel {
         dst: 1,
         src: 0,
-        kernel: 2,
+        kernel: KernelId::Fourier,
         ctx0: 3,
         ctx1: 4,
     };
@@ -517,7 +517,7 @@ fn roundtrip_qkernel_max_values() {
     let instr = Instruction::QKernel {
         dst: 7,
         src: 7,
-        kernel: 31,
+        kernel: KernelId::Permutation,
         ctx0: 15,
         ctx1: 15,
     };
@@ -529,7 +529,7 @@ fn roundtrip_qkernel_zero_values() {
     let instr = Instruction::QKernel {
         dst: 0,
         src: 0,
-        kernel: 0,
+        kernel: KernelId::Init,
         ctx0: 0,
         ctx1: 0,
     };
@@ -542,13 +542,13 @@ fn roundtrip_qkernel_zero_values() {
 
 #[test]
 fn roundtrip_qobserve() {
-    let instr = Instruction::QObserve { dst_h: 2, src_q: 5, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 2, src_q: 5, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qobserve_max() {
-    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -558,19 +558,19 @@ fn roundtrip_qobserve_max() {
 
 #[test]
 fn roundtrip_qsample() {
-    let instr = Instruction::QSample { dst_h: 2, src_q: 5, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QSample { dst_h: 2, src_q: 5, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qsample_max() {
-    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qsample_zero() {
-    let instr = Instruction::QSample { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -580,45 +580,45 @@ fn roundtrip_qsample_zero() {
 
 #[test]
 fn roundtrip_qobserve_mode_prob() {
-    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: 1, ctx0: 3, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Prob, ctx0: 3, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qobserve_mode_amp() {
-    let instr = Instruction::QObserve { dst_h: 2, src_q: 4, mode: 2, ctx0: 5, ctx1: 7 };
+    let instr = Instruction::QObserve { dst_h: 2, src_q: 4, mode: ObserveMode::Amp, ctx0: 5, ctx1: 7 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qsample_mode_prob() {
-    let instr = Instruction::QSample { dst_h: 1, src_q: 3, mode: 1, ctx0: 6, ctx1: 0 };
+    let instr = Instruction::QSample { dst_h: 1, src_q: 3, mode: ObserveMode::Prob, ctx0: 6, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qsample_mode_amp() {
-    let instr = Instruction::QSample { dst_h: 5, src_q: 2, mode: 2, ctx0: 8, ctx1: 9 };
+    let instr = Instruction::QSample { dst_h: 5, src_q: 2, mode: ObserveMode::Amp, ctx0: 8, ctx1: 9 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qobserve_backward_compat() {
     // mode=0, ctx0=0, ctx1=0 should round-trip identically to legacy format
-    let instr = Instruction::QObserve { dst_h: 3, src_q: 6, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 3, src_q: 6, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qobserve_mode_max_ctx() {
     // Max ctx0/ctx1 values (4 bits each = 15)
-    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: 2, ctx0: 15, ctx1: 15 };
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Amp, ctx0: 15, ctx1: 15 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qsample_mode_max_ctx() {
-    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: 2, ctx0: 15, ctx1: 15 };
+    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: ObserveMode::Amp, ctx0: 15, ctx1: 15 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -656,19 +656,19 @@ fn roundtrip_qstore_max() {
 
 #[test]
 fn roundtrip_hreduce() {
-    let instr = Instruction::HReduce { src: 2, dst: 5, func: 10 };
+    let instr = Instruction::HReduce { src: 2, dst: 5, func: ReduceFn::Mean };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_hreduce_max_func() {
-    let instr = Instruction::HReduce { src: 7, dst: 15, func: 15 };
+    let instr = Instruction::HReduce { src: 7, dst: 15, func: ReduceFn::NegateZ };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_hreduce_zero() {
-    let instr = Instruction::HReduce { src: 0, dst: 0, func: 0 };
+    let instr = Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::Round };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -743,7 +743,7 @@ fn exact_encoding_qkernel() {
     let instr = Instruction::QKernel {
         dst: 1,
         src: 0,
-        kernel: 2,
+        kernel: KernelId::Fourier,
         ctx0: 3,
         ctx1: 4,
     };
@@ -812,7 +812,7 @@ fn error_unresolved_label_jif() {
 #[test]
 fn error_unresolved_label_jmpf() {
     let labels = HashMap::new();
-    let instr = Instruction::JmpF { flag: 0, target: "missing".to_string() };
+    let instr = Instruction::JmpF { flag: FlagId::Zf, target: "missing".to_string() };
     let result = encode(&instr, &labels);
     assert!(result.is_err());
 }
@@ -836,7 +836,7 @@ fn decode_qsample_opcode_0x40() {
     // 0x40 is now assigned to QSAMPLE
     let word: u32 = 0x40_000000;
     let result = decode(word).unwrap();
-    assert_eq!(result, Instruction::QSample { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 });
+    assert_eq!(result, Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 });
 }
 
 #[test]
@@ -879,28 +879,20 @@ fn error_reg4_overflow_rhs() {
 #[test]
 fn error_reg3_overflow_qprep() {
     let labels = HashMap::new();
-    let instr = Instruction::QPrep { dst: 8, dist: 0 };
+    let instr = Instruction::QPrep { dst: 8, dist: DistId::Uniform };
     assert!(encode(&instr, &labels).is_err());
 }
 
 #[test]
 fn error_dist_overflow() {
-    let labels = HashMap::new();
-    let instr = Instruction::QPrep { dst: 0, dist: 8 };
-    assert!(encode(&instr, &labels).is_err());
+    // With type-safe enums, invalid dist values are caught at TryFrom time
+    assert!(DistId::try_from(8u8).is_err());
 }
 
 #[test]
 fn error_kernel_overflow() {
-    let labels = HashMap::new();
-    let instr = Instruction::QKernel {
-        dst: 0,
-        src: 0,
-        kernel: 32,
-        ctx0: 0,
-        ctx1: 0,
-    };
-    assert!(encode(&instr, &labels).is_err());
+    // With type-safe enums, invalid kernel values are caught at TryFrom time
+    assert!(KernelId::try_from(32u8).is_err());
 }
 
 #[test]
@@ -912,10 +904,8 @@ fn error_shift_overflow() {
 
 #[test]
 fn error_reduce_func_overflow() {
-    let labels = HashMap::new();
-    // MAX_FUNC is now 31 (5 bits), so func=32 should overflow
-    let instr = Instruction::HReduce { src: 0, dst: 0, func: 32 };
-    assert!(encode(&instr, &labels).is_err());
+    // With type-safe enums, invalid func values are caught at TryFrom time
+    assert!(ReduceFn::try_from(32u8).is_err());
 }
 
 #[test]
@@ -936,7 +926,7 @@ fn error_jmpf_address_overflow() {
     let mut labels = HashMap::new();
     labels.insert("too_far".to_string(), 0x10000u32);
     let instr = Instruction::JmpF {
-        flag: 0,
+        flag: FlagId::Zf,
         target: "too_far".to_string(),
     };
     assert!(encode(&instr, &labels).is_err());
@@ -1007,7 +997,7 @@ fn edge_max_reg4_values() {
 
 #[test]
 fn edge_max_reg3_values_qobserve() {
-    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 };
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -1319,11 +1309,11 @@ fn roundtrip_all_variants_comprehensive() {
 
     // Quantum variants
     let q_variants: Vec<Instruction> = vec![
-        Instruction::QPrep { dst: 0, dist: 0 },
-        Instruction::QPrep { dst: 7, dist: 3 },
-        Instruction::QKernel { dst: 1, src: 0, kernel: 2, ctx0: 3, ctx1: 4 },
-        Instruction::QObserve { dst_h: 2, src_q: 5, mode: 0, ctx0: 0, ctx1: 0 },
-        Instruction::QSample { dst_h: 1, src_q: 3, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        Instruction::QPrep { dst: 7, dist: DistId::Ghz },
+        Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Fourier, ctx0: 3, ctx1: 4 },
+        Instruction::QObserve { dst_h: 2, src_q: 5, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QSample { dst_h: 1, src_q: 3, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::QLoad { dst_q: 3, addr: 100 },
         Instruction::QStore { src_q: 0, addr: 0 },
     ];
@@ -1334,7 +1324,7 @@ fn roundtrip_all_variants_comprehensive() {
     }
 
     // Hybrid reduce
-    let hr = Instruction::HReduce { src: 2, dst: 5, func: 10 };
+    let hr = Instruction::HReduce { src: 2, dst: 5, func: ReduceFn::Mean };
     let w = encode(&hr, &labels).unwrap();
     assert_eq!(decode(w).unwrap(), hr);
 
@@ -1361,7 +1351,7 @@ fn roundtrip_all_variants_comprehensive() {
 #[test]
 fn roundtrip_qkernelf() {
     let instr = Instruction::QKernelF {
-        dst: 1, src: 0, kernel: 5, fctx0: 3, fctx1: 4,
+        dst: 1, src: 0, kernel: KernelId::Rotate, fctx0: 3, fctx1: 4,
     };
     assert_eq!(roundtrip(&instr), instr);
 }
@@ -1369,7 +1359,7 @@ fn roundtrip_qkernelf() {
 #[test]
 fn roundtrip_qkernelf_max_values() {
     let instr = Instruction::QKernelF {
-        dst: 7, src: 7, kernel: 31, fctx0: 15, fctx1: 15,
+        dst: 7, src: 7, kernel: KernelId::Permutation, fctx0: 15, fctx1: 15,
     };
     assert_eq!(roundtrip(&instr), instr);
 }
@@ -1377,7 +1367,7 @@ fn roundtrip_qkernelf_max_values() {
 #[test]
 fn roundtrip_qkernelf_zero_values() {
     let instr = Instruction::QKernelF {
-        dst: 0, src: 0, kernel: 0, fctx0: 0, fctx1: 0,
+        dst: 0, src: 0, kernel: KernelId::Init, fctx0: 0, fctx1: 0,
     };
     assert_eq!(roundtrip(&instr), instr);
 }
@@ -1385,7 +1375,7 @@ fn roundtrip_qkernelf_zero_values() {
 #[test]
 fn roundtrip_qkernelz() {
     let instr = Instruction::QKernelZ {
-        dst: 1, src: 0, kernel: 6, zctx0: 2, zctx1: 3,
+        dst: 1, src: 0, kernel: KernelId::PhaseShift, zctx0: 2, zctx1: 3,
     };
     assert_eq!(roundtrip(&instr), instr);
 }
@@ -1393,7 +1383,7 @@ fn roundtrip_qkernelz() {
 #[test]
 fn roundtrip_qkernelz_max_values() {
     let instr = Instruction::QKernelZ {
-        dst: 7, src: 7, kernel: 31, zctx0: 15, zctx1: 15,
+        dst: 7, src: 7, kernel: KernelId::Permutation, zctx0: 15, zctx1: 15,
     };
     assert_eq!(roundtrip(&instr), instr);
 }
@@ -1401,7 +1391,7 @@ fn roundtrip_qkernelz_max_values() {
 #[test]
 fn roundtrip_qkernelz_zero_values() {
     let instr = Instruction::QKernelZ {
-        dst: 0, src: 0, kernel: 0, zctx0: 0, zctx1: 0,
+        dst: 0, src: 0, kernel: KernelId::Init, zctx0: 0, zctx1: 0,
     };
     assert_eq!(roundtrip(&instr), instr);
 }
@@ -1439,31 +1429,31 @@ fn test_qprepr_mnemonic() {
 
 #[test]
 fn roundtrip_qencode_r_file() {
-    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: 0 };
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: FileSel::RFile };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qencode_f_file() {
-    let instr = Instruction::QEncode { dst: 1, src_base: 2, count: 2, file_sel: 1 };
+    let instr = Instruction::QEncode { dst: 1, src_base: 2, count: 2, file_sel: FileSel::FFile };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qencode_z_file() {
-    let instr = Instruction::QEncode { dst: 3, src_base: 4, count: 8, file_sel: 2 };
+    let instr = Instruction::QEncode { dst: 3, src_base: 4, count: 8, file_sel: FileSel::ZFile };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qencode_max_values() {
-    let instr = Instruction::QEncode { dst: 7, src_base: 15, count: 15, file_sel: 2 };
+    let instr = Instruction::QEncode { dst: 7, src_base: 15, count: 15, file_sel: FileSel::ZFile };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qencode_zero_values() {
-    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 0, file_sel: 0 };
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 0, file_sel: FileSel::RFile };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -1474,15 +1464,14 @@ fn test_qencode_mnemonic() {
 
 #[test]
 fn error_qencode_file_sel_overflow() {
-    let labels = HashMap::new();
-    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: 3 };
-    assert!(encode(&instr, &labels).is_err());
+    // With type-safe enums, invalid file_sel values are caught at TryFrom time
+    assert!(FileSel::try_from(3u8).is_err());
 }
 
 #[test]
 fn error_qencode_count_overflow() {
     let labels = HashMap::new();
-    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 16, file_sel: 0 };
+    let instr = Instruction::QEncode { dst: 0, src_base: 0, count: 16, file_sel: FileSel::RFile };
     assert!(encode(&instr, &labels).is_err());
 }
 
@@ -1573,25 +1562,25 @@ fn roundtrip_qcnot_zero_values() {
 
 #[test]
 fn roundtrip_qrot_x() {
-    let instr = Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 0, angle_freg: 3 };
+    let instr = Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: RotAxis::X, angle_freg: 3 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qrot_y() {
-    let instr = Instruction::QRot { dst: 3, src: 4, qubit_reg: 5, axis: 1, angle_freg: 6 };
+    let instr = Instruction::QRot { dst: 3, src: 4, qubit_reg: 5, axis: RotAxis::Y, angle_freg: 6 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qrot_z() {
-    let instr = Instruction::QRot { dst: 7, src: 7, qubit_reg: 15, axis: 2, angle_freg: 15 };
+    let instr = Instruction::QRot { dst: 7, src: 7, qubit_reg: 15, axis: RotAxis::Z, angle_freg: 15 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
 #[test]
 fn roundtrip_qrot_zero_values() {
-    let instr = Instruction::QRot { dst: 0, src: 0, qubit_reg: 0, axis: 0, angle_freg: 0 };
+    let instr = Instruction::QRot { dst: 0, src: 0, qubit_reg: 0, axis: RotAxis::X, angle_freg: 0 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -1629,9 +1618,8 @@ fn error_qcnot_dst_overflow() {
 
 #[test]
 fn error_qrot_axis_overflow() {
-    let labels = HashMap::new();
-    let instr = Instruction::QRot { dst: 0, src: 0, qubit_reg: 0, axis: 3, angle_freg: 0 };
-    assert!(encode(&instr, &labels).is_err());
+    // With type-safe enums, invalid axis values are caught at TryFrom time
+    assert!(RotAxis::try_from(3u8).is_err());
 }
 
 #[test]
@@ -1712,7 +1700,7 @@ fn roundtrip_qmixed() {
 #[test]
 fn roundtrip_qprepn() {
     let labels = HashMap::new();
-    let instr = Instruction::QPrepN { dst: 5, dist: 3, qubit_count_reg: 10 };
+    let instr = Instruction::QPrepN { dst: 5, dist: DistId::Ghz, qubit_count_reg: 10 };
     let word = encode(&instr, &labels).unwrap();
     let decoded = decode(word).unwrap();
     assert_eq!(decoded, instr);
@@ -1787,7 +1775,7 @@ fn mnemonic_p2_opcodes() {
 #[test]
 fn roundtrip_hreduce_expect() {
     let labels = HashMap::new();
-    let instr = Instruction::HReduce { src: 3, dst: 5, func: cqam_core::instruction::reduce_fn::EXPECT };
+    let instr = Instruction::HReduce { src: 3, dst: 5, func: cqam_core::instruction::ReduceFn::Expect };
     let word = encode(&instr, &labels).unwrap();
     let decoded = decode(word).unwrap();
     assert_eq!(decoded, instr);

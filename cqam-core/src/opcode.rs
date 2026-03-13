@@ -8,7 +8,7 @@
 use std::collections::HashMap;
 
 use crate::error::CqamError;
-use crate::instruction::Instruction;
+use crate::instruction::*;
 
 // =============================================================================
 // Opcode constants
@@ -237,7 +237,7 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::HAtmS => Ok(encode_n(op::HATMS)),
         Instruction::HAtmE => Ok(encode_n(op::HATME)),
         Instruction::Reti => Ok(encode_n(op::RETI)),
-        Instruction::Ecall { proc_id } => encode_rr(op::ECALL, *proc_id, 0),
+        Instruction::Ecall { proc_id } => encode_rr(op::ECALL, u8::from(*proc_id), 0),
 
         // -- RRR-format (3-register) ------------------------------------------
         Instruction::IAdd { dst, lhs, rhs } => encode_rrr(op::IADD, *dst, *lhs, *rhs),
@@ -321,15 +321,15 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         }
         Instruction::JmpF { flag, target } => {
             let addr = resolve_label_u16(target, label_map)?;
-            encode_jr(op::JMPF, *flag, addr)
+            encode_jr(op::JMPF, u8::from(*flag), addr)
         }
         Instruction::SetIV { trap_id, target } => {
             let addr = resolve_label_u16(target, label_map)?;
-            encode_jr(op::SETIV, *trap_id, addr)
+            encode_jr(op::SETIV, u8::from(*trap_id), addr)
         }
 
         // -- QP-format (quantum prepare) --------------------------------------
-        Instruction::QPrep { dst, dist } => encode_qp(op::QPREP, *dst, *dist),
+        Instruction::QPrep { dst, dist } => encode_qp(op::QPREP, *dst, u8::from(*dist)),
 
         // -- Q-format (quantum kernel) ----------------------------------------
         Instruction::QKernel {
@@ -338,13 +338,13 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             kernel,
             ctx0,
             ctx1,
-        } => encode_q(op::QKERNEL, *dst, *src, *kernel, *ctx0, *ctx1),
+        } => encode_q(op::QKERNEL, *dst, *src, u8::from(*kernel), *ctx0, *ctx1),
 
         Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } =>
-            encode_q(op::QKERNELF, *dst, *src, *kernel, *fctx0, *fctx1),
+            encode_q(op::QKERNELF, *dst, *src, u8::from(*kernel), *fctx0, *fctx1),
 
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } =>
-            encode_q(op::QKERNELZ, *dst, *src, *kernel, *zctx0, *zctx1),
+            encode_q(op::QKERNELZ, *dst, *src, u8::from(*kernel), *zctx0, *zctx1),
 
         // -- QMK-format (masked gate operations) ----------------------------------
         Instruction::QHadM { dst, src, mask_reg } =>
@@ -360,7 +360,7 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         // -- QROT-format (parameterized rotation) ---------------------------------
         Instruction::QRot { dst, src, qubit_reg, axis, angle_freg } =>
-            encode_qrot(op::QROT, *dst, *src, *qubit_reg, *axis, *angle_freg),
+            encode_qrot(op::QROT, *dst, *src, *qubit_reg, u8::from(*axis), *angle_freg),
 
         // -- QMEAS-format (partial measurement) -----------------------------------
         Instruction::QMeas { dst_r, src_q, qubit_reg } => {
@@ -401,13 +401,11 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         // -- QPREPN-format: [opcode:8][dst:3][dist:3][qubit_count_reg:4][pad:14]
         Instruction::QPrepN { dst, dist, qubit_count_reg } => {
             validate_reg3(*dst, "dst")?;
-            if *dist > MAX_DIST {
-                return Err(CqamError::OperandOverflow { field: "dist".to_string(), value: *dist as u32, max: MAX_DIST as u32 });
-            }
+            let dist_u8 = u8::from(*dist);
             validate_reg4(*qubit_count_reg, "qubit_count_reg")?;
             Ok(((op::QPREPN as u32) << 24)
                 | ((*dst as u32) << 21)
-                | ((*dist as u32) << 18)
+                | ((dist_u8 as u32) << 18)
                 | ((*qubit_count_reg as u32) << 14))
         }
 
@@ -431,20 +429,20 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         // -- QE-format (quantum encode from registers) ----------------------------
         Instruction::QEncode { dst, src_base, count, file_sel } =>
-            encode_qe(op::QENCODE, *dst, *src_base, *count, *file_sel),
+            encode_qe(op::QENCODE, *dst, *src_base, *count, u8::from(*file_sel)),
 
         // -- QO-format (quantum observe, extended) --------------------------------
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } =>
-            encode_qo_ext(op::QOBSERVE, *dst_h, *src_q, *mode, *ctx0, *ctx1),
+            encode_qo_ext(op::QOBSERVE, *dst_h, *src_q, u8::from(*mode), *ctx0, *ctx1),
         Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } =>
-            encode_qo_ext(op::QSAMPLE, *dst_h, *src_q, *mode, *ctx0, *ctx1),
+            encode_qo_ext(op::QSAMPLE, *dst_h, *src_q, u8::from(*mode), *ctx0, *ctx1),
 
         // -- QS-format (quantum memory) ---------------------------------------
         Instruction::QLoad { dst_q, addr } => encode_qs(op::QLOAD, *dst_q, *addr),
         Instruction::QStore { src_q, addr } => encode_qs(op::QSTORE, *src_q, *addr),
 
         // -- HR-format (hybrid reduce) ----------------------------------------
-        Instruction::HReduce { src, dst, func } => encode_hr(op::HREDUCE, *src, *dst, *func),
+        Instruction::HReduce { src, dst, func } => encode_hr(op::HREDUCE, *src, *dst, u8::from(*func)),
 
         // -- L-format (label pseudo-instruction) ------------------------------
         Instruction::Label(name) => {
@@ -502,7 +500,8 @@ pub fn decode_with_debug(
         op::HATME => Ok(Instruction::HAtmE),
         op::RETI => Ok(Instruction::Reti),
         op::ECALL => {
-            let proc_id = extract_reg4(word, 20);
+            let raw = extract_reg4(word, 20);
+            let proc_id = crate::instruction::ProcId::try_from(raw)?;
             Ok(Instruction::Ecall { proc_id })
         }
 
@@ -693,7 +692,8 @@ pub fn decode_with_debug(
             })
         }
         op::JMPF => {
-            let flag = extract_reg4(word, 20);
+            let raw = extract_reg4(word, 20);
+            let flag = crate::instruction::FlagId::try_from(raw)?;
             let addr = extract_u16(word);
             Ok(Instruction::JmpF {
                 flag,
@@ -701,7 +701,8 @@ pub fn decode_with_debug(
             })
         }
         op::SETIV => {
-            let trap_id = extract_reg4(word, 20);
+            let raw = extract_reg4(word, 20);
+            let trap_id = crate::instruction::TrapId::try_from(raw)?;
             let addr = extract_u16(word);
             Ok(Instruction::SetIV {
                 trap_id,
@@ -712,7 +713,8 @@ pub fn decode_with_debug(
         // -- QP-format (quantum prepare) --------------------------------------
         op::QPREP => {
             let dst = extract_reg3(word, 21);
-            let dist = extract_reg3(word, 18);
+            let raw_dist = extract_reg3(word, 18);
+            let dist = crate::instruction::DistId::try_from(raw_dist)?;
             Ok(Instruction::QPrep { dst, dist })
         }
 
@@ -720,7 +722,8 @@ pub fn decode_with_debug(
         op::QKERNEL => {
             let dst = extract_reg3(word, 21);
             let src = extract_reg3(word, 18);
-            let kernel = extract_u5(word, 13);
+            let raw_kernel = extract_u5(word, 13);
+            let kernel = crate::instruction::KernelId::try_from(raw_kernel)?;
             let ctx0 = extract_reg4(word, 9);
             let ctx1 = extract_reg4(word, 5);
             Ok(Instruction::QKernel {
@@ -736,7 +739,8 @@ pub fn decode_with_debug(
         op::QKERNELF => {
             let dst = extract_reg3(word, 21);
             let src = extract_reg3(word, 18);
-            let kernel = extract_u5(word, 13);
+            let raw_kernel = extract_u5(word, 13);
+            let kernel = crate::instruction::KernelId::try_from(raw_kernel)?;
             let fctx0 = extract_reg4(word, 9);
             let fctx1 = extract_reg4(word, 5);
             Ok(Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 })
@@ -746,7 +750,8 @@ pub fn decode_with_debug(
         op::QKERNELZ => {
             let dst = extract_reg3(word, 21);
             let src = extract_reg3(word, 18);
-            let kernel = extract_u5(word, 13);
+            let raw_kernel = extract_u5(word, 13);
+            let kernel = crate::instruction::KernelId::try_from(raw_kernel)?;
             let zctx0 = extract_reg4(word, 9);
             let zctx1 = extract_reg4(word, 5);
             Ok(Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 })
@@ -764,7 +769,8 @@ pub fn decode_with_debug(
             let dst = extract_reg3(word, 21);
             let src_base = extract_reg4(word, 16);
             let count = extract_reg4(word, 12);
-            let file_sel = extract_u2(word, 10);
+            let raw_file_sel = extract_u2(word, 10);
+            let file_sel = crate::instruction::FileSel::try_from(raw_file_sel)?;
             Ok(Instruction::QEncode { dst, src_base, count, file_sel })
         }
 
@@ -802,7 +808,8 @@ pub fn decode_with_debug(
             let dst = extract_reg3(word, 21);
             let src = extract_reg3(word, 18);
             let qubit_reg = extract_reg4(word, 14);
-            let axis = ((word >> 12) & 0x3) as u8;
+            let raw_axis = ((word >> 12) & 0x3) as u8;
+            let axis = crate::instruction::RotAxis::try_from(raw_axis)?;
             let angle_freg = extract_reg4(word, 8);
             Ok(Instruction::QRot { dst, src, qubit_reg, axis, angle_freg })
         }
@@ -859,7 +866,8 @@ pub fn decode_with_debug(
         // -- QPREPN: variable qubit count state preparation --
         op::QPREPN => {
             let dst = extract_reg3(word, 21);
-            let dist = extract_reg3(word, 18);
+            let raw_dist = extract_reg3(word, 18);
+            let dist = crate::instruction::DistId::try_from(raw_dist)?;
             let qubit_count_reg = extract_reg4(word, 14);
             Ok(Instruction::QPrepN { dst, dist, qubit_count_reg })
         }
@@ -902,7 +910,8 @@ pub fn decode_with_debug(
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
             let src_q = extract_reg3(word, 18);
-            let mode = extract_u2(word, 16);
+            let raw_mode = extract_u2(word, 16);
+            let mode = crate::instruction::ObserveMode::try_from(raw_mode)?;
             let ctx0 = extract_reg4(word, 12);
             let ctx1 = extract_reg4(word, 8);
             Ok(Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 })
@@ -910,7 +919,8 @@ pub fn decode_with_debug(
         op::QSAMPLE => {
             let dst_h = extract_reg3(word, 21);
             let src_q = extract_reg3(word, 18);
-            let mode = extract_u2(word, 16);
+            let raw_mode = extract_u2(word, 16);
+            let mode = crate::instruction::ObserveMode::try_from(raw_mode)?;
             let ctx0 = extract_reg4(word, 12);
             let ctx1 = extract_reg4(word, 8);
             Ok(Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 })
@@ -932,7 +942,8 @@ pub fn decode_with_debug(
         op::HREDUCE => {
             let src = extract_reg4(word, 20);
             let dst = extract_reg4(word, 16);
-            let func = extract_u5(word, 11);
+            let raw_func = extract_u5(word, 11);
+            let func = crate::instruction::ReduceFn::try_from(raw_func)?;
             Ok(Instruction::HReduce { src, dst, func })
         }
 
@@ -1532,7 +1543,7 @@ mod tests {
     fn test_roundtrip_qkernel() {
         let labels = HashMap::new();
         let instr = Instruction::QKernel {
-            dst: 1, src: 0, kernel: 2, ctx0: 3, ctx1: 4,
+            dst: 1, src: 0, kernel: KernelId::Fourier, ctx0: 3, ctx1: 4,
         };
         let word = encode(&instr, &labels).unwrap();
         let decoded = decode(word).unwrap();

@@ -6,22 +6,12 @@
 //! Bell, GHZ), unitary evolution, measurement, and fidelity metrics.
 
 use crate::complex::{self, C64, cx_add, cx_mul, cx_conj, cx_scale, cx_norm_sq};
+use cqam_core::error::CqamError;
 use cqam_core::quantum_state::QuantumState;
 use rand::Rng;
 use rayon::prelude::*;
 
-/// Minimum dimension to use parallel iteration. Below this, sequential is faster.
-const PAR_THRESHOLD: usize = 256;
-
-/// Tolerance for entanglement detection via single-qubit reduced purity.
-const EF_EPSILON: f64 = 1e-10;
-
-/// Tolerance for superposition detection: diagonal elements with probability
-/// below this are treated as zero.
-const SF_EPSILON: f64 = 1e-12;
-
-/// Maximum number of qubits supported by the full density matrix.
-pub const MAX_QUBITS: u8 = 16;
+use crate::constants::{PAR_THRESHOLD, EF_EPSILON, SF_EPSILON, MAX_QUBITS};
 
 /// A density matrix representing an n-qubit quantum state.
 ///
@@ -45,19 +35,23 @@ impl DensityMatrix {
     ///
     /// `data` must have length `(2^num_qubits)^2`. Returns Err if
     /// `num_qubits` exceeds MAX_QUBITS or data length is wrong.
-    pub fn from_raw(num_qubits: u8, data: Vec<C64>) -> Result<Self, String> {
+    pub fn from_raw(num_qubits: u8, data: Vec<C64>) -> Result<Self, CqamError> {
         if num_qubits > MAX_QUBITS {
-            return Err(format!(
-                "DensityMatrix: {} qubits exceeds maximum {}",
-                num_qubits, MAX_QUBITS
-            ));
+            return Err(CqamError::QubitLimitExceeded {
+                instruction: "DensityMatrix::from_raw".to_string(),
+                required: num_qubits,
+                max: MAX_QUBITS,
+            });
         }
         let dim = 1usize << num_qubits;
         if data.len() != dim * dim {
-            return Err(format!(
-                "DensityMatrix: data length {} != expected {}",
-                data.len(), dim * dim
-            ));
+            return Err(CqamError::TypeMismatch {
+                instruction: "DensityMatrix::from_raw".to_string(),
+                detail: format!(
+                    "data length {} != expected {}",
+                    data.len(), dim * dim
+                ),
+            });
         }
         Ok(Self { num_qubits, data })
     }
@@ -157,34 +151,50 @@ impl DensityMatrix {
     ///
     /// # Errors
     /// Returns Err if statevectors have mismatched dimensions or zero total weight.
-    pub fn from_mixture(states: &[(f64, &[C64])]) -> Result<Self, String> {
+    pub fn from_mixture(states: &[(f64, &[C64])]) -> Result<Self, CqamError> {
         if states.is_empty() {
-            return Err("from_mixture: empty state list".to_string());
+            return Err(CqamError::TypeMismatch {
+                instruction: "DensityMatrix::from_mixture".to_string(),
+                detail: "empty state list".to_string(),
+            });
         }
 
         let dim = states[0].1.len();
         if dim == 0 || (dim & (dim - 1)) != 0 {
-            return Err(format!("from_mixture: dimension {} is not a power of 2", dim));
+            return Err(CqamError::TypeMismatch {
+                instruction: "DensityMatrix::from_mixture".to_string(),
+                detail: format!("dimension {} is not a power of 2", dim),
+            });
         }
         let num_qubits = dim.trailing_zeros() as u8;
         if num_qubits > MAX_QUBITS {
-            return Err(format!("from_mixture: {} qubits exceeds MAX_QUBITS", num_qubits));
+            return Err(CqamError::QubitLimitExceeded {
+                instruction: "DensityMatrix::from_mixture".to_string(),
+                required: num_qubits,
+                max: MAX_QUBITS,
+            });
         }
 
         // Validate all dims match
         for (i, (_, psi)) in states.iter().enumerate() {
             if psi.len() != dim {
-                return Err(format!(
-                    "from_mixture: state {} has dimension {} but expected {}",
-                    i, psi.len(), dim
-                ));
+                return Err(CqamError::TypeMismatch {
+                    instruction: "DensityMatrix::from_mixture".to_string(),
+                    detail: format!(
+                        "state {} has dimension {} but expected {}",
+                        i, psi.len(), dim
+                    ),
+                });
             }
         }
 
         // Compute total weight
         let total_weight: f64 = states.iter().map(|(w, _)| *w).sum();
         if total_weight <= 0.0 {
-            return Err("from_mixture: total weight must be positive".to_string());
+            return Err(CqamError::TypeMismatch {
+                instruction: "DensityMatrix::from_mixture".to_string(),
+                detail: "total weight must be positive".to_string(),
+            });
         }
 
         let mut data = vec![complex::ZERO; dim * dim];
@@ -217,14 +227,21 @@ impl DensityMatrix {
     /// Construct a density matrix from a pure state vector: rho = |psi><psi|.
     ///
     /// The statevector length must be a power of 2 (2^n for some n >= 1).
-    pub fn from_statevector(psi: &[C64]) -> Result<Self, String> {
+    pub fn from_statevector(psi: &[C64]) -> Result<Self, CqamError> {
         let len = psi.len();
         if len == 0 || (len & (len - 1)) != 0 {
-            return Err(format!("Statevector length {} is not a power of 2", len));
+            return Err(CqamError::TypeMismatch {
+                instruction: "DensityMatrix::from_statevector".to_string(),
+                detail: format!("statevector length {} is not a power of 2", len),
+            });
         }
         let num_qubits = len.trailing_zeros() as u8;
         if num_qubits > MAX_QUBITS {
-            return Err(format!("Statevector implies {} qubits, max is {}", num_qubits, MAX_QUBITS));
+            return Err(CqamError::QubitLimitExceeded {
+                instruction: "DensityMatrix::from_statevector".to_string(),
+                required: num_qubits,
+                max: MAX_QUBITS,
+            });
         }
 
         // Normalize the statevector

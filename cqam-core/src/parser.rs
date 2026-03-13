@@ -263,24 +263,19 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: "ECALL requires a procedure name or ID".to_string(),
                 });
             }
-            use crate::instruction::proc_id;
-            let pid = match arg {
-                "PRINT_INT" => proc_id::PRINT_INT,
-                "PRINT_FLOAT" => proc_id::PRINT_FLOAT,
-                "PRINT_STR" => proc_id::PRINT_STR,
-                "PRINT_CHAR" => proc_id::PRINT_CHAR,
-                "DUMP_REGS" => proc_id::DUMP_REGS,
-                _ => arg.parse::<u8>().map_err(|_| CqamError::ParseError {
+            use crate::instruction::ProcId;
+            let pid = if let Some(p) = ProcId::from_name(arg) {
+                p
+            } else {
+                let raw = arg.parse::<u8>().map_err(|_| CqamError::ParseError {
                     line: line_num,
                     message: format!("ECALL: unknown procedure '{}'", arg),
-                })?,
-            };
-            if pid > 15 {
-                return Err(CqamError::ParseError {
+                })?;
+                ProcId::try_from(raw).map_err(|_| CqamError::ParseError {
                     line: line_num,
-                    message: format!("ECALL: proc_id {} exceeds max 15", pid),
-                });
-            }
+                    message: format!("ECALL: invalid proc_id {}", raw),
+                })?
+            };
             Ok(Instruction::Ecall { proc_id: pid })
         }
 
@@ -337,16 +332,10 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("SETIV requires 2 operands, got {}", ops.len()),
                 });
             }
-            let trap_id = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+            let trap_id = crate::instruction::TrapId::from_token(ops[0]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
                 message: format!("SETIV: invalid trap ID '{}'", ops[0]),
             })?;
-            if trap_id > 2 {
-                return Err(CqamError::ParseError {
-                    line: line_num,
-                    message: format!("SETIV: trap ID must be 0-2, got {}", trap_id),
-                });
-            }
             let target = ops[1].to_string();
             if target.is_empty() {
                 return Err(CqamError::ParseError {
@@ -369,7 +358,7 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                 line: line_num,
                 message: format!("QPREP: invalid register '{}'", ops[0]),
             })?;
-            let dist = parse_u8(ops[1]).ok_or_else(|| CqamError::ParseError {
+            let dist = crate::instruction::DistId::from_token(ops[1]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
                 message: format!("QPREP: invalid distribution ID '{}'", ops[1]),
             })?;
@@ -700,19 +689,19 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                 line: line_num,
                 message: format!("QENCODE: invalid count '{}'", ops[2]),
             })?;
-            let file_sel = parse_u8(ops[3]).ok_or_else(|| CqamError::ParseError {
-                line: line_num,
-                message: format!("QENCODE: invalid file_sel '{}'", ops[3]),
-            })?;
-            if file_sel > 2 {
-                return Err(CqamError::ParseError {
+            let file_sel = {
+                let raw = parse_u8(ops[3]).ok_or_else(|| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QENCODE: invalid file_sel '{}'", ops[3]),
+                })?;
+                crate::instruction::FileSel::try_from(raw).map_err(|_| CqamError::ParseError {
                     line: line_num,
                     message: format!(
                         "QENCODE: file_sel must be 0 (R), 1 (F), or 2 (Z), got {}",
-                        file_sel
+                        raw
                     ),
-                });
-            }
+                })?
+            };
             Ok(Instruction::QEncode { dst, src_base, count, file_sel })
         }
 
@@ -749,7 +738,7 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                 line: line_num,
                 message: format!("QPREPN: invalid dst register '{}'", ops[0]),
             })?;
-            let dist = parse_u8(ops[1]).ok_or_else(|| CqamError::ParseError {
+            let dist = crate::instruction::DistId::from_token(ops[1]).ok_or_else(|| CqamError::ParseError {
                 line: line_num,
                 message: format!("QPREPN: invalid distribution ID '{}'", ops[1]),
             })?;
@@ -788,12 +777,16 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("JMPF requires 2 operands, got {}", ops.len()),
                 });
             }
-            let flag = if let Some(id) = crate::instruction::flag_name_to_id(ops[0]) {
+            let flag = if let Some(id) = crate::instruction::FlagId::from_mnemonic(ops[0]) {
                 id
             } else {
-                parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+                let raw = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
                     line: line_num,
-                    message: format!("JMPF: unknown flag '{}' (expected ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG, IF, or numeric ID)", ops[0]),
+                    message: format!("JMPF: unknown flag '{}' (expected ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG, IF, AF, or numeric ID)", ops[0]),
+                })?;
+                crate::instruction::FlagId::try_from(raw).map_err(|_| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("JMPF: invalid flag ID {}", raw),
                 })?
             };
             let target = ops[1].to_string();
@@ -812,15 +805,19 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                     message: format!("HREDUCE requires 3 operands, got {}", ops.len()),
                 });
             }
-            let func = if let Some(id) = crate::instruction::reduce_fn_name_to_id(ops[0]) {
+            let func = if let Some(id) = crate::instruction::ReduceFn::from_mnemonic(ops[0]) {
                 id
             } else {
-                parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+                let raw = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
                     line: line_num,
                     message: format!(
                         "HREDUCE: unknown function '{}' (expected ROUND, FLOOR, CEILI, TRUNC, ABSOL, NEGAT, MAGNI, PHASE, REALP, IMAGP, MEANT, MODEV, ARGMX, VARNC, CONJZ, NEGTZ, EXPCT, or numeric ID)",
                         ops[0]
                     ),
+                })?;
+                crate::instruction::ReduceFn::try_from(raw).map_err(|_| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("HREDUCE: invalid function ID {}", raw),
                 })?
             };
             let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
@@ -1449,11 +1446,17 @@ pub fn parse_u8(token: &str) -> Option<u8> {
 }
 
 /// Parse a kernel mnemonic or numeric ID.
-fn parse_kernel_id(token: &str, instr: &str, line_num: usize) -> Result<u8, CqamError> {
-    if let Some(id) = crate::instruction::kernel_name_to_id(token) {
+fn parse_kernel_id(token: &str, instr: &str, line_num: usize) -> Result<crate::instruction::KernelId, CqamError> {
+    if let Some(id) = crate::instruction::KernelId::from_mnemonic(token) {
         Ok(id)
-    } else if let Some(id) = parse_u8(token) {
-        Ok(id)
+    } else if let Some(raw) = parse_u8(token) {
+        crate::instruction::KernelId::try_from(raw).map_err(|_| CqamError::ParseError {
+            line: line_num,
+            message: format!(
+                "{}: invalid kernel ID {} (expected UNIT, ENTG, QFFT, DIFF, GROV, DROT, PHSH, QIFT, CTLU, DIAG, PERM, or numeric ID 0-10)",
+                instr, raw
+            ),
+        })
     } else {
         Err(CqamError::ParseError {
             line: line_num,
@@ -1614,25 +1617,27 @@ where
 }
 
 /// Parse a rotation axis token: numeric (0-2) or named (X, Y, Z).
-fn parse_rot_axis(token: &str) -> Option<u8> {
+fn parse_rot_axis(token: &str) -> Option<crate::instruction::RotAxis> {
+    use crate::instruction::RotAxis;
     let token = token.trim();
     match token {
-        "X" | "x" | "0" => Some(0),
-        "Y" | "y" | "1" => Some(1),
-        "Z" | "z" | "2" => Some(2),
+        "X" | "x" | "0" => Some(RotAxis::X),
+        "Y" | "y" | "1" => Some(RotAxis::Y),
+        "Z" | "z" | "2" => Some(RotAxis::Z),
         _ => None,
     }
 }
 
-/// Parse an observe mode token: numeric (0-2) or named (DIST, PROB, AMP).
-fn parse_observe_mode(token: &str) -> Option<u8> {
+/// Parse an observe mode token: numeric (0-3) or named (DIST, PROB, AMP, SAMPLE).
+fn parse_observe_mode(token: &str) -> Option<crate::instruction::ObserveMode> {
+    use crate::instruction::ObserveMode;
     let token = token.trim();
     match token {
-        "DIST" | "dist" => Some(0),
-        "PROB" | "prob" => Some(1),
-        "AMP" | "amp" => Some(2),
-        "SAMPLE" | "sample" => Some(3),
-        _ => parse_u8(token).filter(|&v| v <= 3),
+        "DIST" | "dist" => Some(ObserveMode::Dist),
+        "PROB" | "prob" => Some(ObserveMode::Prob),
+        "AMP" | "amp" => Some(ObserveMode::Amp),
+        "SAMPLE" | "sample" => Some(ObserveMode::Sample),
+        _ => parse_u8(token).and_then(|v| ObserveMode::try_from(v).ok()),
     }
 }
 
@@ -1664,7 +1669,7 @@ fn parse_qobserve(ops: &[&str], name: &str, line_num: usize) -> ParseResult {
             message: format!("{}: invalid mode '{}'", name, ops[2]),
         })?
     } else {
-        0
+        crate::instruction::ObserveMode::Dist
     };
     let ctx0 = if ops.len() >= 4 {
         parse_reg(ops[3]).ok_or_else(|| CqamError::ParseError {

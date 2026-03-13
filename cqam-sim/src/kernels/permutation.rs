@@ -11,11 +11,11 @@
 use cqam_core::error::CqamError;
 use crate::complex::C64;
 use crate::density_matrix::DensityMatrix;
-use crate::statevector::Statevector;
 use crate::kernel::Kernel;
+use crate::statevector::Statevector;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Permutation kernel (kernel_id = 10).
 ///
@@ -42,21 +42,27 @@ impl Permutation {
     /// # Errors
     ///
     /// Returns `Err` if any entry is out of range or appears more than once.
-    pub fn new(table: Vec<usize>) -> Result<Self, String> {
+    pub fn new(table: Vec<usize>) -> Result<Self, CqamError> {
         let dim = table.len();
         // Validation: each value must be in 0..dim, each appears exactly once
         let mut seen = vec![false; dim];
         for (k, &sigma_k) in table.iter().enumerate() {
             if sigma_k >= dim {
-                return Err(format!(
-                    "permutation entry {}={} out of range 0..{}", k, sigma_k, dim
-                ));
+                return Err(CqamError::TypeMismatch {
+                    instruction: "QKERNEL/PERMUTATION".to_string(),
+                    detail: format!(
+                        "permutation entry {}={} out of range 0..{}", k, sigma_k, dim
+                    ),
+                });
             }
             if seen[sigma_k] {
-                return Err(format!(
-                    "permutation entry {} appears more than once (duplicate at index {})",
-                    sigma_k, k
-                ));
+                return Err(CqamError::TypeMismatch {
+                    instruction: "QKERNEL/PERMUTATION".to_string(),
+                    detail: format!(
+                        "permutation entry {} appears more than once (duplicate at index {})",
+                        sigma_k, k
+                    ),
+                });
             }
             seen[sigma_k] = true;
         }
@@ -111,13 +117,16 @@ impl Kernel for Permutation {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let dim = input.dimension();
         if self.table.len() != dim {
-            return Err(format!(
-                "permutation has {} entries but register dimension is {}",
-                self.table.len(), dim
-            ));
+            return Err(CqamError::TypeMismatch {
+                instruction: "QKERNEL/PERMUTATION".to_string(),
+                detail: format!(
+                    "permutation has {} entries but register dimension is {}",
+                    self.table.len(), dim
+                ),
+            });
         }
 
         let amps = input.amplitudes();

@@ -12,14 +12,12 @@ use std::sync::Arc;
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::memory::{CMem, QMem};
+use cqam_core::quantum_backend::{QRegHandle, QuantumBackend};
 use cqam_core::register::{IntRegFile, FloatRegFile, ComplexRegFile, HybridRegFile};
-use cqam_sim::quantum_register::QuantumRegister;
-use rand::SeedableRng;
-use rand_chacha::ChaCha8Rng;
 use crate::isr::IsrTable;
 use crate::resource::ResourceTracker;
 use crate::psw::ProgramStateWord;
-use crate::simconfig::QuantumFidelityThreshold;
+use cqam_core::config::VmConfig;
 use crate::thread_pool::SharedMemory;
 
 /// The complete execution state of the CQAM virtual machine.
@@ -43,16 +41,16 @@ pub struct ExecutionContext {
     /// Hybrid register file: H0-H7 (8 x HybridValue).
     pub hregs: HybridRegFile,
 
-    /// Quantum register file: Q0-Q7 (8 x `Option<QuantumRegister>`).
+    /// Quantum register file: Q0-Q7 (8 x `Option<QRegHandle>`).
     /// Separate from QMEM. These are the "live" quantum registers
     /// that QPREP, QKERNEL, and QOBSERVE operate on.
-    pub qregs: [Option<QuantumRegister>; 8],
+    pub qregs: [Option<QRegHandle>; 8],
 
     /// Classical memory: 65536 cells of i64.
     pub cmem: CMem,
 
-    /// Quantum memory: 256 slots of QuantumRegister.
-    pub qmem: QMem<QuantumRegister>,
+    /// Quantum memory: 256 slots of QRegHandle.
+    pub qmem: QMem<QRegHandle>,
 
     /// Call stack for CALL/RET instructions.
     /// Each entry is the return address (PC value to resume at).
@@ -61,8 +59,8 @@ pub struct ExecutionContext {
     /// Program status word (condition flags, trap flags).
     pub psw: ProgramStateWord,
 
-    /// Quantum fidelity thresholds for interrupt generation.
-    pub config: QuantumFidelityThreshold,
+    /// VM configuration: fidelity thresholds, qubit defaults, backend flags.
+    pub config: VmConfig,
 
     /// ISR vector table for trap handler dispatch.
     pub isr_table: IsrTable,
@@ -71,15 +69,14 @@ pub struct ExecutionContext {
     pub resource_tracker: ResourceTracker,
 
     /// The program being executed (IR form: one `Instruction` per word).
-    pub program: Vec<Instruction>,
+    /// Stored in `Arc` so the execution loop can hold an immutable reference
+    /// to the program while mutating the rest of the context, avoiding
+    /// per-cycle instruction clones.
+    pub program: Arc<[Instruction]>,
 
     /// Label resolution cache: label name -> instruction index.
     /// Populated once during construction by `resolve_labels()`.
     pub labels: HashMap<String, usize>,
-
-    /// Seedable random number generator for reproducible measurements.
-    /// Use `set_rng_seed` to make measurement sequences deterministic.
-    pub rng: ChaCha8Rng,
 
     /// Thread identity (0 = primary/single-threaded, 1..N-1 = workers).
     pub thread_id: u16,
@@ -94,7 +91,7 @@ pub struct ExecutionContext {
     pub shared_region: Option<(u16, u16)>,
 
     /// Whether this thread should skip instructions until HATME (non-leader in SPMD).
-    pub skip_to_hatme: bool,
+    pub(crate) skip_to_hatme: bool,
 
     /// Reference to shared memory (set during HFORK, None otherwise).
     /// All threads in a parallel region share the same SharedMemory instance.
@@ -107,6 +104,7 @@ impl ExecutionContext {
     /// Initializes all register files to zero/empty, allocates memory,
     /// and resolves all labels in the program.
     pub fn new(program: Vec<Instruction>) -> Self {
+        let program: Arc<[Instruction]> = program.into();
         let mut ctx = Self {
             pc: 0,
             iregs: IntRegFile::new(),
@@ -118,11 +116,10 @@ impl ExecutionContext {
             qmem: QMem::new(),
             call_stack: Vec::new(),
             psw: ProgramStateWord::new(),
-            config: QuantumFidelityThreshold::default(),
+            config: VmConfig::default(),
             isr_table: IsrTable::new(),
             resource_tracker: ResourceTracker::new(),
             labels: HashMap::new(),
-            rng: ChaCha8Rng::from_entropy(),
             thread_id: 0,
             thread_count: 1,
             in_atomic_section: false,
@@ -135,9 +132,22 @@ impl ExecutionContext {
         ctx
     }
 
-    /// Set a deterministic seed for reproducible measurement sequences.
-    pub fn set_rng_seed(&mut self, seed: u64) {
-        self.rng = ChaCha8Rng::seed_from_u64(seed);
+    /// Store a new handle in a Q register, releasing any previous handle via the backend.
+    pub fn set_qreg<B: QuantumBackend + ?Sized>(
+        &mut self,
+        idx: u8,
+        handle: QRegHandle,
+        backend: &mut B,
+    ) {
+        if let Some(old) = self.qregs[idx as usize].take() {
+            backend.release(old);
+        }
+        self.qregs[idx as usize] = Some(handle);
+    }
+
+    /// Take a handle from a Q register (for destructive operations).
+    pub fn take_qreg(&mut self, idx: u8) -> Option<QRegHandle> {
+        self.qregs[idx as usize].take()
     }
 
     /// Advance the program counter by one.
@@ -187,6 +197,73 @@ impl ExecutionContext {
     /// the top-level, which should be treated as HALT).
     pub fn pop_call(&mut self) -> Option<usize> {
         self.call_stack.pop()
+    }
+
+    // =========================================================================
+    // Shared-memory-aware classical memory access
+    // =========================================================================
+
+    /// Load an i64 from classical memory, checking shared memory first.
+    ///
+    /// If `shared_memory` is set and the address falls within the shared region,
+    /// the value is read from shared memory (snapshot outside atomic sections,
+    /// live data inside). Otherwise falls back to local CMEM.
+    pub fn cmem_load(&self, addr: u16) -> i64 {
+        if let Some(ref sm) = self.shared_memory {
+            if let Some(val) = sm.read(addr, self.in_atomic_section) {
+                return val;
+            }
+        }
+        self.cmem.load(addr)
+    }
+
+    /// Store an i64 to classical memory, respecting shared-memory constraints.
+    ///
+    /// If `shared_memory` is set and the address falls within the shared region,
+    /// writes are only permitted inside an atomic section (HATMS/HATME).
+    /// Returns `Err(CqamError::SharedMemoryViolation)` on illegal writes.
+    pub fn cmem_store(&mut self, addr: u16, val: i64) -> Result<(), CqamError> {
+        if let Some(ref sm) = self.shared_memory {
+            if sm.contains(addr) {
+                if self.in_atomic_section {
+                    sm.write(addr, val).ok_or(CqamError::SharedMemoryViolation {
+                        address: addr,
+                        thread_id: self.thread_id,
+                    })?;
+                } else {
+                    return Err(CqamError::SharedMemoryViolation {
+                        address: addr,
+                        thread_id: self.thread_id,
+                    });
+                }
+                return Ok(());
+            }
+        }
+        self.cmem.store(addr, val);
+        Ok(())
+    }
+
+    /// Load an f64 from classical memory (stored as bit-cast i64).
+    pub fn cmem_load_f64(&self, addr: u16) -> f64 {
+        f64::from_bits(self.cmem_load(addr) as u64)
+    }
+
+    /// Store an f64 to classical memory (stored as bit-cast i64).
+    pub fn cmem_store_f64(&mut self, addr: u16, val: f64) -> Result<(), CqamError> {
+        self.cmem_store(addr, val.to_bits() as i64)
+    }
+
+    /// Load a complex (f64, f64) from two consecutive classical memory cells.
+    pub fn cmem_load_c64(&self, addr: u16) -> (f64, f64) {
+        let re = self.cmem_load_f64(addr);
+        let im = self.cmem_load_f64(addr.wrapping_add(1));
+        (re, im)
+    }
+
+    /// Store a complex (f64, f64) to two consecutive classical memory cells.
+    pub fn cmem_store_c64(&mut self, addr: u16, val: (f64, f64)) -> Result<(), CqamError> {
+        self.cmem_store_f64(addr, val.0)?;
+        self.cmem_store_f64(addr.wrapping_add(1), val.1)
     }
 
     /// Scan the program for Label instructions and populate the label cache.

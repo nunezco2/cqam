@@ -18,7 +18,7 @@ use crate::statevector::Statevector;
 use crate::kernel::Kernel;
 use rayon::prelude::*;
 
-const PAR_THRESHOLD: usize = 256;
+use crate::constants::PAR_THRESHOLD;
 
 /// Diagonal rotation kernel parameterized by angle theta.
 ///
@@ -43,7 +43,7 @@ impl Kernel for Rotate {
         Ok(result)
     }
 
-    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, String> {
+    fn apply_sv(&self, input: &Statevector) -> Result<Statevector, CqamError> {
         let dim = input.dimension();
         let amps = input.amplitudes();
         let theta = self.theta;

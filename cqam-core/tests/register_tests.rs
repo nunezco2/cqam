@@ -183,7 +183,7 @@ fn test_hybrid_value_complex() {
 
 #[test]
 fn test_hybrid_value_dist() {
-    let val = HybridValue::Dist(vec![(0u16, 0.5), (1, 0.5)]);
+    let val = HybridValue::Dist(vec![(0u32, 0.5), (1, 0.5)]);
     if let HybridValue::Dist(ref d) = val {
         assert_eq!(d.len(), 2);
     } else {
@@ -209,11 +209,11 @@ fn test_hybrid_reg_file_set_int() {
 #[test]
 fn test_hybrid_reg_file_set_dist() {
     let mut regs = HybridRegFile::new();
-    let dist = vec![(0u16, 0.5), (1, 0.3), (2, 0.2)];
+    let dist = vec![(0u32, 0.5), (1, 0.3), (2, 0.2)];
     regs.set(3, HybridValue::Dist(dist.clone())).unwrap();
     if let HybridValue::Dist(d) = regs.get(3).unwrap() {
         assert_eq!(d.len(), 3);
-        assert_eq!(d[0], (0u16, 0.5));
+        assert_eq!(d[0], (0u32, 0.5));
     } else {
         panic!("Expected HybridValue::Dist");
     }

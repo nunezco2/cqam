@@ -575,7 +575,7 @@ fn test_parse_label() {
 fn test_parse_qprep() {
     assert_eq!(
         parse_instruction("QPREP Q0, 0").unwrap(),
-        Instruction::QPrep { dst: 0, dist: 0 }
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform }
     );
 }
 
@@ -583,7 +583,7 @@ fn test_parse_qprep() {
 fn test_parse_qprep_bell() {
     assert_eq!(
         parse_instruction("QPREP Q1, 2").unwrap(),
-        Instruction::QPrep { dst: 1, dist: 2 }
+        Instruction::QPrep { dst: 1, dist: DistId::Bell }
     );
 }
 
@@ -591,7 +591,7 @@ fn test_parse_qprep_bell() {
 fn test_parse_qkernel() {
     assert_eq!(
         parse_instruction("QKERNEL ENTG, Q1, Q0, R2, R3").unwrap(),
-        Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 2, ctx1: 3 }
+        Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 2, ctx1: 3 }
     );
 }
 
@@ -599,7 +599,7 @@ fn test_parse_qkernel() {
 fn test_parse_qobserve() {
     assert_eq!(
         parse_instruction("QOBSERVE H0, Q1").unwrap(),
-        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }
     );
 }
 
@@ -607,7 +607,7 @@ fn test_parse_qobserve() {
 fn test_parse_qsample() {
     assert_eq!(
         parse_instruction("QSAMPLE H0, Q1").unwrap(),
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 }
+        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }
     );
 }
 
@@ -615,7 +615,7 @@ fn test_parse_qsample() {
 fn test_parse_qsample_max_regs() {
     assert_eq!(
         parse_instruction("QSAMPLE H7, Q7").unwrap(),
-        Instruction::QSample { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 }
+        Instruction::QSample { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }
     );
 }
 
@@ -663,15 +663,15 @@ fn test_parse_hmerge() {
 fn test_parse_jmpf_by_name() {
     assert_eq!(
         parse_instruction("JMPF QF, THEN").unwrap(),
-        Instruction::JmpF { flag: 4, target: "THEN".into() }
+        Instruction::JmpF { flag: FlagId::Qf, target: "THEN".into() }
     );
     assert_eq!(
         parse_instruction("JMPF EF, LABEL").unwrap(),
-        Instruction::JmpF { flag: 6, target: "LABEL".into() }
+        Instruction::JmpF { flag: FlagId::Ef, target: "LABEL".into() }
     );
     assert_eq!(
         parse_instruction("JMPF IF, DONE").unwrap(),
-        Instruction::JmpF { flag: 12, target: "DONE".into() }
+        Instruction::JmpF { flag: FlagId::If, target: "DONE".into() }
     );
 }
 
@@ -680,7 +680,7 @@ fn test_parse_jmpf_by_number() {
     // Numeric IDs still accepted for backward compatibility
     assert_eq!(
         parse_instruction("JMPF 4, THEN").unwrap(),
-        Instruction::JmpF { flag: 4, target: "THEN".into() }
+        Instruction::JmpF { flag: FlagId::Qf, target: "THEN".into() }
     );
 }
 
@@ -688,7 +688,7 @@ fn test_parse_jmpf_by_number() {
 fn test_parse_hreduce() {
     assert_eq!(
         parse_instruction("HREDUCE ROUND, H0, R1").unwrap(),
-        Instruction::HReduce { src: 0, dst: 1, func: 0 }
+        Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::Round }
     );
 }
 
@@ -724,7 +724,7 @@ fn test_parse_max_complex_register() {
 fn test_parse_max_quantum_register() {
     assert_eq!(
         parse_instruction("QPREP Q7, 0").unwrap(),
-        Instruction::QPrep { dst: 7, dist: 0 }
+        Instruction::QPrep { dst: 7, dist: DistId::Uniform }
     );
 }
 
@@ -732,7 +732,7 @@ fn test_parse_max_quantum_register() {
 fn test_parse_max_hybrid_register() {
     assert_eq!(
         parse_instruction("QOBSERVE H7, Q7").unwrap(),
-        Instruction::QObserve { dst_h: 7, src_q: 7, mode: 0, ctx0: 0, ctx1: 0 }
+        Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }
     );
 }
 
@@ -848,10 +848,10 @@ HALT
 ";
     let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
-    assert_eq!(program[0], Instruction::QPrep { dst: 0, dist: 0 });
-    assert_eq!(program[1], Instruction::QKernel { dst: 1, src: 0, kernel: 1, ctx0: 0, ctx1: 1 });
-    assert_eq!(program[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 });
-    assert_eq!(program[3], Instruction::HReduce { src: 0, dst: 2, func: 12 });
+    assert_eq!(program[0], Instruction::QPrep { dst: 0, dist: DistId::Uniform });
+    assert_eq!(program[1], Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 0, ctx1: 1 });
+    assert_eq!(program[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 });
+    assert_eq!(program[3], Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::Argmax });
     assert_eq!(program[4], Instruction::Halt);
 }
 
@@ -1016,15 +1016,15 @@ fn test_parse_jmp_to_label_with_digits() {
 fn test_parse_qkernelf() {
     assert_eq!(
         parse_instruction("QKERNELF DROT, Q1, Q0, F3, F4").unwrap(),
-        Instruction::QKernelF { dst: 1, src: 0, kernel: 5, fctx0: 3, fctx1: 4 }
+        Instruction::QKernelF { dst: 1, src: 0, kernel: KernelId::Rotate, fctx0: 3, fctx1: 4 }
     );
 }
 
 #[test]
 fn test_parse_qkernelf_max_regs() {
     assert_eq!(
-        parse_instruction("QKERNELF 31, Q7, Q7, F15, F15").unwrap(),
-        Instruction::QKernelF { dst: 7, src: 7, kernel: 31, fctx0: 15, fctx1: 15 }
+        parse_instruction("QKERNELF PERM, Q7, Q7, F15, F15").unwrap(),
+        Instruction::QKernelF { dst: 7, src: 7, kernel: KernelId::Permutation, fctx0: 15, fctx1: 15 }
     );
 }
 
@@ -1032,7 +1032,7 @@ fn test_parse_qkernelf_max_regs() {
 fn test_parse_qkernelf_zero_values() {
     assert_eq!(
         parse_instruction("QKERNELF UNIT, Q0, Q0, F0, F0").unwrap(),
-        Instruction::QKernelF { dst: 0, src: 0, kernel: 0, fctx0: 0, fctx1: 0 }
+        Instruction::QKernelF { dst: 0, src: 0, kernel: KernelId::Init, fctx0: 0, fctx1: 0 }
     );
 }
 
@@ -1056,15 +1056,15 @@ fn test_parse_qkernelf_invalid_register() {
 fn test_parse_qkernelz() {
     assert_eq!(
         parse_instruction("QKERNELZ PHSH, Q1, Q0, Z2, Z3").unwrap(),
-        Instruction::QKernelZ { dst: 1, src: 0, kernel: 6, zctx0: 2, zctx1: 3 }
+        Instruction::QKernelZ { dst: 1, src: 0, kernel: KernelId::PhaseShift, zctx0: 2, zctx1: 3 }
     );
 }
 
 #[test]
 fn test_parse_qkernelz_max_regs() {
     assert_eq!(
-        parse_instruction("QKERNELZ 31, Q7, Q7, Z15, Z15").unwrap(),
-        Instruction::QKernelZ { dst: 7, src: 7, kernel: 31, zctx0: 15, zctx1: 15 }
+        parse_instruction("QKERNELZ PERM, Q7, Q7, Z15, Z15").unwrap(),
+        Instruction::QKernelZ { dst: 7, src: 7, kernel: KernelId::Permutation, zctx0: 15, zctx1: 15 }
     );
 }
 
@@ -1072,7 +1072,7 @@ fn test_parse_qkernelz_max_regs() {
 fn test_parse_qkernelz_zero_values() {
     assert_eq!(
         parse_instruction("QKERNELZ UNIT, Q0, Q0, Z0, Z0").unwrap(),
-        Instruction::QKernelZ { dst: 0, src: 0, kernel: 0, zctx0: 0, zctx1: 0 }
+        Instruction::QKernelZ { dst: 0, src: 0, kernel: KernelId::Init, zctx0: 0, zctx1: 0 }
     );
 }
 
@@ -1104,7 +1104,7 @@ HALT
 ";
     let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 6);
-    assert_eq!(program[3], Instruction::QKernelF { dst: 1, src: 0, kernel: 5, fctx0: 0, fctx1: 1 });
+    assert_eq!(program[3], Instruction::QKernelF { dst: 1, src: 0, kernel: KernelId::Rotate, fctx0: 0, fctx1: 1 });
 }
 
 #[test]
@@ -1119,7 +1119,7 @@ HALT
 ";
     let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 6);
-    assert_eq!(program[3], Instruction::QKernelZ { dst: 1, src: 0, kernel: 6, zctx0: 0, zctx1: 1 });
+    assert_eq!(program[3], Instruction::QKernelZ { dst: 1, src: 0, kernel: KernelId::PhaseShift, zctx0: 0, zctx1: 1 });
 }
 
 // ===========================================================================
@@ -1161,7 +1161,7 @@ fn test_parse_qprepr_invalid_register() {
 fn test_parse_qencode_r_file() {
     assert_eq!(
         parse_instruction("QENCODE Q0, R0, 4, 0").unwrap(),
-        Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: 0 }
+        Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: FileSel::RFile }
     );
 }
 
@@ -1169,7 +1169,7 @@ fn test_parse_qencode_r_file() {
 fn test_parse_qencode_f_file() {
     assert_eq!(
         parse_instruction("QENCODE Q1, F2, 2, 1").unwrap(),
-        Instruction::QEncode { dst: 1, src_base: 2, count: 2, file_sel: 1 }
+        Instruction::QEncode { dst: 1, src_base: 2, count: 2, file_sel: FileSel::FFile }
     );
 }
 
@@ -1177,7 +1177,7 @@ fn test_parse_qencode_f_file() {
 fn test_parse_qencode_z_file() {
     assert_eq!(
         parse_instruction("QENCODE Q3, Z0, 8, 2").unwrap(),
-        Instruction::QEncode { dst: 3, src_base: 0, count: 8, file_sel: 2 }
+        Instruction::QEncode { dst: 3, src_base: 0, count: 8, file_sel: FileSel::ZFile }
     );
 }
 
@@ -1220,7 +1220,7 @@ HALT
 ";
     let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
-    assert_eq!(program[2], Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: 1 });
+    assert_eq!(program[2], Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: FileSel::FFile });
 }
 
 // =============================================================================
@@ -1292,7 +1292,7 @@ HALT
     let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
     assert_eq!(program[2], Instruction::QHadM { dst: 0, src: 0, mask_reg: 0 });
-    assert_eq!(program[3], Instruction::QObserve { dst_h: 0, src_q: 0, mode: 0, ctx0: 0, ctx1: 0 });
+    assert_eq!(program[3], Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 });
 }
 
 // ===========================================================================
@@ -1371,7 +1371,7 @@ fn test_parse_qcnot_too_many_operands() {
 fn test_parse_qrot_x_axis() {
     assert_eq!(
         parse_instruction("QROT Q0, Q1, R2, X, F3").unwrap(),
-        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 0, angle_freg: 3 }
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: RotAxis::X, angle_freg: 3 }
     );
 }
 
@@ -1379,7 +1379,7 @@ fn test_parse_qrot_x_axis() {
 fn test_parse_qrot_y_axis() {
     assert_eq!(
         parse_instruction("QROT Q0, Q1, R2, Y, F3").unwrap(),
-        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 1, angle_freg: 3 }
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: RotAxis::Y, angle_freg: 3 }
     );
 }
 
@@ -1387,7 +1387,7 @@ fn test_parse_qrot_y_axis() {
 fn test_parse_qrot_z_axis() {
     assert_eq!(
         parse_instruction("QROT Q0, Q1, R2, Z, F3").unwrap(),
-        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 2, angle_freg: 3 }
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: RotAxis::Z, angle_freg: 3 }
     );
 }
 
@@ -1395,7 +1395,7 @@ fn test_parse_qrot_z_axis() {
 fn test_parse_qrot_numeric_axis() {
     assert_eq!(
         parse_instruction("QROT Q0, Q1, R2, 0, F3").unwrap(),
-        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: 0, angle_freg: 3 }
+        Instruction::QRot { dst: 0, src: 1, qubit_reg: 2, axis: RotAxis::X, angle_freg: 3 }
     );
 }
 
@@ -1514,7 +1514,7 @@ fn test_parse_qmixed_error() {
 fn test_parse_qprepn() {
     assert_eq!(
         parse_instruction("QPREPN Q0, 1, R2").unwrap(),
-        Instruction::QPrepN { dst: 0, dist: 1, qubit_count_reg: 2 }
+        Instruction::QPrepN { dst: 0, dist: DistId::Zero, qubit_count_reg: 2 }
     );
 }
 

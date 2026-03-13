@@ -5,7 +5,7 @@
 #![allow(dead_code)]
 
 use cqam_core::register::HybridValue;
-use cqam_sim::quantum_register::QuantumRegister;
+use cqam_core::quantum_backend::QRegHandle;
 
 /// Format an integer register value.
 ///
@@ -65,13 +65,11 @@ pub fn format_hybrid(value: &HybridValue) -> String {
 ///
 /// Returns a compact description:
 /// - `None` -> "---"
-/// - `Some(Pure)` -> "Pure(Nq)"
-/// - `Some(Mixed)` -> "Mixed(Nq)"
-pub fn format_qreg_summary(qreg: &Option<QuantumRegister>) -> String {
+/// - `Some(handle)` -> "Handle(N)"
+pub fn format_qreg_summary(qreg: &Option<QRegHandle>) -> String {
     match qreg {
         None => "---".to_string(),
-        Some(QuantumRegister::Pure(sv)) => format!("Pure({}q)", sv.num_qubits()),
-        Some(QuantumRegister::Mixed(dm)) => format!("Mixed({}q)", dm.num_qubits()),
+        Some(handle) => format!("Handle({})", handle.0),
     }
 }
 

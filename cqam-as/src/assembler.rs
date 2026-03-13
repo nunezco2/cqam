@@ -497,7 +497,7 @@ mod tests {
     #[test]
     fn test_strip_jmpf_target_resolved() {
         let program = vec![
-            Instruction::JmpF { flag: 0, target: "branch".to_string() },
+            Instruction::JmpF { flag: cqam_core::instruction::FlagId::Zf, target: "branch".to_string() },
             Instruction::Halt,
             Instruction::Label("branch".to_string()),
             Instruction::HMerge,

@@ -7,7 +7,7 @@ use cqam_as::assembler::{
     AssemblyOptions, AssemblyResult,
 };
 use cqam_as::binary::{read_cqb, write_cqb};
-use cqam_core::instruction::Instruction;
+use cqam_core::instruction::*;
 use cqam_core::opcode;
 
 // =============================================================================
@@ -150,10 +150,10 @@ fn test_roundtrip_no_operand_instructions() {
 #[test]
 fn test_roundtrip_quantum_ops() {
     let cases: Vec<Instruction> = vec![
-        Instruction::QPrep { dst: 0, dist: 0 },
-        Instruction::QPrep { dst: 7, dist: 3 },
-        Instruction::QKernel { dst: 1, src: 2, kernel: 4, ctx0: 3, ctx1: 4 },
-        Instruction::QObserve { dst_h: 0, src_q: 1, mode: 0, ctx0: 0, ctx1: 0 },
+        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
+        Instruction::QPrep { dst: 7, dist: DistId::Ghz },
+        Instruction::QKernel { dst: 1, src: 2, kernel: KernelId::GroverIter, ctx0: 3, ctx1: 4 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::QLoad { dst_q: 3, addr: 255 },
         Instruction::QStore { src_q: 7, addr: 0 },
     ];
@@ -167,7 +167,7 @@ fn test_roundtrip_quantum_ops() {
 
 #[test]
 fn test_roundtrip_hreduce() {
-    let instr = Instruction::HReduce { src: 2, dst: 5, func: 10 };
+    let instr = Instruction::HReduce { src: 2, dst: 5, func: ReduceFn::Mean };
     let result = assemble_ok(vec![instr.clone()]);
     let decoded = decode_ok(result.code[0]);
     assert_eq!(decoded, instr);
@@ -235,7 +235,7 @@ fn test_jif_label_resolution() {
 #[test]
 fn test_jmpf_label_resolution() {
     let program = vec![
-        Instruction::JmpF { flag: 0, target: "branch".to_string() },
+        Instruction::JmpF { flag: FlagId::Zf, target: "branch".to_string() },
         Instruction::Halt,
         Instruction::Label("branch".to_string()),
         Instruction::HMerge,
@@ -487,7 +487,7 @@ fn test_strip_jmpf_decoded_target_correct() {
     // LABEL branch      (idx 2, labels_before=0, stripped=2)
     // HMERGE            (idx 3, stripped pos 2)
     let program = vec![
-        Instruction::JmpF { flag: 0, target: "branch".to_string() },
+        Instruction::JmpF { flag: FlagId::Zf, target: "branch".to_string() },
         Instruction::Halt,
         Instruction::Label("branch".to_string()),
         Instruction::HMerge,
@@ -498,7 +498,7 @@ fn test_strip_jmpf_decoded_target_correct() {
     let decoded = decode_ok(result.code[0]);
     assert_eq!(
         decoded,
-        Instruction::JmpF { flag: 0, target: "@2".to_string() }
+        Instruction::JmpF { flag: FlagId::Zf, target: "@2".to_string() }
     );
 }
 
@@ -666,7 +666,7 @@ fn test_strip_complex_program_all_branch_types() {
         Instruction::Halt,
         Instruction::Label("sub".to_string()),
         Instruction::ILdi { dst: 1, imm: 99 },
-        Instruction::JmpF { flag: 0, target: "end".to_string() },
+        Instruction::JmpF { flag: FlagId::Zf, target: "end".to_string() },
         Instruction::Ret,
     ];
 
@@ -697,7 +697,7 @@ fn test_strip_complex_program_all_branch_types() {
     let jmpf = decode_ok(result.code[6]);
     assert_eq!(
         jmpf,
-        Instruction::JmpF { flag: 0, target: "@4".to_string() }
+        Instruction::JmpF { flag: FlagId::Zf, target: "@4".to_string() }
     );
 
     // .cqb round-trip should preserve everything

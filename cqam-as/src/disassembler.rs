@@ -158,12 +158,7 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::ICCfg { dst } => format!("ICCFG R{}", dst),
         Instruction::ITid { dst } => format!("ITID R{}", dst),
         Instruction::Ecall { proc_id } => {
-            let name = cqam_core::instruction::proc_id_name(*proc_id);
-            if name != "unknown" {
-                format!("ECALL {}", name)
-            } else {
-                format!("ECALL {}", proc_id)
-            }
+            format!("ECALL {}", proc_id.name())
         }
 
         // Control flow
@@ -176,32 +171,34 @@ fn format_instruction(instr: &Instruction) -> String {
         // Quantum
         Instruction::QPrep { dst, dist } => format!("QPREP Q{}, {}", dst, dist),
         Instruction::QKernel { dst, src, kernel, ctx0, ctx1 } => {
-            format!("QKERNEL {}, Q{}, Q{}, R{}, R{}", cqam_core::instruction::kernel_mnemonic(*kernel), dst, src, ctx0, ctx1)
+            format!("QKERNEL {}, Q{}, Q{}, R{}, R{}", kernel.mnemonic(), dst, src, ctx0, ctx1)
         }
         Instruction::QKernelF { dst, src, kernel, fctx0, fctx1 } => {
-            format!("QKERNELF {}, Q{}, Q{}, F{}, F{}", cqam_core::instruction::kernel_mnemonic(*kernel), dst, src, fctx0, fctx1)
+            format!("QKERNELF {}, Q{}, Q{}, F{}, F{}", kernel.mnemonic(), dst, src, fctx0, fctx1)
         }
         Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 } => {
-            format!("QKERNELZ {}, Q{}, Q{}, Z{}, Z{}", cqam_core::instruction::kernel_mnemonic(*kernel), dst, src, zctx0, zctx1)
+            format!("QKERNELZ {}, Q{}, Q{}, Z{}, Z{}", kernel.mnemonic(), dst, src, zctx0, zctx1)
         }
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if *mode == 0 && *ctx0 == 0 && *ctx1 == 0 {
+            use cqam_core::instruction::ObserveMode;
+            if *mode == ObserveMode::Dist && *ctx0 == 0 && *ctx1 == 0 {
                 format!("QOBSERVE H{}, Q{}", dst_h, src_q)
-            } else if *mode == 3 {
+            } else if *mode == ObserveMode::Sample {
                 format!("QOBSERVE H{}, Q{}, SAMPLE", dst_h, src_q)
-            } else if *mode == 1 {
-                format!("QOBSERVE H{}, Q{}, {}, R{}", dst_h, src_q, mode, ctx0)
+            } else if *mode == ObserveMode::Prob {
+                format!("QOBSERVE H{}, Q{}, {}, R{}", dst_h, src_q, u8::from(*mode), ctx0)
             } else {
-                format!("QOBSERVE H{}, Q{}, {}, R{}, R{}", dst_h, src_q, mode, ctx0, ctx1)
+                format!("QOBSERVE H{}, Q{}, {}, R{}, R{}", dst_h, src_q, u8::from(*mode), ctx0, ctx1)
             }
         }
         Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if *mode == 0 && *ctx0 == 0 && *ctx1 == 0 {
+            use cqam_core::instruction::ObserveMode;
+            if *mode == ObserveMode::Dist && *ctx0 == 0 && *ctx1 == 0 {
                 format!("QSAMPLE H{}, Q{}", dst_h, src_q)
-            } else if *mode == 1 {
-                format!("QSAMPLE H{}, Q{}, {}, R{}", dst_h, src_q, mode, ctx0)
+            } else if *mode == ObserveMode::Prob {
+                format!("QSAMPLE H{}, Q{}, {}, R{}", dst_h, src_q, u8::from(*mode), ctx0)
             } else {
-                format!("QSAMPLE H{}, Q{}, {}, R{}, R{}", dst_h, src_q, mode, ctx0, ctx1)
+                format!("QSAMPLE H{}, Q{}, {}, R{}, R{}", dst_h, src_q, u8::from(*mode), ctx0, ctx1)
             }
         }
         Instruction::QLoad { dst_q, addr } => format!("QLOAD Q{}, {}", dst_q, addr),
@@ -238,13 +235,7 @@ fn format_instruction(instr: &Instruction) -> String {
             format!("QSWAP Q{}, Q{}, R{}, R{}", dst, src, qubit_a_reg, qubit_b_reg)
         }
         Instruction::QEncode { dst, src_base, count, file_sel } => {
-            let file_prefix = match file_sel {
-                0 => "R",
-                1 => "F",
-                2 => "Z",
-                _ => "?",
-            };
-            format!("QENCODE Q{}, {}{}, {}, {}", dst, file_prefix, src_base, count, file_sel)
+            format!("QENCODE Q{}, {}{}, {}, {}", dst, file_sel.name(), src_base, count, u8::from(*file_sel))
         }
 
         // Mixed-state, partial-trace, reset, and float math instructions
@@ -271,10 +262,10 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::HAtmS => "HATMS".to_string(),
         Instruction::HAtmE => "HATME".to_string(),
         Instruction::JmpF { flag, target } => {
-            format!("JMPF {}, {}", cqam_core::instruction::flag_name(*flag), target)
+            format!("JMPF {}, {}", flag.mnemonic(), target)
         }
         Instruction::HReduce { src, dst, func } => {
-            format!("HREDUCE {}, H{}, R{}", cqam_core::instruction::reduce_fn_mnemonic(*func), src, dst)
+            format!("HREDUCE {}, H{}, R{}", func.mnemonic(), src, dst)
         }
 
         // Interrupt handling
@@ -292,6 +283,7 @@ fn format_instruction(instr: &Instruction) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cqam_core::instruction::KernelId;
 
     #[test]
     fn test_format_nop() {
@@ -313,7 +305,7 @@ mod tests {
     #[test]
     fn test_format_qkernel() {
         let instr = Instruction::QKernel {
-            dst: 1, src: 0, kernel: 2, ctx0: 3, ctx1: 4,
+            dst: 1, src: 0, kernel: KernelId::Fourier, ctx0: 3, ctx1: 4,
         };
         assert_eq!(format_instruction(&instr), "QKERNEL QFFT, Q1, Q0, R3, R4");
     }
