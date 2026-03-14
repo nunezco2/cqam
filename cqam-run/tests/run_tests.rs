@@ -13,7 +13,8 @@ fn test_no_double_pc_advance() {
         Instruction::IAdd { dst: 3, lhs: 1, rhs: 2 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.pc, 3, "PC should be 3 after executing 3 instructions");
     assert_eq!(ctx.iregs.get(1).unwrap(), 42);
@@ -30,7 +31,8 @@ fn test_pc_advance_with_jump() {
         Instruction::ILdi { dst: 2, imm: 42 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 0, "R1 should be 0 (instruction was skipped)");
     assert_eq!(ctx.iregs.get(2).unwrap(), 42);
@@ -48,7 +50,8 @@ fn test_call_ret_flow() {
         Instruction::Ret,
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 42, "R1 should be set in FUNC");
     assert_eq!(ctx.iregs.get(0).unwrap(), 100, "R0 should be set after return");
@@ -65,7 +68,8 @@ fn test_jif_conditional_execution() {
         Instruction::ILdi { dst: 2, imm: 42 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(1).unwrap(), 0, "R1 should not be set (skipped)");
     assert_eq!(ctx.iregs.get(2).unwrap(), 42, "R2 should be set after skip");
@@ -79,7 +83,8 @@ fn test_halt_terminates_execution() {
         Instruction::ILdi { dst: 1, imm: 999 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(0).unwrap(), 1);
     assert_eq!(ctx.iregs.get(1).unwrap(), 0, "R1 should not be set (after HALT)");
@@ -96,7 +101,8 @@ fn test_arithmetic_with_memory() {
         Instruction::ILdm { dst: 3, addr: 100 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(2).unwrap(), 30);
     assert_eq!(ctx.iregs.get(3).unwrap(), 30);
@@ -113,7 +119,8 @@ fn test_division_by_zero_halts_via_isr() {
         Instruction::IDiv { dst: 2, lhs: 0, rhs: 1 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
     // Division by zero sets trap_arith, ISR dispatch (no handler) sets trap_halt
     assert!(ctx.psw.trap_halt);
     assert_eq!(ctx.iregs.get(2).unwrap(), 0); // safe default
@@ -138,9 +145,11 @@ fn test_max_cycles_enforcement() {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     };
 
-    let ctx = run_program_with_config(program, &config).unwrap();
+    let result = run_program_with_config(program, &config).unwrap();
+    let ctx = result.ctx();
 
     // The program should have been halted by max_cycles enforcement
     assert!(
@@ -166,9 +175,11 @@ fn test_max_cycles_allows_short_programs() {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     };
 
-    let ctx = run_program_with_config(program, &config).unwrap();
+    let result = run_program_with_config(program, &config).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(2).unwrap(), 49);
     assert_eq!(ctx.pc, 3);
@@ -182,7 +193,8 @@ fn test_run_program_with_default_config() {
         Instruction::Halt,
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
     assert_eq!(ctx.iregs.get(0).unwrap(), 100);
     assert!(ctx.psw.trap_halt);
 }
@@ -207,7 +219,8 @@ fn test_setiv_div_by_zero_handler_executes_and_reti_resumes() {
         Instruction::Reti,
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert_eq!(ctx.iregs.get(15).unwrap(), 99, "Handler should have run");
     assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should resume after handler");
@@ -225,7 +238,8 @@ fn test_unregistered_trap_falls_through_to_halt() {
         Instruction::ILdi { dst: 3, imm: 999 }, // should NOT execute
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Should halt on unhandled trap");
     assert_eq!(ctx.iregs.get(3).unwrap(), 0, "Should not reach instruction after trap");
@@ -249,9 +263,11 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     };
 
-    let ctx = run_program_with_config(program, &config).unwrap();
+    let result = run_program_with_config(program, &config).unwrap();
+    let ctx = result.ctx();
 
     assert!(!ctx.psw.trap_halt, "Should NOT halt when interrupts disabled");
     assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should continue");
@@ -266,7 +282,8 @@ fn test_reti_with_empty_call_stack_halts() {
         Instruction::ILdi { dst: 1, imm: 999 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt);
     assert_eq!(ctx.iregs.get(1).unwrap(), 0, "Should not execute after RETI-halt");
@@ -294,9 +311,11 @@ fn test_fidelity_threshold_wiring() {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     };
 
-    let ctx = run_program_with_config(program, &config).unwrap();
+    let result = run_program_with_config(program, &config).unwrap();
+    let ctx = result.ctx();
 
     assert!((ctx.config.min_purity - 0.85).abs() < f64::EPSILON);
 }
@@ -322,7 +341,8 @@ fn test_imod_by_zero_halts_via_isr() {
         Instruction::IMod { dst: 2, lhs: 0, rhs: 1 },
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
     assert!(ctx.psw.trap_halt, "IMod by zero should halt via ISR default");
     assert_eq!(ctx.iregs.get(2).unwrap(), 0, "IMod by zero should set dst to 0");
 }
@@ -346,7 +366,8 @@ fn test_setiv_overwrites_previous_handler() {
         Instruction::Reti,
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
     assert_eq!(ctx.iregs.get(15).unwrap(), 22, "Second handler should have run (overwrite)");
     assert!(ctx.psw.trap_halt, "Should halt normally");
 }
@@ -366,7 +387,8 @@ fn test_imod_by_zero_with_handler_resumes() {
         Instruction::Reti,
     ];
 
-    let ctx = run_program(program).unwrap();
+    let result = run_program(program).unwrap();
+    let ctx = result.ctx();
     assert_eq!(ctx.iregs.get(15).unwrap(), 99, "Handler should have run");
     assert_eq!(ctx.iregs.get(3).unwrap(), 77, "Execution should resume after handler");
 }
@@ -389,11 +411,13 @@ fn test_pragma_qubits_applied() {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     };
 
-    let ctx = run_program_with_config_and_metadata(
+    let result = run_program_with_config_and_metadata(
         parsed.instructions, &config, &parsed.metadata,
     ).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     assert!(ctx.qregs[0].is_some(), "Q0 should be prepared");
@@ -416,11 +440,13 @@ fn test_cli_overrides_pragma() {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     };
 
-    let ctx = run_program_with_config_and_metadata(
+    let result = run_program_with_config_and_metadata(
         parsed.instructions, &config, &parsed.metadata,
     ).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     assert!(ctx.qregs[0].is_some(), "Q0 should be prepared");

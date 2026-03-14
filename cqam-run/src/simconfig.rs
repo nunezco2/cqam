@@ -72,6 +72,13 @@ pub struct SimConfig {
     /// RNG seed for reproducible quantum measurements.
     /// Default: None (use entropy-based RNG).
     pub rng_seed: Option<u64>,
+
+    /// Number of shots for QPU-realistic sampling mode.
+    /// When set, measurement distributions are resampled N times
+    /// to produce shot histograms instead of exact distributions.
+    /// Default: None (exact simulation).
+    #[serde(default)]
+    pub shots: Option<u32>,
 }
 
 impl Default for SimConfig {
@@ -84,6 +91,7 @@ impl Default for SimConfig {
             force_density_matrix: false,
             default_threads: None,
             rng_seed: None,
+            shots: None,
         }
     }
 }

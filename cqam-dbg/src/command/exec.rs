@@ -582,6 +582,7 @@ fn copy_sim_config(c: &cqam_run::simconfig::SimConfig) -> cqam_run::simconfig::S
         force_density_matrix: c.force_density_matrix,
         default_threads: c.default_threads,
         rng_seed: c.rng_seed,
+        shots: c.shots,
     }
 }
 

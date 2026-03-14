@@ -7,6 +7,7 @@
 
 use crate::constants::{INT_REG_COUNT, FLOAT_REG_COUNT, COMPLEX_REG_COUNT, H_REG_COUNT};
 use crate::error::CqamError;
+use crate::shot::ShotHistogram;
 
 // =============================================================================
 // Integer register file: R0-R15
@@ -220,6 +221,9 @@ pub enum HybridValue {
     /// Each entry is (basis_state: u32, probability: f64).
     /// This is the primary output of QObserve.
     Dist(Vec<(u32, f64)>),
+
+    /// Shot histogram from QPU-realistic sampling.
+    Hist(ShotHistogram),
 }
 
 

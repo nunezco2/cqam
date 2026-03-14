@@ -58,6 +58,7 @@ pub fn format_hybrid(value: &HybridValue) -> String {
         HybridValue::Float(f) => format_float(*f),
         HybridValue::Complex(re, im) => format_complex(*re, *im),
         HybridValue::Dist(entries) => format!("Dist({})", entries.len()),
+        HybridValue::Hist(hist) => format!("Hist({} shots, {} outcomes)", hist.total_shots, hist.num_outcomes()),
     }
 }
 

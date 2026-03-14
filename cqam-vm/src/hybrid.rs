@@ -217,6 +217,13 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
                             };
                             $ctx.iregs.set($dst, ($body)(mean))?;
                         }
+                        HybridValue::Hist(ref hist) => {
+                            let entries = hist.to_dist();
+                            let mean: f64 = entries.iter()
+                                .map(|(val, prob)| *val as f64 * prob)
+                                .sum();
+                            $ctx.iregs.set($dst, ($body)(mean))?;
+                        }
                         HybridValue::Int(v) => {
                             $ctx.iregs.set($dst, ($body)(v as f64))?;
                         }
@@ -249,6 +256,10 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
                         HybridValue::Dist(ref entries) => {
                             $ctx.fregs.set($dst, ($body)(entries))?;
                         }
+                        HybridValue::Hist(ref hist) => {
+                            let entries = hist.to_dist();
+                            $ctx.fregs.set($dst, ($body)(&entries))?;
+                        }
                         HybridValue::Int(v) => {
                             $ctx.fregs.set($dst, v as f64)?;
                         }
@@ -267,6 +278,10 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
                     match $val {
                         HybridValue::Dist(ref entries) => {
                             $ctx.iregs.set($dst, ($body)(entries))?;
+                        }
+                        HybridValue::Hist(ref hist) => {
+                            let entries = hist.to_dist();
+                            $ctx.iregs.set($dst, ($body)(&entries))?;
                         }
                         HybridValue::Int(v) => {
                             $ctx.iregs.set($dst, v)?;
@@ -357,33 +372,39 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
                 }
 
                 ReduceFn::Expect => {
-                    if let HybridValue::Dist(ref entries) = hybrid_val {
-                        let base_addr = ctx.iregs.get(*dst)? as u16;
-
-                        let expectation = if entries.len() >= PAR_THRESHOLD {
-                            let cmem = &ctx.cmem;
-                            entries.par_iter().map(|(val, prob)| {
-                                let eigenvalue_addr = base_addr.wrapping_add(*val as u16);
-                                let eigenvalue = f64::from_bits(cmem.load(eigenvalue_addr) as u64);
-                                eigenvalue * prob
-                            }).sum::<f64>()
-                        } else {
-                            let mut exp = 0.0f64;
-                            for (val, prob) in entries {
-                                let eigenvalue_addr = base_addr.wrapping_add(*val as u16);
-                                let eigenvalue = f64::from_bits(ctx.cmem.load(eigenvalue_addr) as u64);
-                                exp += eigenvalue * prob;
-                            }
-                            exp
-                        };
-
-                        ctx.fregs.set(*dst, expectation)?;
+                    let entries: Vec<(u32, f64)>;
+                    let entries_ref: &[(u32, f64)] = if let HybridValue::Dist(ref e) = hybrid_val {
+                        e
+                    } else if let HybridValue::Hist(ref hist) = hybrid_val {
+                        entries = hist.to_dist();
+                        &entries
                     } else {
                         return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/EXPECT".to_string(),
-                            detail: format!("expected Dist, got {:?}", hybrid_val),
+                            detail: format!("expected Dist or Hist, got {:?}", hybrid_val),
                         });
-                    }
+                    };
+
+                    let base_addr = ctx.iregs.get(*dst)? as u16;
+
+                    let expectation = if entries_ref.len() >= PAR_THRESHOLD {
+                        let cmem = &ctx.cmem;
+                        entries_ref.par_iter().map(|(val, prob)| {
+                            let eigenvalue_addr = base_addr.wrapping_add(*val as u16);
+                            let eigenvalue = f64::from_bits(cmem.load(eigenvalue_addr) as u64);
+                            eigenvalue * prob
+                        }).sum::<f64>()
+                    } else {
+                        let mut exp = 0.0f64;
+                        for (val, prob) in entries_ref {
+                            let eigenvalue_addr = base_addr.wrapping_add(*val as u16);
+                            let eigenvalue = f64::from_bits(ctx.cmem.load(eigenvalue_addr) as u64);
+                            exp += eigenvalue * prob;
+                        }
+                        exp
+                    };
+
+                    ctx.fregs.set(*dst, expectation)?;
                 }
             }
 

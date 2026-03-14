@@ -14,6 +14,8 @@
 //!   --qubits <n>            Default qubits per quantum register (overrides config)
 //!   --max-cycles <n>        Maximum instruction cycles (overrides config)
 //!   --density-matrix        Force density-matrix backend (no statevector)
+//!   --threads <n>           Default thread count for HFORK (1-256)
+//!   --shots <n>             Number of shots for QPU-realistic sampling
 //!   --print-final-state     Dump all non-zero registers and memory after execution
 //!   --psw                   Print the Program State Word
 //!   --resources             Print cumulative resource usage counters
@@ -43,6 +45,7 @@ fn print_help() {
     eprintln!("  --resources           Print cumulative resource usage counters");
     eprintln!("  --density-matrix      Force density-matrix backend (no statevector)");
     eprintln!("  --threads <n>         Default thread count for HFORK (1-256)");
+    eprintln!("  --shots <n>           Number of shots for QPU-realistic sampling");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -54,6 +57,7 @@ struct CliArgs {
     qubits: Option<u8>,
     max_cycles: Option<usize>,
     threads: Option<u16>,
+    shots: Option<u32>,
     density_matrix: bool,
     print_state: bool,
     print_psw: bool,
@@ -79,6 +83,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut qubits: Option<u8> = None;
     let mut max_cycles: Option<usize> = None;
     let mut threads: Option<u16> = None;
+    let mut shots: Option<u32> = None;
     let mut density_matrix = false;
     let mut print_state = false;
     let mut print_psw = false;
@@ -122,6 +127,17 @@ fn parse_args() -> Result<CliArgs, String> {
                 }
                 threads = Some(n);
             }
+            "--shots" => {
+                i += 1;
+                let n: u32 = args.get(i)
+                    .ok_or("--shots requires a number")?
+                    .parse()
+                    .map_err(|_| "--shots must be a positive integer")?;
+                if n == 0 {
+                    return Err("--shots must be >= 1".to_string());
+                }
+                shots = Some(n);
+            }
             "--density-matrix" => density_matrix = true,
             "--print-final-state" => print_state = true,
             "--psw" => print_psw = true,
@@ -151,6 +167,7 @@ fn parse_args() -> Result<CliArgs, String> {
         qubits,
         max_cycles,
         threads,
+        shots,
         density_matrix,
         print_state,
         print_psw,
@@ -196,6 +213,9 @@ fn main() {
     if let Some(n) = cli.threads {
         config.default_threads = Some(n);
     }
+    if let Some(n) = cli.shots {
+        config.shots = Some(n);
+    }
 
     if cli.verbose {
         eprintln!("Config: {:?}", config);
@@ -213,11 +233,11 @@ fn main() {
         eprintln!("Loaded {} instructions from {}", parsed.instructions.len(), cli.input);
     }
 
-    let ctx = match run_program_with_data(
+    let result = match run_program_with_data(
         parsed.instructions, &config, &parsed.metadata, &parsed.data_section,
         &parsed.shared_section, &parsed.private_section,
     ) {
-        Ok(c) => c,
+        Ok(r) => r,
         Err(e) => {
             eprintln!("Runtime error: {}", e);
             process::exit(1);
@@ -225,8 +245,9 @@ fn main() {
     };
 
     if cli.verbose {
+        let ctx = result.ctx();
         eprintln!("Execution complete (PC={}, halted={})", ctx.pc, ctx.psw.trap_halt);
     }
 
-    print_report(&ctx, cli.print_state, cli.print_psw, cli.print_resources);
+    print_report(&result, cli.print_state, cli.print_psw, cli.print_resources);
 }

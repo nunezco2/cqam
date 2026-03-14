@@ -4,7 +4,7 @@
 //! and classical memory after a program completes.
 
 use cqam_core::register::HybridValue;
-use cqam_vm::context::ExecutionContext;
+use crate::shot::RunResult;
 
 /// Print execution results based on selected report options.
 ///
@@ -13,11 +13,14 @@ use cqam_vm::context::ExecutionContext;
 /// - `print_psw`: Print the full Program State Word.
 /// - `print_resources`: Print cumulative resource usage.
 pub fn print_report(
-    ctx: &ExecutionContext,
+    result: &RunResult,
     print_state: bool,
     print_psw: bool,
     print_resources: bool,
 ) {
+    let ctx = result.ctx();
+    let is_shots = matches!(result, RunResult::Shots(_));
+
     if print_state {
         // -- Integer registers (R0-R15) --
         println!("\n=== Integer Registers (non-zero) ===");
@@ -47,11 +50,36 @@ pub fn print_report(
         }
 
         // -- Hybrid registers (H0-H7) --
-        println!("\n=== Hybrid Registers (non-empty) ===");
+        if is_shots {
+            println!("\n=== Hybrid Registers (shot histograms) ===");
+        } else {
+            println!("\n=== Hybrid Registers (non-empty) ===");
+        }
         for i in 0..8u8 {
             if let Ok(val) = ctx.hregs.get(i) {
-                if !matches!(val, HybridValue::Empty) {
-                    println!("  H{} = {:?}", i, val);
+                match val {
+                    HybridValue::Empty => {}
+                    HybridValue::Hist(hist) => {
+                        println!("  H{} = ShotHistogram ({} shots, {} outcomes):", i, hist.total_shots, hist.num_outcomes());
+                        let max_state = hist.counts.keys().last().copied().unwrap_or(0);
+                        let width = if max_state == 0 {
+                            1
+                        } else {
+                            1 + (max_state as f64).log2().ceil() as usize
+                        };
+                        for (&state, &count) in &hist.counts {
+                            let prob = count as f64 / hist.total_shots as f64;
+                            println!("    |{:0>width$}> : {} ({:.4})",
+                                state,
+                                count,
+                                prob,
+                                width = width,
+                            );
+                        }
+                    }
+                    _ => {
+                        println!("  H{} = {:?}", i, val);
+                    }
                 }
             }
         }

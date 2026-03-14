@@ -45,3 +45,4 @@ pub mod register;
 pub mod memory;
 pub mod parser;
 pub mod opcode;
+pub mod shot;

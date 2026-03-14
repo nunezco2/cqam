@@ -28,13 +28,15 @@ fn test_config() -> SimConfig {
         force_density_matrix: false,
         default_threads: None,
         rng_seed: None,
+        shots: None,
     }
 }
 
 #[test]
 fn test_e2e_qrng() {
     let parsed = load_program(&example_path("basic/qrng.cqam")).unwrap();
-    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let result = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // F5 = empirical mean (should be finite)
@@ -47,7 +49,8 @@ fn test_e2e_qrng() {
 #[test]
 fn test_e2e_qaoa() {
     let parsed = load_program(&example_path("intermediate/qaoa.cqam")).unwrap();
-    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let result = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // F7 = expected cost (mean), should be finite
@@ -61,7 +64,8 @@ fn test_e2e_qaoa() {
 #[test]
 fn test_e2e_phase_estimation() {
     let parsed = load_program(&example_path("intermediate/phase_estimation.cqam")).unwrap();
-    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let result = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // F4 = mean phase index, should be finite
@@ -72,7 +76,8 @@ fn test_e2e_phase_estimation() {
 #[test]
 fn test_e2e_vqe_loop() {
     let parsed = load_program(&example_path("intermediate/vqe_loop.cqam")).unwrap();
-    let ctx = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let result = run_program_with_config(parsed.instructions, &test_config()).unwrap();
+    let ctx = result.ctx();
 
     assert!(ctx.psw.trap_halt, "Program should halt");
     // R2 = iteration count (should be > 0)
