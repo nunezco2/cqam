@@ -84,19 +84,12 @@ res_fmt:
     QKERNELZ PHSH, Q0, Q0, Z0, Z1
     QKERNELF DROT, Q0, Q0, F5, F6
 
-# === Sample before destroying ===
-    QSAMPLE H0, Q0, 0, R1, R1    # H0 = full distribution (non-destructive)
-    HREDUCE MEANT, H0, F7            # F7 = expected cost (mean)
-    HREDUCE VARNC, H0, F8            # F8 = cost variance
-
-# Check specific state probability
-    ILDI R2, 0
-    QSAMPLE H1, Q0, 1, R2, R2    # H1 = P(|0>)
-
 # === Final destructive measurement ===
     QOBSERVE H2, Q0
     HREDUCE MODEV, H2, R3           # R3 = optimal solution (mode)
     HREDUCE ARGMX, H2, R4           # R4 = argmax
+    HREDUCE MEANT, H2, F7           # F7 = expected cost (mean)
+    HREDUCE VARNC, H2, F8           # F8 = cost variance
 
 # === Store results ===
     ISTR R3, 0           # CMEM[0] = best solution

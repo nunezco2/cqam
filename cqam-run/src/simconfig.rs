@@ -88,6 +88,11 @@ pub struct SimConfig {
     /// Noise simulation method override.
     #[serde(default)]
     pub noise_method: Option<String>,
+
+    /// Bell pair budget for QSTORE/QLOAD teleportation. 0 = unlimited.
+    /// Default: None (use VmConfig default of 256).
+    #[serde(default)]
+    pub bell_pair_budget: Option<u32>,
 }
 
 impl Default for SimConfig {
@@ -103,6 +108,7 @@ impl Default for SimConfig {
             shots: None,
             noise_model: None,
             noise_method: None,
+            bell_pair_budget: None,
         }
     }
 }
@@ -171,6 +177,10 @@ impl SimConfig {
         }
 
         vm.force_density_matrix = self.force_density_matrix;
+
+        if let Some(budget) = self.bell_pair_budget {
+            vm.bell_pair_budget = budget;
+        }
 
         // Thread count precedence: CLI (SimConfig) > pragma > VmConfig default
         if let Some(threads) = self.default_threads {

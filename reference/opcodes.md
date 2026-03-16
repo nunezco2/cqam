@@ -20,7 +20,7 @@ bits [31:24] contain the 8-bit opcode.
 | JR | `[opcode:8][pred:4][_:4][addr16:16]` | JIF, JMPF, SETIV |
 | QP | `[opcode:8][dst_q:3][dist:3][_:18]` | QPREP |
 | Q | `[opcode:8][dst:3][src:3][kern:5][c0:4][c1:4][_:5]` | QKERNEL, QKERNELF, QKERNELZ |
-| QO_EXT | `[opcode:8][dst_h:3][src_q:3][mode:2][ctx0:4][ctx1:4][_:8]` | QOBSERVE, QSAMPLE |
+| QO_EXT | `[opcode:8][dst_h:3][src_q:3][mode:2][ctx0:4][ctx1:4][_:8]` | QOBSERVE |
 | QS | `[opcode:8][qreg:3][_:5][addr:8][_:8]` | QLOAD, QSTORE |
 | HR | `[opcode:8][src:4][dst:4][func:4][_:12]` | HREDUCE |
 | QR | `[opcode:8][dst_q:3][_:1][dist_reg:4][_:16]` | QPREPR |
@@ -91,8 +91,8 @@ bits [31:24] contain the 8-bit opcode.
 | 0x30 | QPREP    | QP     | Q[dst] = new_state(dist_id) |
 | 0x31 | QKERNEL  | Q      | Q[dst] = kernel(Q[src], R[c0], R[c1]) |
 | 0x32 | QOBSERVE | QO_EXT | H[dst] = observe(Q[src], mode, ctx0, ctx1); destructive |
-| 0x33 | QLOAD    | QS     | Q[dst] = QMEM[addr] |
-| 0x34 | QSTORE   | QS     | QMEM[addr] = Q[src] |
+| 0x33 | QLOAD    | QS     | Teleport QMEM[addr] into Q[dst]; QMEM[addr] consumed; costs one Bell pair |
+| 0x34 | QSTORE   | QS     | Teleport Q[src] into QMEM[addr]; Q[src] consumed; costs one Bell pair |
 | 0x35 | ILDX     | RR     | R[dst] = CMEM[R[addr_reg]] |
 | 0x36 | ISTRX    | RR     | CMEM[R[addr_reg]] = R[src] |
 | 0x37 | FLDX     | RR     | F[dst] = f64::from_bits(CMEM[R[addr_reg]]) |
@@ -103,7 +103,7 @@ bits [31:24] contain the 8-bit opcode.
 | 0x3C | FSTRX    | RR     | CMEM[R[addr_reg]] = F[src].to_bits() |
 | 0x3D | ZLDX     | RR     | Z[dst] from CMEM[R[addr_reg]]..+1 |
 | 0x3E | ZSTRX    | RR     | CMEM[R[addr_reg]]..+1 = Z[src] |
-| 0x40 | QSAMPLE  | QO_EXT | H[dst] = sample(Q[src], mode, ctx0, ctx1); non-destructive |
+| 0x40 | RESERVED | —      | Formerly QSAMPLE (removed; non-destructive observation violates physical realism) |
 | 0x41 | QKERNELF | Q      | Q[dst] = kernel(Q[src], F[fctx0], F[fctx1]) |
 | 0x42 | QKERNELZ | Q      | Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1]) |
 | 0x43 | QPREPR   | QR     | Q[dst] = new_state(R[dist_reg]) |
@@ -132,7 +132,7 @@ bits [31:24] contain the 8-bit opcode.
 | 0x5B | HATMS    | N      | Atomic section start: full barrier + leader election |
 | 0x5C | HATME    | N      | Atomic section end: snapshot commit + barrier resume |
 
-Reserved: 0x2F (interrupt), 0x50 (reserved), 0x5D-0xFF (future).
+Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0xFF (future).
 
 ## 4. Distribution IDs (QPREP / QPREPR / QPREPN dist field)
 
@@ -214,7 +214,7 @@ Output register file depends on the function ID:
 - IDs 11-12: result written to integer register file (R).
 - IDs 14-15: result written to complex register file (Z).
 
-## 8. Observation Mode IDs (QOBSERVE/QSAMPLE mode field)
+## 8. Observation Mode IDs (QOBSERVE mode field)
 
 | ID | Name | Output Type | Description |
 |----|------|-------------|-------------|

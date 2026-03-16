@@ -36,6 +36,9 @@ pub struct VmConfig {
     /// Default number of threads for HFORK parallelism.
     /// Default: 1 (single-threaded). Overridden by --threads CLI flag.
     pub default_threads: u16,
+
+    /// Initial Bell pair budget for QSTORE/QLOAD teleportation. 0 = unlimited.
+    pub bell_pair_budget: u32,
 }
 
 impl Default for VmConfig {
@@ -45,6 +48,7 @@ impl Default for VmConfig {
             default_qubits: 2, // backward compatible with current 4-state tests
             force_density_matrix: false,
             default_threads: 1,
+            bell_pair_budget: 256,
         }
     }
 }

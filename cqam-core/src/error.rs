@@ -97,6 +97,9 @@ pub enum CqamError {
 
     /// Invalid numeric ID for a typed domain (e.g., kernel, distribution, flag).
     InvalidId { domain: &'static str, value: u8 },
+
+    /// Bell pair budget exhausted during teleportation-based QSTORE/QLOAD.
+    BellPairExhausted { instruction: String },
 }
 
 impl fmt::Display for CqamError {
@@ -213,6 +216,9 @@ impl fmt::Display for CqamError {
             }
             CqamError::InvalidId { domain, value } => {
                 write!(f, "Invalid {} ID: {}", domain, value)
+            }
+            CqamError::BellPairExhausted { instruction } => {
+                write!(f, "Bell pair budget exhausted during {}", instruction)
             }
         }
     }

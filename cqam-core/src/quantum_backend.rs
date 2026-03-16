@@ -46,7 +46,7 @@ pub struct QOpResult {
     pub num_qubits: u8,
 }
 
-/// Result of a quantum observation (QOBSERVE or QSAMPLE).
+/// Result of a quantum observation (QOBSERVE).
 ///
 /// The VM converts these into `HybridValue` for the hybrid register file.
 #[derive(Debug, Clone)]
@@ -229,18 +229,6 @@ pub trait QuantumBackend: Send {
         ctx1: usize,
     ) -> Result<ObserveResult, CqamError>;
 
-    /// Non-destructively sample the probability distribution.
-    ///
-    /// Maps to: QSAMPLE
-    /// The handle remains valid after this call.
-    fn sample(
-        &mut self,
-        handle: QRegHandle,
-        mode: ObserveMode,
-        ctx0: usize,
-        ctx1: usize,
-    ) -> Result<ObserveResult, CqamError>;
-
     /// Measure a single qubit (projective measurement with collapse).
     ///
     /// Maps to: QMEAS
@@ -291,6 +279,13 @@ pub trait QuantumBackend: Send {
     // =========================================================================
     // Handle lifecycle
     // =========================================================================
+
+    /// Apply teleportation noise to a quantum state after QSTORE/QLOAD transfer.
+    /// Default: no-op (perfect teleportation with ideal Bell pairs).
+    fn apply_teleportation_noise(&mut self, handle: QRegHandle) -> Result<(), CqamError> {
+        let _ = handle;
+        Ok(())
+    }
 
     /// Clone a handle's quantum state, producing an independent copy.
     ///

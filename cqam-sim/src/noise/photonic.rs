@@ -130,6 +130,8 @@ impl NoiseModel for PhotonicNoise {
         // No thermal population for photonic qubits
     }
 
+    fn bell_pair_fidelity(&self) -> f64 { self.fusion_success_prob * self.detector_efficiency }
+
     fn name(&self) -> &str { "photonic" }
 
     fn has_readout_noise(&self) -> bool {

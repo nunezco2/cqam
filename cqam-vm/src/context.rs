@@ -96,6 +96,9 @@ pub struct ExecutionContext {
     /// Reference to shared memory (set during HFORK, None otherwise).
     /// All threads in a parallel region share the same SharedMemory instance.
     pub shared_memory: Option<Arc<SharedMemory>>,
+
+    /// Remaining Bell pairs for QSTORE/QLOAD teleportation.
+    pub bell_pair_budget: u32,
 }
 
 impl ExecutionContext {
@@ -126,6 +129,7 @@ impl ExecutionContext {
             shared_region: None,
             skip_to_hatme: false,
             shared_memory: None,
+            bell_pair_budget: VmConfig::default().bell_pair_budget,
             program,
         };
         ctx.resolve_labels();

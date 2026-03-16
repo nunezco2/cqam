@@ -122,6 +122,8 @@ impl NoiseModel for SuperconductingNoise {
         }
     }
 
+    fn bell_pair_fidelity(&self) -> f64 { 1.0 - self.two_gate_error }
+
     fn name(&self) -> &str { "superconducting" }
 
     fn has_readout_noise(&self) -> bool {

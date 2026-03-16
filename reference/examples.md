@@ -243,11 +243,14 @@ QIFT (fourier_inv), CTLU (controlled_u), DIAG (diagonal_unitary), PERM (permutat
 
 ## Measurement Instructions
 
+All observation in CQAM is destructive or partial. Non-destructive observation
+has no physical basis and is not supported by the ISA. Use QOBSERVE for full
+destructive measurement or QMEAS for partial single-qubit measurement.
+
 | Instruction | Example | Description |
 |-------------|---------|-------------|
-| QOBSERVE | `QOBSERVE H0, Q1, 0, R0, R0` | Measure Q1 into H0 (destructive, mode=DIST) |
-| QSAMPLE  | `QSAMPLE H1, Q0, 0, R0, R0` | Non-destructive sample of Q0 into H1 |
-| QMEAS | `QMEAS R3, Q0, R0` | Measure qubit R0 of Q0; outcome (0 or 1) -> R3; Q0 updated |
+| QOBSERVE | `QOBSERVE H0, Q1, 0, R0, R0` | Measure Q1 into H0 (destructive, mode=DIST); Q1 consumed |
+| QMEAS | `QMEAS R3, Q0, R0` | Measure qubit R0 of Q0; outcome (0 or 1) -> R3; Q0 updated (not consumed) |
 
 ### QMEAS example
 
@@ -259,38 +262,59 @@ QIFT (fourier_inv), CTLU (controlled_u), DIAG (diagonal_unitary), PERM (permutat
 
 ## Observation Mode Examples
 
-The observation instructions (QOBSERVE, QSAMPLE) support three modes:
+QOBSERVE supports three modes for extracting classical information from a
+quantum register. All modes are destructive: Q[src] is consumed.
 
 ### Mode 0 (DIST): Full distribution (default)
 
-    QPREP Q0, 0              # Uniform distribution
-    QOBSERVE H0, Q0, 0, R0, R0   # H0 = Dist([(0,0.25),(1,0.25),(2,0.25),(3,0.25)])
+    QPREP Q0, 0              # Uniform 2-qubit superposition
+    QOBSERVE H0, Q0, 0, R0, R0   # H0 = Dist([(0,0.25),(1,0.25),(2,0.25),(3,0.25)]); Q0 consumed
 
 ctx0 and ctx1 are ignored in DIST mode.
 
-### Mode 1 (PROB): Single probability
+### Mode 1 (PROB): Single basis-state probability
 
-    QPREP Q0, 2              # Bell state
+    QPREP Q0, 2              # Bell state (fresh copy needed per query, since QOBSERVE is destructive)
     ILDI R0, 0               # Query basis state |0>
-    QSAMPLE H0, Q0, 1, R0, R0    # H0 = Float(0.5)
+    QOBSERVE H0, Q0, 1, R0, R0   # H0 = Float(0.5); Q0 consumed
 
-ctx0 selects the basis state index; ctx1 is ignored.
+ctx0 selects the basis state index; ctx1 is ignored. Each PROB query
+consumes the register; prepare a fresh state for each distinct query.
 
 ### Mode 2 (AMP): Density matrix element
 
-    QPREP Q0, 2              # Bell state
+    QPREP Q0, 2              # Bell state (fresh copy needed per query)
     ILDI R0, 0               # row = 0
     ILDI R1, 3               # col = 3 (|11> = state 3)
-    QSAMPLE H0, Q0, 2, R0, R1    # H0 = Complex(0.5, 0.0)
+    QOBSERVE H0, Q0, 2, R0, R1   # H0 = Complex(0.5, 0.0); Q0 consumed
 
-ctx0 selects the row; ctx1 selects the column.
+ctx0 selects the row; ctx1 selects the column. Prepare a fresh state for
+each density matrix element query.
 
 ## Quantum Memory Instructions
 
+QSTORE and QLOAD implement quantum teleportation. Each operation consumes one
+Bell pair from the VM's Bell pair budget (default 256). The source is destroyed
+in each case: the state exists in exactly one location at all times, consistent
+with the no-cloning theorem. A QSTORE followed by a QLOAD is a move round-trip,
+not a copy. When a noise model is active, each operation applies a depolarizing
+channel proportional to `(1 - bell_pair_fidelity)` on the transferred state.
+
 | Instruction | Example | Description |
 |-------------|---------|-------------|
-| QLOAD | `QLOAD Q0, 10` | Load Q0 from QMEM[10] |
-| QSTORE | `QSTORE Q0, 10` | Store Q0 to QMEM[10] |
+| QSTORE | `QSTORE Q0, 10` | Teleport Q0 into QMEM[10]; Q0 is consumed; costs one Bell pair |
+| QLOAD | `QLOAD Q0, 10` | Teleport QMEM[10] into Q0; QMEM[10] is emptied; costs one Bell pair |
+
+### QSTORE / QLOAD move example
+
+    QPREP Q0, 0              # prepare 2-qubit uniform superposition in Q0
+    QKERNEL QFFT, Q1, Q0, R0, R1  # apply QFT; result in Q1
+    QSTORE Q1, 5             # teleport Q1 to QMEM[5]; Q1 is now None
+    # ... intervening classical computation ...
+    QLOAD Q2, 5              # teleport QMEM[5] back into Q2; QMEM[5] is now empty
+    QOBSERVE H0, Q2, 0, R0, R0   # measure Q2; Q2 consumed
+
+One Bell pair is spent on QSTORE and one on QLOAD (two total for the round trip).
 
 ## Masked Gate Operations
 
@@ -360,10 +384,10 @@ This enables data-driven state preparation in loops:
     ILDI R3, 1               # increment
     LABEL: prep_loop
     QPREPR Q0, R5            # Prepare with dist_id = R5
-    QSAMPLE H0, Q0, 0, R0, R0   # Sample without destroying
+    QOBSERVE H0, Q0, 0, R0, R0  # Measure and consume Q0
     IADD R5, R5, R3          # R5 += 1
     ILT R7, R5, R6           # R7 = (R5 < 4)
-    JIF R7, prep_loop
+    JIF R7, prep_loop        # re-prepare fresh state each iteration
 
 ## Hybrid Instructions
 

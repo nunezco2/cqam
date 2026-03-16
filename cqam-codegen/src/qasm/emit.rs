@@ -318,14 +318,6 @@ impl QasmFormat for Instruction {
                     ObserveMode::Sample => vec![format!("// @cqam.observe H{} = observe(q{}, mode={});", dst_h, src_q, mode)],
                 }
             }
-            Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-                match *mode {
-                    ObserveMode::Dist => vec![format!("// @cqam.qsample H{} = sample(q{});", dst_h, src_q)],
-                    ObserveMode::Prob => vec![format!("// @cqam.qsample_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
-                    ObserveMode::Amp => vec![format!("// @cqam.qsample_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
-                    ObserveMode::Sample => vec![format!("// @cqam.qsample H{} = sample(q{}, mode={});", dst_h, src_q, mode)],
-                }
-            }
             Instruction::QLoad { dst_q, addr } => {
                 vec![format!("// QLOAD q{} from QMEM[{}] [no QASM equivalent]", dst_q, addr)]
             }

@@ -244,12 +244,6 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             if matches!(mode, ObserveMode::Prob | ObserveMode::Amp | ObserveMode::Sample) { used.int_regs.insert(*ctx0); }
             if matches!(mode, ObserveMode::Amp) { used.int_regs.insert(*ctx1); }
         }
-        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            used.quantum_regs.insert(*src_q);
-            used.hybrid_regs.insert(*dst_h);
-            if matches!(mode, ObserveMode::Prob | ObserveMode::Amp | ObserveMode::Sample) { used.int_regs.insert(*ctx0); }
-            if matches!(mode, ObserveMode::Amp) { used.int_regs.insert(*ctx1); }
-        }
         Instruction::QLoad { dst_q, .. } => {
             used.quantum_regs.insert(*dst_q);
             used.uses_qmem = true;

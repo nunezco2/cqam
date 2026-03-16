@@ -72,39 +72,36 @@ fn ghz_verify() {
     let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
     run_to_completion(&mut engine);
 
-    // CMEM layout from the program:
-    // FSTR F0, 0  =>  CMEM[0] = P(|0...0>) as f64 bits  (expect ~0.5)
-    // FSTR F1, 1  =>  CMEM[1] = P(|1...1>) as f64 bits  (expect ~0.5)
-    // FSTR F2, 2  =>  CMEM[2] = |rho[0][N-1]|            (expect ~0.5)
-    // ISTR R6, 3  =>  CMEM[3] = mode of measurement      (0 or 2^N-1)
-    // ISTR R7, 4  =>  CMEM[4] = entanglement flag        (expect 1)
+    // CMEM layout from the program (post-QSAMPLE removal):
+    // FSTR F5, 0  =>  CMEM[0] = mean of GHZ measurement (f64 bits)
+    // FSTR F4, 1  =>  CMEM[1] = variance of GHZ measurement (f64 bits)
+    // ISTR R6, 3  =>  CMEM[3] = mode of measurement (0 or 2^N-1)
+    // ISTR R7, 4  =>  CMEM[4] = entanglement flag (expect 1)
 
-    let p_zero = f64::from_bits(engine.ctx.cmem.load(0) as u64);
-    let p_ones = f64::from_bits(engine.ctx.cmem.load(1) as u64);
-    let coherence = f64::from_bits(engine.ctx.cmem.load(2) as u64);
+    let mean = f64::from_bits(engine.ctx.cmem.load(0) as u64);
+    let variance = f64::from_bits(engine.ctx.cmem.load(1) as u64);
     let entangled = engine.ctx.cmem.load(4);
 
-    println!("GHZ: P(|0..0>) = {:.4}, P(|1..1>) = {:.4}, coherence = {:.4}, entangled = {}",
-        p_zero, p_ones, coherence, entangled);
+    println!("GHZ: mean = {:.4}, variance = {:.4}, entangled = {}",
+        mean, variance, entangled);
 
+    // GHZ state has two outcomes (|0...0> and |1...1>) each with P=0.5.
+    // For 16 qubits, outcomes are 0 and 65535.
+    // Mean = 0.5 * 0 + 0.5 * 65535 = 32767.5
+    let expected_mean = (((1u64 << 16) - 1) as f64) / 2.0;
     assert!(
-        (p_zero - 0.5).abs() < 1e-6,
-        "P(|0...0>) should be 0.5, got {}",
-        p_zero
+        (mean - expected_mean).abs() < 1.0,
+        "Mean should be ~{}, got {}",
+        expected_mean, mean
     );
+
+    // Variance should be large (bimodal distribution)
     assert!(
-        (p_ones - 0.5).abs() < 1e-6,
-        "P(|1...1>) should be 0.5, got {}",
-        p_ones
+        variance > 1e6,
+        "Variance should be large for bimodal GHZ, got {}",
+        variance
     );
-    assert!(
-        (coherence - 0.5).abs() < 1e-6,
-        "|rho[0][N-1]| should be 0.5, got {}",
-        coherence
-    );
-    // Entanglement flag: the JMPF/HFORK/HMERGE path may or may not set this
-    // depending on the kernel implementation, but the quantum state itself is correct.
-    // Accept either 0 or 1 (the important thing is the probabilities above).
+
     println!("  entanglement flag = {} (informational)", entangled);
 }
 

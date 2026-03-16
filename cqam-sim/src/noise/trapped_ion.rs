@@ -127,6 +127,8 @@ impl NoiseModel for TrappedIonNoise {
         // Hyperfine qubits: T1 >> circuit time, no thermal population
     }
 
+    fn bell_pair_fidelity(&self) -> f64 { 1.0 - self.ms_gate_error }
+
     fn name(&self) -> &str { "trapped-ion" }
 
     fn has_readout_noise(&self) -> bool {

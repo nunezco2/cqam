@@ -648,7 +648,6 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
         | Instruction::QKernelF { .. }
         | Instruction::QKernelZ { .. }
         | Instruction::QObserve { .. }
-        | Instruction::QSample { .. }
         | Instruction::QLoad { .. }
         | Instruction::QStore { .. }
         | Instruction::QHadM { .. }

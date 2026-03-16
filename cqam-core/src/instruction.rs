@@ -265,13 +265,6 @@ pub enum Instruction {
     /// QMEM[addr] = Q[src_q]
     QStore { src_q: u8, addr: u8 },
 
-    /// Non-destructively sample the probability distribution of a quantum register.
-    /// H[dst_h] = diagonal_probabilities(Q[src_q])
-    /// The quantum register Q[src_q] is NOT consumed (non-destructive read).
-    /// mode: 0=DIST (full distribution), 1=PROB (single probability), 2=AMP (amplitude)
-    /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
-    QSample { dst_h: u8, src_q: u8, mode: ObserveMode, ctx0: u8, ctx1: u8 },
-
     /// Apply quantum kernel with float context parameters from F-file.
     /// Q[dst] = kernel(Q[src], F[fctx0], F[fctx1])
     /// kernel: kernel ID (see kernel_id module)
@@ -800,7 +793,7 @@ impl FlagId {
     }
 }
 
-/// Observation mode IDs for QObserve/QSample.
+/// Observation mode IDs for QObserve.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum ObserveMode {

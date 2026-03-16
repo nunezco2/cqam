@@ -229,31 +229,14 @@ res_fmt:
     ILDI R6, 9            # mask = 0b1001 -> flip qubits 0 and 3
     QFLIP Q0, Q0, R6      # state index = 8 + 1 = 9
 
-    ILDI R10, 9
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
-
-    ILDI R0, @t1_pre
-    ILDI R1, @t1_pre.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
 # Apply adder
     QKERNEL PERM, Q0, Q0, R8, R9
 
-    ILDI R10, 11
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
-
-    ILDI R0, @t1_post
-    ILDI R1, @t1_post.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-    FLDI F5, 1
-    FEQ R10, F1, F5
+# Verify via destructive measurement: expect state 11
+    QOBSERVE H0, Q0
+    HREDUCE ARGMX, H0, R10   # R10 = most probable state (expect 11)
+    ILDI R11, 11
+    IEQ R10, R10, R11
     JIF R10, t1_pass
     ILDI R0, @t1_fail
     ILDI R1, @t1_fail.len
@@ -285,30 +268,13 @@ LABEL: t1_end
     ILDI R6, 15            # mask = 0b1111 -> state index 15
     QFLIP Q1, Q1, R6
 
-    ILDI R10, 15
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F1
-
-    ILDI R0, @t2_pre
-    ILDI R1, @t2_pre.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
     QKERNEL PERM, Q1, Q1, R8, R9
 
-    ILDI R10, 14
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F1
-
-    ILDI R0, @t2_post
-    ILDI R1, @t2_post.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-    FLDI F5, 1
-    FEQ R10, F1, F5
+# Verify via destructive measurement: expect state 14
+    QOBSERVE H0, Q1
+    HREDUCE ARGMX, H0, R10   # R10 = most probable state (expect 14)
+    ILDI R11, 14
+    IEQ R10, R10, R11
     JIF R10, t2_pass
     ILDI R0, @t2_fail
     ILDI R1, @t2_fail.len
@@ -352,38 +318,16 @@ LABEL: t2_end
 # Apply adder
     QKERNEL PERM, Q2, Q2, R8, R9
 
-# Check: P(state 0)=0.25, P(state 5)=0.25, P(state 10)=0.25, P(state 15)=0.25
+# Verify via destructive measurement: expect one of states {0, 5, 10, 15}
 # state 0  = |a=0,b=0>, state 5  = |a=1,b=1>
 # state 10 = |a=2,b=2>, state 15 = |a=3,b=3>
-    ILDI R10, 0
-    QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE REALP, H0, F1             # P(a=0,b=0)
-    ILDI R10, 5
-    QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE REALP, H0, F2             # P(a=1,b=1)
-    ILDI R10, 10
-    QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE REALP, H0, F3             # P(a=2,b=2)
-    ILDI R10, 15
-    QSAMPLE H0, Q2, 1, R10, R10
-    HREDUCE REALP, H0, F4             # P(a=3,b=3)
+    QOBSERVE H0, Q2
+    HREDUCE MEANT, H0, F1            # F1 = mean of distribution
+    HREDUCE VARNC, H0, F2            # F2 = variance
 
-    ILDI R0, @t3_post
-    ILDI R1, @t3_post.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-# Verify: each should be ~0.25, sum ~1.0
-    FLDI F5, 0
-    FADD F5, F1, F2
-    FADD F5, F5, F3
-    FADD F5, F5, F4       # F5 = sum of four probs (should be ~1.0)
-# Tolerance check: 0.99 < sum < 1.01
+# Verify: mean should be > 0 (non-trivial distribution)
     FLDI F6, 0
-    FLDI F7, 0
-    # Check F1 > 0.24 as proxy (each term should be ~0.25)
-    FLT R10, F6, F1       # R10 = (0 < P(a=0,b=0))
+    FLT R10, F6, F2       # R10 = (0 < variance) -- non-trivial superposition
     JIF R10, t3_pass
     ILDI R0, @t3_fail
     ILDI R1, @t3_fail.len
@@ -415,42 +359,15 @@ LABEL: t3_end
     ILDI R6, 9
     QFLIP Q3, Q3, R6      # state 9 = |a=2,b=1>
 
-    ILDI R10, 9
-    QSAMPLE H0, Q3, 1, R10, R10
-    HREDUCE REALP, H0, F1
+# Add then subtract (runs blind — no mid-step observation)
+    QKERNEL PERM, Q3, Q3, R8, R9    # Add: state 9 -> 11
+    QKERNEL PERM, Q3, Q3, R7, R9    # Subtract: state 11 -> 9
 
-    ILDI R0, @t4_pre
-    ILDI R1, @t4_pre.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-# Add
-    QKERNEL PERM, Q3, Q3, R8, R9
-    ILDI R10, 11
-    QSAMPLE H0, Q3, 1, R10, R10
-    HREDUCE REALP, H0, F1
-
-    ILDI R0, @t4_mid
-    ILDI R1, @t4_mid.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-# Subtract (inverse)
-    QKERNEL PERM, Q3, Q3, R7, R9
-    ILDI R10, 9
-    QSAMPLE H0, Q3, 1, R10, R10
-    HREDUCE REALP, H0, F1
-
-    ILDI R0, @t4_post
-    ILDI R1, @t4_post.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-    FLDI F5, 1
-    FEQ R10, F1, F5
+# Verify via destructive measurement: expect state 9 (identity)
+    QOBSERVE H0, Q3
+    HREDUCE ARGMX, H0, R10   # R10 = most probable state (expect 9)
+    ILDI R11, 9
+    IEQ R10, R10, R11
     JIF R10, t4_pass
     ILDI R0, @t4_fail
     ILDI R1, @t4_fail.len

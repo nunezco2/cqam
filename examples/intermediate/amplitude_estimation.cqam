@@ -71,23 +71,8 @@ LABEL: grover_inner
     ISUB R5, R5, R3              # iterations--
     JIF R5, grover_inner
 
-# --- Store the state after 2^k iterations ---
-# Use QMEM slot = k
-    QSTORE Q0, 0         # Store to QMEM[0] (reused each k)
-
-# --- Sample the amplified state ---
-    QSAMPLE H0, Q0, 0, R1, R1   # Full distribution
-    HREDUCE MEANT, H0, F0           # Mean at this depth
+# Runs blind — no mid-step observation (physical realism)
     ISTR R4, 100                 # CMEM[100+?] = k (limited addressing)
-
-# --- Check probability of target state ---
-    QSAMPLE H1, Q0, 1, R0, R0   # P(target) at depth 2^k
-    HREDUCE REALP, H1, F1            # F1 = P(target) as real value
-
-# Store P(target) at each depth
-    IADD R8, R4, R3      # R8 = k + 1
-    IMUL R8, R8, R3      # workspace
-    FSTR F1, 110         # Store at fixed address
 
 # --- Apply QFT to extract phase information ---
     QKERNEL QFFT, Q1, Q0, R1, R1   # QFT of Grover-amplified state
@@ -112,9 +97,8 @@ LABEL: grover_inner
 # The amplitude is encoded in the phase: a = sin^2(theta_est / 2)
 # theta_est is derived from the argmax of the QFT output
 
-# Reload last state from QMEM
-    QLOAD Q2, 0
-    QKERNEL QFFT, Q3, Q2, R1, R1   # Final QFT
+# Apply QFT to the last Grover-amplified state (Q0 from final iteration)
+    QKERNEL QFFT, Q3, Q0, R1, R1   # Final QFT
     QOBSERVE H3, Q3              # Full distribution
     HREDUCE ARGMX, H3, R11          # R11 = argmax (phase index)
     HREDUCE MEANT, H3, F4           # F4 = mean phase index

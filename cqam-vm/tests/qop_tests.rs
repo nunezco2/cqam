@@ -287,13 +287,15 @@ fn test_qstore_and_qload() {
 
     execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
 
+    // QSTORE: teleportation semantics -- consumes source register
     execute_qop(&mut ctx, &Instruction::QStore { src_q: 0, addr: 10 }, &mut backend).unwrap();
     assert!(ctx.qmem.is_occupied(10));
+    assert!(ctx.qregs[0].is_none(), "QSTORE should consume the source register (teleportation)");
 
+    // QLOAD: teleportation semantics -- consumes QMEM slot
     execute_qop(&mut ctx, &Instruction::QLoad { dst_q: 2, addr: 10 }, &mut backend).unwrap();
     assert!(ctx.qregs[2].is_some());
-
-    assert!(ctx.qregs[0].is_some());
+    assert!(!ctx.qmem.is_occupied(10), "QLOAD should consume the QMEM slot (teleportation)");
 }
 
 // ===========================================================================
@@ -459,137 +461,6 @@ fn test_qobserve_consumes_q_register() {
 }
 
 // =============================================================================
-// QSAMPLE tests
-// =============================================================================
-
-#[test]
-fn test_qsample_preserves_q_register() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-    assert!(ctx.qregs[0].is_some());
-
-    execute_qop(&mut ctx, &Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, &mut backend).unwrap();
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be Some after QSAMPLE (non-destructive)");
-}
-
-#[test]
-fn test_qsample_produces_valid_distribution() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Bell state: |00> and |11> each with p=0.5
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Bell }, &mut backend).unwrap();
-    execute_qop(&mut ctx, &Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, &mut backend).unwrap();
-
-    if let HybridValue::Dist(pairs) = ctx.hregs.get(0).unwrap() {
-        assert_eq!(pairs.len(), 2, "Bell state should have exactly 2 entries, got {}", pairs.len());
-        let total: f64 = pairs.iter().map(|(_, p)| p).sum();
-        assert!((total - 1.0).abs() < 1e-10, "Total probability should be 1.0");
-        for &(_, p) in pairs {
-            assert!((p - 0.5).abs() < 1e-10, "Each Bell probability should be ~0.5, got {}", p);
-        }
-    } else {
-        panic!("Expected HybridValue::Dist after QSAMPLE");
-    }
-}
-
-#[test]
-fn test_qsample_then_qkernel() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Prepare Q[0] with UNIFORM distribution
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-
-    // QSAMPLE: non-destructive read of Q[0] into H[0]
-    execute_qop(&mut ctx, &Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, &mut backend).unwrap();
-
-    // Verify H[0] has a valid distribution
-    if let HybridValue::Dist(pairs) = ctx.hregs.get(0).unwrap() {
-        assert_eq!(pairs.len(), 4, "Pre-kernel sample should have 4 entries");
-    } else {
-        panic!("Expected HybridValue::Dist after QSAMPLE");
-    }
-
-    // Q[0] should still be live for QKERNEL
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be live after QSAMPLE");
-
-    // Apply INIT kernel: Q[1] = init(Q[0])
-    ctx.iregs.set(0, 0).unwrap();
-    ctx.iregs.set(1, 0).unwrap();
-    execute_qop(&mut ctx, &Instruction::QKernel {
-        dst: 1,
-        src: 0,
-        kernel: KernelId::Init,
-        ctx0: 0,
-        ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // Q[1] should hold the kernel result
-    assert!(ctx.qregs[1].is_some(), "Q[1] should hold INIT kernel result");
-
-    // Q[0] should still be live (QSAMPLE did not consume it, QKERNEL borrows src)
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be live after QKERNEL (src is borrowed)");
-}
-
-#[test]
-fn test_qsample_on_empty_register_returns_error() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-    let result = execute_qop(&mut ctx, &Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, &mut backend);
-    assert!(result.is_err());
-    let msg = format!("{}", result.unwrap_err());
-    assert!(msg.contains("Uninitialized register"), "Expected UninitializedRegister error, got: {}", msg);
-}
-
-// =============================================================================
-// QSAMPLE does NOT set measured flag (edge case)
-// =============================================================================
-
-#[test]
-fn test_qsample_does_not_set_measured_flags() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Prepare and sample -- should NOT set df/cf
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-    execute_qop(&mut ctx, &Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, &mut backend).unwrap();
-
-    assert!(!ctx.psw.df, "Decoherence flag (df) should NOT be set after QSAMPLE");
-    assert!(!ctx.psw.cf, "Collapse flag (cf) should NOT be set after QSAMPLE");
-}
-
-// =============================================================================
-// QSAMPLE on single-qubit register (edge case)
-// =============================================================================
-
-#[test]
-fn test_qsample_single_qubit_register() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-    ctx.config.default_qubits = 1; // 1 qubit = 2 basis states
-
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-    execute_qop(&mut ctx, &Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }, &mut backend).unwrap();
-
-    // Q[0] should still be live
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be live after QSAMPLE on 1-qubit register");
-
-    if let HybridValue::Dist(pairs) = ctx.hregs.get(0).unwrap() {
-        assert_eq!(pairs.len(), 2, "1-qubit uniform should have 2 entries, got {}", pairs.len());
-        let total: f64 = pairs.iter().map(|(_, p)| p).sum();
-        assert!((total - 1.0).abs() < 1e-10, "Total probability should be 1.0");
-        for &(_, p) in pairs {
-            assert!((p - 0.5).abs() < 1e-10, "Each probability should be ~0.5, got {}", p);
-        }
-    } else {
-        panic!("Expected HybridValue::Dist after QSAMPLE on 1-qubit register");
-    }
-}
-
-// =============================================================================
 // QOBSERVE on GHZ state (entangled distribution shape)
 // =============================================================================
 
@@ -626,65 +497,7 @@ fn test_qobserve_ghz_state_distribution_shape() {
 }
 
 // =============================================================================
-// Integration: QSAMPLE -> HREDUCE pipeline
-// =============================================================================
-
-#[test]
-fn test_qsample_hreduce_pipeline() {
-    use cqam_core::parser::parse_program;
-    use cqam_vm::fork::ForkManager;
-    use cqam_vm::executor::run_program;
-
-    // QSAMPLE non-destructively reads Q0 into H0, then reduces with MEAN/MODE/VARIANCE
-    let source = r#"
-# Prepare uniform distribution: 4 states, each p=0.25
-QPREP Q0, 0
-# Non-destructive sample
-QSAMPLE H0, Q0
-# MEAN: 0*0.25 + 1*0.25 + 2*0.25 + 3*0.25 = 1.5
-HREDUCE MEANT, H0, F0
-# MODE: all equal, so max_by picks one (implementation-defined, but must be 0-3)
-HREDUCE MODEV, H0, R0
-# VARIANCE: E[X^2] - E[X]^2 = (0+1+4+9)*0.25 - 1.5^2 = 3.5 - 2.25 = 1.25
-HREDUCE VARNC, H0, F1
-HALT
-"#;
-
-    let program = parse_program(source).expect("Failed to parse QSAMPLE pipeline program").instructions;
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    let mut backend = test_backend();
-
-    run_program(&mut ctx, &mut fm, &mut backend).expect("QSAMPLE pipeline program failed");
-
-    assert!(ctx.psw.trap_halt, "Program should have halted");
-
-    // Q0 should still be live (QSAMPLE is non-destructive)
-    assert!(ctx.qregs[0].is_some(), "Q0 should still be live after QSAMPLE (non-destructive)");
-
-    // MEAN of uniform(0,1,2,3) = 1.5
-    let f0 = ctx.fregs.get(0).unwrap();
-    assert!((f0 - 1.5).abs() < 1e-10,
-        "Mean of uniform(0,1,2,3) should be 1.5, got F0={}", f0);
-
-    // MODE: all probabilities equal, implementation picks one of {0,1,2,3}
-    let r0 = ctx.iregs.get(0).unwrap();
-    assert!((0..=3).contains(&r0),
-        "Mode of uniform should be in 0..=3, got R0={}", r0);
-
-    // VARIANCE of uniform(0,1,2,3) = sum((x - 1.5)^2 * 0.25)
-    // = (2.25 + 0.25 + 0.25 + 2.25) * 0.25 = 5.0 * 0.25 = 1.25
-    let f1 = ctx.fregs.get(1).unwrap();
-    assert!((f1 - 1.25).abs() < 1e-10,
-        "Variance of uniform(0,1,2,3) should be 1.25, got F1={}", f1);
-
-    // PSW: df and cf should NOT be set (QSAMPLE does not measure)
-    assert!(!ctx.psw.df, "Decoherence flag should NOT be set after QSAMPLE pipeline");
-    assert!(!ctx.psw.cf, "Collapse flag should NOT be set after QSAMPLE pipeline");
-}
-
-// =============================================================================
-// QOBSERVE/QSAMPLE mode dispatch tests
+// QOBSERVE mode dispatch tests
 // =============================================================================
 
 #[test]
@@ -739,61 +552,6 @@ fn test_qobserve_mode_amp() {
         assert!(im.abs() < 1e-10, "im(rho[0][0]) should be 0.0, got {}", im);
     } else {
         panic!("Expected HybridValue::Complex after QOBSERVE/AMP");
-    }
-}
-
-#[test]
-fn test_qsample_mode_prob() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Prepare uniform state: each |k> has probability 0.25
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-
-    // Set ctx0 = 2 (query probability of basis state 2)
-    ctx.iregs.set(0, 2).unwrap();
-
-    execute_qop(&mut ctx, &Instruction::QSample {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0,
-    }, &mut backend).unwrap();
-
-    // Should be non-destructive
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be live after QSAMPLE/PROB");
-
-    // H[0] should hold Complex(0.25, 0.0) -- probability of |2> in uniform state
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.25).abs() < 1e-10, "p(|2>) in uniform state should be 0.25, got {}", re);
-        assert!((im).abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
-    } else {
-        panic!("Expected HybridValue::Complex after QSAMPLE/PROB");
-    }
-}
-
-#[test]
-fn test_qsample_mode_amp() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Prepare Bell state: rho[0][0]=0.5, rho[0][3]=0.5, rho[3][0]=0.5, rho[3][3]=0.5
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Bell }, &mut backend).unwrap();
-
-    // Query rho[0][3] -> should be 0.5 + 0i
-    ctx.iregs.set(0, 0).unwrap(); // row
-    ctx.iregs.set(1, 3).unwrap(); // col
-
-    execute_qop(&mut ctx, &Instruction::QSample {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // Should be non-destructive
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be live after QSAMPLE/AMP");
-
-    // H[0] should hold Complex(0.5, 0.0)
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.5).abs() < 1e-10, "re(rho[0][3]) should be 0.5, got {}", re);
-        assert!(im.abs() < 1e-10, "im(rho[0][3]) should be 0.0, got {}", im);
-    } else {
-        panic!("Expected HybridValue::Complex after QSAMPLE/AMP");
     }
 }
 
@@ -923,87 +681,6 @@ fn test_e2e_observe_prob_then_round() {
         &mut fm, &mut backend).unwrap();
 
     assert_eq!(ctx.iregs.get(3).unwrap(), 0, "round(0.25) should be 0");
-}
-
-/// QSAMPLE(AMP) followed by QKERNEL on same register.
-///
-/// Verifies non-destructive behavior: after QSAMPLE/AMP, the quantum
-/// register is still live and can be used by QKERNEL.
-#[test]
-fn test_qsample_amp_then_qkernel_non_destructive() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Prepare zero state: rho[0][0] = 1.0
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Zero }, &mut backend).unwrap();
-
-    // Set row=0, col=0 for AMP query
-    ctx.iregs.set(0, 0).unwrap();
-    ctx.iregs.set(1, 0).unwrap();
-
-    // QSAMPLE in AMP mode: H[0] = Complex(1.0, 0.0) -- non-destructive
-    execute_qop(&mut ctx, &Instruction::QSample {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // Q[0] should still be alive
-    assert!(ctx.qregs[0].is_some(), "Q[0] should be alive after QSAMPLE/AMP");
-
-    // Verify H[0] is correct
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 1.0).abs() < 1e-10);
-        assert!(im.abs() < 1e-10);
-    } else {
-        panic!("Expected HybridValue::Complex after QSAMPLE/AMP");
-    }
-
-    // Now apply QKERNEL on the same register -- should succeed
-    execute_qop(&mut ctx, &Instruction::QKernel {
-        dst: 1, src: 0, kernel: KernelId::Init, ctx0: 0, ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // Q[1] should hold the result, Q[0] still alive
-    assert!(ctx.qregs[1].is_some(), "Q[1] should hold INIT kernel result");
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be alive after QKERNEL");
-}
-
-/// QSAMPLE/PROB with out-of-range index should return error.
-#[test]
-fn test_qsample_mode_prob_out_of_range() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // 2 qubits -> dimension 4; index 4 is out of range
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-    ctx.iregs.set(0, 4).unwrap();
-
-    let result = execute_qop(&mut ctx, &Instruction::QSample {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0,
-    }, &mut backend);
-    assert!(result.is_err(), "QSAMPLE/PROB with out-of-range index should error");
-
-    // Q[0] should still be alive (QSAMPLE is non-destructive, even on error)
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be alive after failed QSAMPLE");
-}
-
-/// QSAMPLE/AMP with out-of-range row should return error.
-#[test]
-fn test_qsample_mode_amp_out_of_range() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // 2 qubits -> dimension 4; row=5 is out of range
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-    ctx.iregs.set(0, 5).unwrap();
-    ctx.iregs.set(1, 0).unwrap();
-
-    let result = execute_qop(&mut ctx, &Instruction::QSample {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend);
-    assert!(result.is_err(), "QSAMPLE/AMP with out-of-range row should error");
-
-    // Q[0] should still be alive (QSAMPLE is non-destructive)
-    assert!(ctx.qregs[0].is_some(), "Q[0] should still be alive after failed QSAMPLE");
 }
 
 // =============================================================================
@@ -1259,17 +936,17 @@ HALT
 }
 
 // =============================================================================
-// End-to-end: QPREP -> QKERNELZ(PHASE_SHIFT) -> QSAMPLE -> verify
+// End-to-end: QPREP -> QKERNELZ(PHASE_SHIFT) -> QOBSERVE -> verify
 // =============================================================================
 
 #[test]
-fn test_e2e_qkernelz_phase_shift_sample() {
+fn test_e2e_qkernelz_phase_shift_observe() {
     use cqam_core::parser::parse_program;
     use cqam_vm::fork::ForkManager;
     use cqam_vm::executor::run_program;
 
     // Pipeline: prepare uniform state, apply PhaseShift with zero amplitude
-    // (which is identity), then sample the distribution.
+    // (which is identity), then observe the distribution.
     // Diagonal probabilities should be 0.25 each.
     let source = r#"
 # Prepare uniform 2-qubit state
@@ -1279,8 +956,8 @@ ZLDI Z0, 0, 0
 ZLDI Z1, 0, 0
 # Apply QKERNELZ with PHASE_SHIFT kernel (kernel_id=6)
 QKERNELZ PHSH, Q1, Q0, Z0, Z1
-# Non-destructive sample Q1 -> H0
-QSAMPLE H0, Q1
+# Destructive observe Q1 -> H0
+QOBSERVE H0, Q1
 # Reduce to mean
 HREDUCE MEANT, H0, F0
 HALT
@@ -1295,8 +972,8 @@ HALT
 
     assert!(ctx.psw.trap_halt, "Program should have halted");
 
-    // Q1 should still be live (QSAMPLE is non-destructive)
-    assert!(ctx.qregs[1].is_some(), "Q1 should be live after QSAMPLE");
+    // Q1 should be consumed (QOBSERVE is destructive)
+    assert!(ctx.qregs[1].is_none(), "Q1 should be consumed after QOBSERVE");
 
     // MEAN of uniform(0,1,2,3) = 1.5
     let f0 = ctx.fregs.get(0).unwrap();
@@ -1312,7 +989,7 @@ HALT
                 "Each probability should be ~0.25 after identity PhaseShift, got {}", p);
         }
     } else {
-        panic!("Expected HybridValue::Dist after QSAMPLE");
+        panic!("Expected HybridValue::Dist after QOBSERVE");
     }
 }
 

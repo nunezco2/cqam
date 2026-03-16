@@ -87,8 +87,8 @@ pub mod op {
     pub const ZLDX: u8 = 0x3D;
     pub const ZSTRX: u8 = 0x3E;
 
-    // -- Quantum sampling and kernel operations (0x40-0x44) -------------------
-    pub const QSAMPLE: u8 = 0x40;
+    // -- Quantum kernel operations (0x40-0x44) --------------------------------
+    // 0x40 reserved (was QSAMPLE, removed: violates physical realism)
     pub const QKERNELF: u8 = 0x41;
     pub const QKERNELZ: u8 = 0x42;
     pub const QPREPR: u8 = 0x43;

@@ -11,7 +11,7 @@
 #
 # In CQAM, we approximate this by:
 #   - Preparing two states in separate Q registers
-#   - Using the QSAMPLE AMP mode to extract density matrix elements
+#   - Using QOBSERVE to extract distribution and density matrix elements
 #   - Computing the fidelity classically from the observations
 #
 # Also demonstrates a "poor man's fidelity" via distribution comparison.
@@ -56,30 +56,22 @@ res_fmt:
     QPREP Q0, 0          # Q0 = uniform superposition
     QPREP Q1, 0          # Q1 = uniform superposition (identical)
 
-# Sample both distributions
-    QSAMPLE H0, Q0, 0, R0, R0   # H0 = dist of Q0
-    QSAMPLE H1, Q1, 0, R0, R0   # H1 = dist of Q1
+# Observe both distributions (destructive)
+    QOBSERVE H4, Q0
+    QOBSERVE H5, Q1
 
-# Compare means and variances
-    HREDUCE MEANT, H0, F0   # F0 = mean(Q0)
-    HREDUCE MEANT, H1, F1   # F1 = mean(Q1)
-    HREDUCE VARNC, H0, F2   # F2 = var(Q0)
-    HREDUCE VARNC, H1, F3   # F3 = var(Q1)
+# Compare means and variances from observed distributions
+    HREDUCE MEANT, H4, F0   # F0 = mean(Q0)
+    HREDUCE MEANT, H5, F1   # F1 = mean(Q1)
+    HREDUCE VARNC, H4, F2   # F2 = var(Q0)
+    HREDUCE VARNC, H5, F3   # F3 = var(Q1)
 
 # Compute mean difference as fidelity proxy
     FSUB F4, F0, F1      # F4 = mean_diff
     FMUL F4, F4, F4      # F4 = mean_diff^2 (should be ~0 for identical)
 
-# Compare via density matrix elements
-    QSAMPLE H2, Q0, 2, R0, R0   # rho_0[0][0]
-    QSAMPLE H3, Q1, 2, R0, R0   # rho_1[0][0]
-    HREDUCE REALP, H2, F5    # F5 = real(rho_0[0][0])
-    HREDUCE REALP, H3, F6    # F6 = real(rho_1[0][0])
-    FSUB F7, F5, F6      # F7 = difference in diagonal (should be 0)
-
-# Clean up
-    QOBSERVE H4, Q0
-    QOBSERVE H5, Q1
+# Compute diagonal element difference from observed distributions
+    FSUB F7, F2, F3      # F7 = variance difference (should be ~0)
 
 # Print measurement histogram for same-state test (top-10 for 16-qubit state)
     ILDI R0, 4            # H4 = distribution from Q0 (same-state test)
@@ -93,23 +85,13 @@ res_fmt:
     QPREP Q2, 0          # Q2 = uniform
     QPREP Q3, 1          # Q3 = zero state (very different!)
 
-# Sample
-    QSAMPLE H0, Q2, 0, R0, R0
-    QSAMPLE H1, Q3, 0, R0, R0
-    HREDUCE MEANT, H0, F8   # mean(uniform)
-    HREDUCE MEANT, H1, F9   # mean(zero)
-    FSUB F10, F8, F9     # difference in means (should be large)
-    FMUL F10, F10, F10   # squared difference
-
-# AMP mode comparison
-    QSAMPLE H2, Q2, 2, R0, R1   # rho_uniform[0][1]
-    QSAMPLE H3, Q3, 2, R0, R1   # rho_zero[0][1]
-    HREDUCE CONJZ, H2, Z0   # Z0 = conj(rho_uniform[0][1])
-    HREDUCE CONJZ, H3, Z1   # Z1 = conj(rho_zero[0][1])
-    ZSUB Z2, Z0, Z1      # Z2 = difference in off-diagonal elements
-
+# Observe both (destructive)
     QOBSERVE H4, Q2
     QOBSERVE H5, Q3
+    HREDUCE MEANT, H4, F8   # mean(uniform)
+    HREDUCE MEANT, H5, F9   # mean(zero)
+    FSUB F10, F8, F9     # difference in means (should be large)
+    FMUL F10, F10, F10   # squared difference
 
     # Print measurement histogram for different-state test (top-10 for 16-qubit state)
     ILDI R0, 4            # H4 = distribution from Q2 (different-state test)
@@ -129,32 +111,18 @@ res_fmt:
     FLDI F13, 2          # theta = 2 (different rotation)
     QKERNELF DROT, Q5, Q5, F13, F12  # Rotate by theta=2
 
-# Compare distributions
-    QSAMPLE H0, Q4, 0, R0, R0
-    QSAMPLE H1, Q5, 0, R0, R0
+# Compare distributions (destructive)
+    QOBSERVE H0, Q4
+    QOBSERVE H1, Q5
     HREDUCE MEANT, H0, F14
-
     HREDUCE MEANT, H1, F15
-
     FSUB F14, F14, F15   # Mean difference
-
-# Store Q4 to quantum memory for later retrieval
-    QSTORE Q4, 0
-    QOBSERVE H2, Q5
-
-# Reload and verify
-    QLOAD Q6, 0
-    QSAMPLE H3, Q6, 1, R0, R0  # P(|0>) of reloaded state
-    HREDUCE REALP, H3, F15
-
-    QOBSERVE H4, Q6
 
 # --- Store all results ---
     FSTR F4, 0           # CMEM[0] = same-state squared mean diff (~0)
     FSTR F10, 1          # CMEM[1] = diff-state squared mean diff (large)
-    FSTR F7, 2           # CMEM[2] = diagonal element difference
-    ZSTR Z2, 3           # CMEM[3-4] = off-diagonal difference (complex)
-    FSTR F14, 5          # CMEM[5] = parameterized state mean diff
+    FSTR F7, 2           # CMEM[2] = variance difference
+    FSTR F14, 3          # CMEM[3] = parameterized state mean diff
 
 # --- Print results ---
     ILDI R0, @res_fmt

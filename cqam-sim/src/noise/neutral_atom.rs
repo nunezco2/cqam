@@ -133,6 +133,8 @@ impl NoiseModel for NeutralAtomNoise {
         // No thermal population for neutral atoms (optical pumping)
     }
 
+    fn bell_pair_fidelity(&self) -> f64 { 1.0 - self.rydberg_error }
+
     fn name(&self) -> &str { "neutral-atom" }
 
     fn has_readout_noise(&self) -> bool {

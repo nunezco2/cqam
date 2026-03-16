@@ -156,10 +156,12 @@ execution time.
 
 ### 4.13 Measurement Operations
 
+All CQAM measurement operations are destructive or partial; non-destructive
+observation does not exist in the ISA.
+
 | CQAM | QASM |
 |------|------|
-| `QOBSERVE H0, Q1, 0, R0, R0` | `H0 = measure q1;` (mode=DIST). PROB and AMP modes emit annotation comments. |
-| `QSAMPLE H0, Q0, 0, R0, R0` | `// @cqam.qsample: H0 = sample(q0, dist)` (no QASM equivalent) |
+| `QOBSERVE H0, Q1, 0, R0, R0` | `H0 = measure q1;` (mode=DIST). PROB and AMP modes emit annotation comments. Destructive: q1 is consumed. |
 | `QMEAS R3, Q0, R0` | `// @cqam.qmeas: R3 = measure_qubit(q0, R0)` |
 
 ### 4.14 Mixed-State / Structural Operations
@@ -169,8 +171,8 @@ execution time.
 | `QTENSOR Q2, Q0, Q1` | `// @cqam.qtensor: q2 = q0 tensor q1` (no QASM equivalent) |
 | `QPTRACE Q1, Q0, R0` | `// @cqam.qptrace: q1 = partial_trace_b(q0, num_qubits_a=R0)` |
 | `QRESET Q1, Q0, R0` | `reset q0[R0]; // @cqam.qreset: qubit R0 -> |0>` |
-| `QLOAD Q0, 10` | `// @cqam.qload: q0 = QMEM[10]` (no QASM equivalent) |
-| `QSTORE Q0, 10` | `// @cqam.qstore: QMEM[10] = q0` (no QASM equivalent) |
+| `QLOAD Q0, 10` | `// @cqam.qload: q0 = teleport(QMEM[10]); QMEM[10] consumed` (no QASM equivalent) |
+| `QSTORE Q0, 10` | `// @cqam.qstore: QMEM[10] = teleport(q0); q0 consumed` (no QASM equivalent) |
 
 ### 4.15 Hybrid Operations
 

@@ -182,20 +182,16 @@ res_fmt:
 
 # --- U^0 (initial state) ---
     ILDI R10, 1
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 2
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F3
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 8
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F4
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
@@ -207,20 +203,16 @@ res_fmt:
 # --- U^1: |1> -> |2> ---
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 2
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F3
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 8
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F4
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
@@ -232,20 +224,16 @@ res_fmt:
 # --- U^2: |2> -> |4> ---
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 2
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F3
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 8
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F4
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
@@ -257,20 +245,16 @@ res_fmt:
 # --- U^3: |4> -> |8> ---
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 2
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F3
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 8
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F4
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
@@ -282,20 +266,16 @@ res_fmt:
 # --- U^4: |8> -> |1> (period!) ---
     QKERNEL PERM, Q0, Q0, R8, R9
     ILDI R10, 1
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 2
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F3
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 8
-    QSAMPLE H0, Q0, 1, R10, R10
-    HREDUCE REALP, H0, F4
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
@@ -304,9 +284,11 @@ res_fmt:
     ILDI R2, 4
     ECALL PRINT_STR
 
-# Verify: after U^4, P(1) should be 1.0
-    FLDI F5, 1
-    FEQ R10, F1, F5
+# Verify: after U^4, state should be |1>
+    QOBSERVE H0, Q0
+    HREDUCE ARGMX, H0, R10
+    ILDI R11, 1
+    IEQ R10, R10, R11
     JIF R10, t1_pass
     ILDI R0, @t1_fail
     ILDI R1, @t1_fail.len
@@ -345,12 +327,10 @@ LABEL: t1_end
 
 # --- (U^2)^0: initial state ---
     ILDI R10, 1
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
@@ -362,12 +342,10 @@ LABEL: t1_end
 # --- (U^2)^1: |1> -> |4> ---
     QKERNEL PERM, Q1, Q1, R7, R9
     ILDI R10, 1
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
@@ -379,12 +357,10 @@ LABEL: t1_end
 # --- (U^2)^2: |4> -> |1> (identity!) ---
     QKERNEL PERM, Q1, Q1, R7, R9
     ILDI R10, 1
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F1
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R10, 4
-    QSAMPLE H0, Q1, 1, R10, R10
-    HREDUCE REALP, H0, F2
+    # Runs blind — no mid-step observation (physical realism)
 
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
@@ -393,9 +369,11 @@ LABEL: t1_end
     ILDI R2, 2
     ECALL PRINT_STR
 
-# Verify: after (U^2)^2, P(1) should be 1.0
-    FLDI F5, 1
-    FEQ R10, F1, F5
+# Verify: after (U^2)^2, state should be |1>
+    QOBSERVE H0, Q1
+    HREDUCE ARGMX, H0, R10
+    ILDI R11, 1
+    IEQ R10, R10, R11
     JIF R10, t2_pass
     ILDI R0, @t2_fail
     ILDI R1, @t2_fail.len

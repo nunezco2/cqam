@@ -84,11 +84,7 @@ res_fmt:
 
 # --- Prepare initial state ---
     QPREP Q0, 0          # Q0 = uniform superposition (register-level)
-
-# --- Sample initial distribution ---
-    QSAMPLE H0, Q0, 0, R1, R1
-    HREDUCE MEANT, H0, F7   # F7 = initial mean
-    HREDUCE VARNC, H0, F8   # F8 = initial variance
+    # Runs blind — no mid-step observation (physical realism)
 
 # === QSVT main loop: interleave R(phi_k) and W ===
 # Structure: R(phi_0) -> W -> R(phi_1) -> W -> ... -> R(phi_{d-1})
@@ -127,32 +123,16 @@ LABEL: qsvt_loop
 
 # === Measurement and analysis ===
 
-# Non-destructive sampling of QSVT output
-    QSAMPLE H1, Q0, 0, R1, R1   # Full distribution
-    HREDUCE MEANT, H1, F11          # F11 = mean of output distribution
-    HREDUCE VARNC, H1, F12          # F12 = variance of output
-
-# Check probability of target state (should be amplified)
-    QSAMPLE H2, Q0, 1, R0, R0   # P(target state)
-    HREDUCE REALP, H2, F13           # F13 = P(target)
-
-# Check probability of |0> (signal qubit outcome)
-    ILDI R8, 0
-    QSAMPLE H3, Q0, 1, R8, R8   # P(|0>)
-    HREDUCE REALP, H3, F14           # F14 = P(|0>) -- encodes polynomial value
-
 # Destructive measurement
     QOBSERVE H4, Q0
     HREDUCE MODEV, H4, R9          # R9 = mode (most probable state)
     HREDUCE ARGMX, H4, R10         # R10 = argmax
+    HREDUCE MEANT, H4, F11         # F11 = QSVT output mean
+    HREDUCE VARNC, H4, F12         # F12 = output variance
 
 # === Store results ===
-    FSTR F7, 0           # CMEM[0] = initial mean
     FSTR F11, 1          # CMEM[1] = QSVT output mean
-    FSTR F13, 2          # CMEM[2] = P(target) after QSVT
-    FSTR F14, 3          # CMEM[3] = P(|0>) (polynomial value proxy)
     ISTR R9, 4           # CMEM[4] = most probable state
-    FSTR F8, 5           # CMEM[5] = initial variance
     FSTR F12, 6          # CMEM[6] = output variance
 
 # --- Print results ---

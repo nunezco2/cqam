@@ -471,15 +471,7 @@ pub fn decode_with_debug(
             let ctx1 = extract_reg4(word, 8);
             Ok(Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 })
         }
-        op::QSAMPLE => {
-            let dst_h = extract_reg3(word, 21);
-            let src_q = extract_reg3(word, 18);
-            let raw_mode = extract_u2(word, 16);
-            let mode = crate::instruction::ObserveMode::try_from(raw_mode)?;
-            let ctx0 = extract_reg4(word, 12);
-            let ctx1 = extract_reg4(word, 8);
-            Ok(Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 })
-        }
+        // 0x40 reserved (was QSAMPLE, removed)
 
         // -- QS-format (quantum memory) ---------------------------------------
         op::QLOAD => {
@@ -583,7 +575,6 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QOBSERVE => Some("QOBSERVE"),
         op::QLOAD => Some("QLOAD"),
         op::QSTORE => Some("QSTORE"),
-        op::QSAMPLE => Some("QSAMPLE"),
         op::QKERNELF => Some("QKERNELF"),
         op::QKERNELZ => Some("QKERNELZ"),
         op::QPREPR => Some("QPREPR"),

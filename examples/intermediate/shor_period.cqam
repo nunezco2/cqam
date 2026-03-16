@@ -84,18 +84,10 @@ res_fmt:
 # ===============================================
 # Step 4: Measure to extract s/r
 # ===============================================
-# Non-destructive sampling first
-    QSAMPLE H0, Q1, 0, R2, R2   # Full distribution
-    HREDUCE MEANT, H0, F2           # F2 = mean (expected frequency)
-    HREDUCE VARNC, H0, F3           # F3 = variance
-
-# Check specific probability peaks
-    ILDI R8, 0
-    QSAMPLE H1, Q1, 1, R8, R8   # P(|0>) — should have a peak
-    HREDUCE REALP, H1, F4            # F4 = P(|0>)
-
 # Destructive measurement
     QOBSERVE H2, Q1              # Full measurement
+    HREDUCE MEANT, H2, F2           # F2 = mean (expected frequency)
+    HREDUCE VARNC, H2, F3           # F3 = variance
 
 # Print measurement histogram
     ISTR R0, 90           # Save R0 (N=15) to CMEM[90]

@@ -603,31 +603,7 @@ fn test_parse_qobserve() {
     );
 }
 
-#[test]
-fn test_parse_qsample() {
-    assert_eq!(
-        parse_instruction("QSAMPLE H0, Q1").unwrap(),
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }
-    );
-}
-
-#[test]
-fn test_parse_qsample_max_regs() {
-    assert_eq!(
-        parse_instruction("QSAMPLE H7, Q7").unwrap(),
-        Instruction::QSample { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }
-    );
-}
-
-#[test]
-fn test_parse_qsample_missing_operand() {
-    assert!(parse_instruction("QSAMPLE H0").is_err());
-}
-
-#[test]
-fn test_parse_qsample_too_many_operands() {
-    assert!(parse_instruction("QSAMPLE H0, Q1, Q2").is_err());
-}
+// (QSAMPLE parse tests removed: QSAMPLE was removed from the ISA.)
 
 #[test]
 fn test_parse_qload() {
@@ -1114,7 +1090,7 @@ QPREP Q0, 0
 ZLDI Z0, 1, 2
 ZLDI Z1, 0, 0
 QKERNELZ PHSH, Q1, Q0, Z0, Z1
-QSAMPLE H0, Q1
+QOBSERVE H0, Q1
 HALT
 ";
     let program = parse_program(source).unwrap().instructions;

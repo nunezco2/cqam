@@ -119,6 +119,7 @@ impl DebuggerEngine {
         // Build unified VmConfig from SimConfig + metadata (CLI > pragma > default)
         let vm_config = sim_config.to_vm_config(metadata);
         ctx.thread_count = vm_config.default_threads;
+        ctx.bell_pair_budget = vm_config.bell_pair_budget;
         ctx.config = vm_config;
 
         // Create simulation backend with matching config.
@@ -288,6 +289,7 @@ impl DebuggerEngine {
         // Re-apply config from SimConfig + stored metadata.
         let vm_config = self.sim_config.to_vm_config(&self.metadata);
         ctx.thread_count = vm_config.default_threads;
+        ctx.bell_pair_budget = vm_config.bell_pair_budget;
         ctx.config = vm_config;
 
         self.ctx = ctx;

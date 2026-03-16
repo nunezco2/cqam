@@ -130,6 +130,8 @@ impl NoiseModel for SpinQubitNoise {
         // Spin qubits: initialization by measurement-based reset, no thermal population
     }
 
+    fn bell_pair_fidelity(&self) -> f64 { 1.0 - self.exchange_error }
+
     fn name(&self) -> &str { "spin" }
 
     fn has_readout_noise(&self) -> bool {

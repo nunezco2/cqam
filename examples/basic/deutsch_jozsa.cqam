@@ -61,12 +61,9 @@ res_fmt:
 # Step 3: QFT to decode (register-level)
     QKERNEL QFFT, Q0, Q0, R0, R0   # Fourier transform decodes phase info
 
-# Step 4: Check P(|0>)
-    QSAMPLE H0, Q0, 1, R1, R1   # H0 = P(|0>) — should be ~1.0 for constant
+# Step 4: Measure P(|0>) (destructive)
+    QOBSERVE H0, Q0, 1, R1, R1   # H0 = P(|0>) — should be ~1.0 for constant
     HREDUCE REALP, H0, F0            # F0 = P(|0>) as real value
-
-# Consume Q0
-    QOBSERVE H1, Q0
 
 # ===============================================
 # Test 2: BALANCED function (f(x) = x_0, parity of first bit)
@@ -84,11 +81,7 @@ res_fmt:
 # Step 3: QFT to decode (register-level)
     QKERNEL QFFT, Q1, Q1, R0, R0   # Fourier transform
 
-# Step 4: Check P(|0>)
-    QSAMPLE H2, Q1, 1, R1, R1   # H2 = P(|0>) — should be ~0.0 for balanced
-    HREDUCE REALP, H2, F1            # F1 = P(|0>) for balanced case
-
-# Full distribution measurement
+# Step 4: Measure full distribution (destructive)
     QOBSERVE H3, Q1
     HREDUCE MODEV, H3, R3           # R3 = mode of balanced result (should NOT be 0)
 
@@ -96,20 +89,20 @@ res_fmt:
 # Classical post-processing: decide constant vs balanced
 # ===============================================
 
-# Threshold: if P(|0>) > 0, classify as constant
+# For constant test: F0 = P(|0>) from QOBSERVE
     FLDI F2, 0           # F2 = 0.0 threshold
-
-# For constant test:
     FGT R4, F0, F2       # R4 = (P_constant(|0>) > 0) ? 1 : 0  -> 1 (constant)
 
-# For balanced test:
-    FGT R5, F1, F2       # R5 = (P_balanced(|0>) > 0) ? 1 : 0
+# For balanced test: check if mode is |0> (if mode == 0, peaked at |0>)
+    ILDI R5, 0
+    IEQ R5, R3, R5       # R5 = (mode == 0) ? -> if balanced, mode should NOT be 0
+                          # So R5=1 means peaked at 0 (constant-like), R5=0 means balanced
 
 # Store verdicts
     ISTR R4, 0           # CMEM[0] = constant test result (expect 1)
     ISTR R5, 1           # CMEM[1] = balanced test result (expect 0 ideally)
     FSTR F0, 2           # CMEM[2] = P(|0>) for constant function
-    FSTR F1, 3           # CMEM[3] = P(|0>) for balanced function
+    ISTR R3, 3           # CMEM[3] = mode of balanced function
 
 # --- Print results ---
     ILDI R0, @res_fmt

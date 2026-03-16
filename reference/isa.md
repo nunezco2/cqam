@@ -122,9 +122,8 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | `QPREP` | dst, dist_id | Q[dst] = new quantum state with distribution dist_id | QP |
 | `QKERNEL` | kern_mnem, dst, src, ctx0, ctx1 | Q[dst] = kernel(Q[src], R[ctx0], R[ctx1]) | Q |
 | `QOBSERVE` | dst_h, src_q, mode, ctx0, ctx1 | H[dst_h] = observe(Q[src_q], mode, R[ctx0], R[ctx1]); Q[src_q] = None | QO_EXT |
-| `QLOAD` | dst_q, addr8 | Q[dst_q] = QMEM[addr8] (clone) | QS |
-| `QSTORE` | src_q, addr8 | QMEM[addr8] = Q[src_q] (clone) | QS |
-| `QSAMPLE` | dst_h, src_q, mode, ctx0, ctx1 | H[dst_h] = sample(Q[src_q], mode, R[ctx0], R[ctx1]); non-destructive | QO_EXT |
+| `QLOAD` | dst_q, addr8 | Teleport QMEM[addr8] into Q[dst_q]; QMEM[addr8] consumed; costs one Bell pair | QS |
+| `QSTORE` | src_q, addr8 | Teleport Q[src_q] into QMEM[addr8]; Q[src_q] consumed; costs one Bell pair | QS |
 | `QKERNELF` | kern_mnem, dst, src, fctx0, fctx1 | Q[dst] = kernel(Q[src], F[fctx0], F[fctx1]) | Q |
 | `QKERNELZ` | kern_mnem, dst, src, zctx0, zctx1 | Q[dst] = kernel(Q[src], Z[zctx0], Z[zctx1]) | Q |
 | `QPREPR` | dst, dist_reg | Q[dst] = new_qdist(R[dist_reg] as u8) | QR |
@@ -132,6 +131,14 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | `QHADM` | dst, src, mask_reg | Apply H to qubits selected by R[mask_reg] bitmask | QMK |
 | `QFLIP` | dst, src, mask_reg | Apply X to qubits selected by R[mask_reg] bitmask | QMK |
 | `QPHASE` | dst, src, mask_reg | Apply Z to qubits selected by R[mask_reg] bitmask | QMK |
+
+**QSTORE and QLOAD implement quantum teleportation.** Each operation consumes one Bell
+pair from the VM's Bell pair budget (default 256, configurable via `VmConfig`). When the
+budget is exhausted, a `QuantumError` trap fires. A budget of 0 means unlimited. One
+`QSTORE` followed by one `QLOAD` is a move round-trip: the no-cloning theorem is respected
+at all times — the quantum state exists in exactly one location before and after each
+instruction. When a noise model is active, imperfect Bell pairs introduce a depolarizing
+channel proportional to `(1 - bell_pair_fidelity)` on the transferred state.
 
 ### 1.10 Hybrid operations (H-file: 8 x HybridValue)
 
@@ -166,8 +173,8 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | Integer | R0-R15 | 16 | `i64` | I-prefix, comparison results |
 | Float | F0-F15 | 16 | `f64` | F-prefix, CVTIF output |
 | Complex | Z0-Z15 | 16 | `(f64, f64)` | Z-prefix |
-| Quantum | Q0-Q7 | 8 | `Option<DensityMatrix>` | QPREP, QKERNEL, QKERNELF, QKERNELZ, QPREPR, QENCODE, QOBSERVE, QSAMPLE, QHADM, QFLIP, QPHASE |
-| Hybrid | H0-H7 | 8 | `HybridValue` | QOBSERVE output, QSAMPLE output, HREDUCE input |
+| Quantum | Q0-Q7 | 8 | `Option<DensityMatrix>` | QPREP, QKERNEL, QKERNELF, QKERNELZ, QPREPR, QENCODE, QOBSERVE, QHADM, QFLIP, QPHASE |
+| Hybrid | H0-H7 | 8 | `HybridValue` | QOBSERVE output, HREDUCE input |
 
 `HybridValue` is a tagged union: `Empty`, `Int(i64)`, `Float(f64)`,
 `Complex(f64, f64)`, or `Dist(Vec<(u16, f64)>)` (measurement outcome).
@@ -195,7 +202,7 @@ following formats.
 | **JR** | opcode[8] | pred[4] _[4] addr16[16] | JIF, JMPF, SETIV |
 | **QP** | opcode[8] | dst[3] dist[3] _[18] | QPREP |
 | **Q** | opcode[8] | dst[3] src[3] kernel[5] ctx0[4] ctx1[4] _[5] | QKERNEL |
-| **QO_EXT** | opcode[8] | dst_h[3] src_q[3] mode[2] ctx0[4] ctx1[4] _[8] | QOBSERVE, QSAMPLE |
+| **QO_EXT** | opcode[8] | dst_h[3] src_q[3] mode[2] ctx0[4] ctx1[4] _[8] | QOBSERVE |
 | **QS** | opcode[8] | qreg[3] _[5] addr8[8] _[8] | QLOAD, QSTORE |
 | **HR** | opcode[8] | src[4] dst[4] func[4] _[12] | HREDUCE |
 | **QR** | opcode[8] | dst_q[3] _[1] dist_reg[4] _[16] | QPREPR |
@@ -216,7 +223,8 @@ following formats.
 | 0x2D-0x2E | Interrupt handling (RETI, SETIV) |
 | 0x30-0x34 | Quantum operations (QPREP..QSTORE) |
 | 0x35-0x3E | Register-indirect memory + hybrid operations |
-| 0x40-0x4E | Extended quantum operations (QSAMPLE..QSWAP) |
+| 0x40 | Reserved (formerly QSAMPLE; opcode removed) |
+| 0x41-0x4E | Extended quantum operations (QKERNELF..QSWAP) |
 | 0x4F-0x57 | Mixed-state, partial-trace, reset, and float math |
 | 0x58 | Qubit-count query (IQCFG) |
 | 0x59-0x5C | Thread-identity and atomic section instructions (ICCFG, ITID, HATMS, HATME) |
@@ -323,6 +331,8 @@ Output register file depends on the function ID:
 
 ### 4.6 Observation Mode IDs (`observe_mode` module)
 
+Used by `QOBSERVE`. All modes are destructive: Q[src] is consumed.
+
 | Name | Value | Output Type | Description |
 |------|-------|-------------|-------------|
 | `DIST` | 0 | Dist(Vec<(u16, f64)>) | Full diagonal probability distribution |
@@ -364,9 +374,14 @@ cells (real part at addr, imaginary part at addr+1).
 | Address type | `u8` (0x00 to 0xFF) |
 | Initial state | All empty (None) |
 | Access instructions | `QLOAD`, `QSTORE` |
+| Bell pair budget | default 256; 0 = unlimited |
 
-QMEM is separate from the quantum register file (Q0-Q7). `QSTORE` clones a
-live Q register into a QMEM slot; `QLOAD` clones a QMEM slot into a Q register.
+QMEM is separate from the quantum register file (Q0-Q7). `QSTORE` teleports a
+live Q register into a QMEM slot, consuming Q[src] in the process. `QLOAD`
+teleports a QMEM slot back into a Q register, consuming QMEM[addr] in the
+process. Both operations consume one Bell pair from the VM's Bell pair budget
+and raise a `QuantumError` trap when the budget is exhausted. This enforces the
+no-cloning theorem: the state exists in exactly one location at all times.
 
 ### 5.3 Shared Memory (`.shared` section)
 

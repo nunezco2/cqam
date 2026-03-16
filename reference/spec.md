@@ -44,11 +44,13 @@ Design philosophy:
 | Bank | Address Type | Size | Element Type | Description |
 |------|-------------|------|--------------|-------------|
 | CMEM | u16 | 65536 cells | i64 | Classical memory, heap-allocated |
-| QMEM | u8 | 256 slots | Option\<QuantumRegister\> | Quantum memory |
+| QMEM | u8 | 256 slots | Option\<QuantumRegister\> | Quantum memory (teleportation semantics) |
 
 CMEM is accessed by ILdm, IStr, FLdm, FStr, ZLdm, ZStr and their register-indirect
 variants (ILdx, IStrx, FLdx, FStrx, ZLdx, ZStrx).
-QMEM is accessed by QLoad, QStore.
+QMEM is accessed by QLoad and QStore. Both operations consume one Bell pair from
+`bell_pair_budget` (see section 2.5). The state exists in exactly one location
+before and after each operation.
 
 ### 2.4 Call Stack
 
@@ -56,6 +58,18 @@ QMEM is accessed by QLoad, QStore.
 - CALL pushes PC+1 onto the stack and jumps to the target label.
 - RET pops the top address and jumps to it. If the stack is empty, RET acts as HALT.
 - ISR handlers also push the current PC for return via RETI.
+
+### 2.5 Bell Pair Budget
+
+- Type: `u32` (counter on ExecutionContext, initialized from VmConfig)
+- Each QSTORE or QLOAD consumes one Bell pair (decrements by 1).
+- Default value: 256 (one Bell pair per QMEM slot).
+- A budget of 0 means unlimited: no budget check is performed.
+- When the budget is non-zero and reaches 0, the next QSTORE or QLOAD sets
+  `psw.int_quantum_err = true` and raises `CqamError::BellPairExhausted`.
+  If a QuantumError ISR handler is registered (via `SETIV`), execution jumps
+  to the handler; otherwise the default action (trap_halt) applies.
+- Configurable via the `bell_pair_budget` field in `VmConfig` / TOML config.
 
 ## 3. Program Status Word (PSW)
 
@@ -192,14 +206,18 @@ Auto-promotion rules:
 
 ### 6.2 Measurement
 
+CQAM enforces physical realism: all observation is destructive or partial.
+Non-destructive reading of a quantum state (sampling without collapse) has no
+physical basis and is not supported by the ISA.
+
 - **Full measurement (QOBSERVE):** Stochastic; samples via the Born rule.
-  Produces a collapsed state and a `HybridValue::Dist` containing `[(k, 1.0)]`.
-  Destructive: Q[src] is set to None and PSW.DF is set.
-- **Non-destructive sample (QSAMPLE):** Extracts probabilities from Q[src]
-  without consuming it. Q[src] remains available for further operations.
-- **Single-qubit measurement (QMEAS):** Measures one qubit, stores the 0/1
-  outcome in an integer register. The quantum register is updated to the
-  post-measurement state (projected and renormalized) but is not consumed.
+  Produces a collapsed outcome and a `HybridValue::Dist` containing `[(k, 1.0)]`.
+  Destructive: Q[src] is set to None and PSW.DF is set. Supports three modes
+  (DIST, PROB, AMP) controlled by the `mode` field; all modes consume Q[src].
+- **Single-qubit measurement (QMEAS):** Measures one qubit via a projective
+  measurement, stores the 0/1 outcome in an integer register. The quantum
+  register is updated to the post-measurement state (projected and renormalized)
+  but is not fully consumed; remaining qubits retain their coherence.
 - **Deterministic measurement:** `measure_deterministic()` returns argmax of
   |alpha_k|^2 or rho_kk (for testing only; not exposed as an ISA instruction).
 
@@ -244,8 +262,8 @@ falls below `SimConfig::fidelity_threshold`, the VM sets `int_quantum_err`.
 
 ### 6.5 Observation Modes
 
-QOBSERVE and QSAMPLE support three extraction modes, selected by the `mode`
-field:
+QOBSERVE supports three extraction modes, selected by the `mode` field. All
+modes are destructive: Q[src] is consumed (set to None) and PSW.DF is marked.
 
 | Mode | ID | Output Type | Semantics |
 |------|----|-------------|-----------|
@@ -253,8 +271,9 @@ field:
 | PROB | 1 | Float(f64) | Probability of a single basis state at index R[ctx0]. Returns p_k = |alpha_k|^2 or rho_kk. |
 | AMP  | 2 | Complex(f64, f64) | Quantum register element at (row, col) where row=R[ctx0], col=R[ctx1]. |
 
-QOBSERVE is destructive: it consumes Q[src] (sets to None) and marks PSW.DF.
-QSAMPLE is non-destructive: Q[src] remains available for further operations.
+When partial classical information is needed without fully consuming a quantum
+register, use QMEAS to measure individual qubits. The register is updated to
+the post-measurement (projected) state but is not set to None.
 
 ### 6.6 Masked Gate Operations
 
@@ -442,7 +461,7 @@ The `ResourceTracker` accumulates deltas across execution for reporting.
 The machine state is a tuple:
 
 ```
-Sigma = (PC, R, F, Z, Q, H, CMEM, QMEM, PSW, CS, TID, N_threads)
+Sigma = (PC, R, F, Z, Q, H, CMEM, QMEM, PSW, CS, TID, N_threads, BPB)
 ```
 
 where:
@@ -453,11 +472,12 @@ where:
 - `Q : [0..7] -> QuantumRegister | NULL` -- quantum register file
 - `H : [0..7] -> HybridValue | EMPTY` -- hybrid register file
 - `CMEM : [0..65535] -> Z` -- classical memory (64-bit cells)
-- `QMEM : [0..255] -> QuantumRegister | NULL` -- quantum memory
+- `QMEM : [0..255] -> QuantumRegister | NULL` -- quantum memory (consume-on-use)
 - `PSW : PSW_State` -- program status word (all flags)
 - `CS : List<N>` -- call stack (return addresses)
 - `TID : N` -- thread identity (0-based index; 0 in single-threaded context)
 - `N_threads : N` -- configured thread count (from pragma or CLI)
+- `BPB : N | unlimited` -- Bell pair budget; 0 encodes unlimited
 
 ### 10.2 State Transition Function
 
@@ -662,16 +682,48 @@ Note: Q[src] is NOT consumed.
   sigma --HALT--> sigma[PSW.trap_halt := true]
 ```
 
-**Non-destructive Sample (QSAMPLE):**
+**Quantum Store -- Teleportation (QSTORE):**
 ```
-    Q[src] != NULL
+    Q[src] != NULL     BPB > 0  (or BPB = 0 meaning unlimited)
+    handle = Q[src]
   -------------------------------------------------------
-  sigma --QSAMPLE(dst_h, src_q, mode, ctx0, ctx1)-->
-    sigma[H[dst_h] := extract(Q[src], mode, R[ctx0], R[ctx1]),
-          PC := PC + 1]
+  sigma --QSTORE(src_q, addr)-->
+    sigma[QMEM[addr] := handle,
+          Q[src_q]   := NULL,
+          BPB        := if BPB > 0 then BPB - 1 else 0,
+          PC         := PC + 1]
+
+    Q[src] != NULL     BPB = 1  (budget exactly exhausted)
+  -------------------------------------------------------
+  sigma --QSTORE(src_q, addr)--> sigma[PSW.int_quantum_err := true]
+    => CqamError::BellPairExhausted { instruction: "QSTORE" }
 ```
 
-Note: Q[src_q] is NOT consumed.
+Note: Q[src_q] is consumed; the state moves to QMEM[addr]. If a noise model
+is active, a depolarizing channel proportional to `(1 - bell_pair_fidelity)`
+is applied to QMEM[addr] after the move.
+
+**Quantum Load -- Teleportation (QLOAD):**
+```
+    QMEM[addr] != NULL     BPB > 0  (or BPB = 0 meaning unlimited)
+    handle = QMEM[addr]
+  -------------------------------------------------------
+  sigma --QLOAD(dst_q, addr)-->
+    sigma[Q[dst_q]   := handle,
+          QMEM[addr] := NULL,
+          BPB        := if BPB > 0 then BPB - 1 else 0,
+          PC         := PC + 1]
+
+    QMEM[addr] != NULL     BPB = 1  (budget exactly exhausted)
+  -------------------------------------------------------
+  sigma --QLOAD(dst_q, addr)--> sigma[PSW.int_quantum_err := true]
+    => CqamError::BellPairExhausted { instruction: "QLOAD" }
+```
+
+Note: QMEM[addr] is consumed; the state moves to Q[dst_q]. Teleportation noise
+is applied in the same way as for QSTORE. A QSTORE followed by a QLOAD is a
+move round-trip: the state returns to the Q register file, but two Bell pairs
+have been consumed and noise has been applied twice (once per operation).
 
 **Quantum Kernel with Float Context (QKERNELF):**
 ```

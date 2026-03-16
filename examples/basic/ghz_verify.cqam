@@ -68,21 +68,7 @@ LABEL: ghz_pow2_done
 # ===============================================
     QPREP Q0, 3          # Q0 = GHZ state (dist_id 3)
 
-# Verify P(|0...0>) = 0.5
-    QSAMPLE H0, Q0, 1, R0, R0   # H0 = P(|0...0>)
-    HREDUCE REALP, H0, F0            # F0 = P(|0...0>) — expect 0.5
-
-# Verify P(|1...1>) = 0.5
-    QSAMPLE H1, Q0, 1, R5, R5   # H1 = P(|1...1>)
-    HREDUCE REALP, H1, F1            # F1 = P(|1...1>) — expect 0.5
-
-# Check off-diagonal coherence: rho[0][2^N-1]
-    QSAMPLE H2, Q0, 2, R0, R5   # H2 = rho[0][2^N-1] as Complex
-    HREDUCE MAGNI, H2, F2            # F2 = |rho[0][N-1]| — expect 0.5
-    HREDUCE PHASE, H2, F3            # F3 = phase of rho[0][N-1] — expect 0
-    HREDUCE CONJZ, H2, Z0           # Z0 = conj(rho[0][N-1])
-
-# Full distribution measurement
+# Full distribution measurement (captures P(|0...0>) and P(|1...1>))
     QOBSERVE H3, Q0              # Destructive measurement
 
 # Print measurement histogram (top-10 for 16-qubit state)
@@ -101,8 +87,8 @@ LABEL: ghz_pow2_done
     QPREP Q1, 1          # Q1 = |0...0>
     QKERNEL ENTG, Q1, Q1, R2, R2   # Entangle kernel
 
-# Sample to compare with direct GHZ
-    QSAMPLE H4, Q1, 0, R2, R2   # H4 = distribution from entangle kernel
+# Observe to compare with direct GHZ
+    QOBSERVE H4, Q1               # H4 = distribution from entangle kernel
     HREDUCE MEANT, H4, F6           # F6 = mean
     HREDUCE VARNC, H4, F7           # F7 = variance
 
@@ -116,7 +102,7 @@ LABEL: ghz_pow2_done
     FLDI F8, 1           # amplitude for |0>
     FLDI F9, 1           # amplitude for |1>
     QENCODE Q2, F8, 2, 1 # Q2 = normalized [1,1]/sqrt(2) = |+> (1 qubit)
-    QSAMPLE H5, Q2, 0, R2, R2
+    QOBSERVE H5, Q2             # H5 = distribution of encoded state
     HREDUCE MEANT, H5, F10  # F10 = mean of encoded state
 
 # ===============================================
@@ -142,12 +128,10 @@ LABEL: merge_verify
     QOBSERVE H6, Q3
 
 # --- Store all results ---
-    FSTR F0, 0           # P(|0...0>) from GHZ
-    FSTR F1, 1           # P(|1...1>) from GHZ
-    FSTR F2, 2           # |rho[0][N-1]|
+    FSTR F5, 0           # Mean of GHZ measurement
+    FSTR F4, 1           # Variance of GHZ measurement
     ISTR R6, 3           # Mode of GHZ measurement
     ISTR R7, 4           # Entanglement verification flag
-    ZSTR Z0, 5           # Conjugate of off-diagonal element
 
 # --- Print results ---
     ILDM R2, 4               # R2 = CMEM[4] = entanglement flag

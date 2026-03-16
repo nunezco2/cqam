@@ -339,13 +339,13 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
 
                 ReduceFn::Argmax => hreduce_dist_to_int!(hybrid_val, "ARGMAX", |e: &[(u32, f64)]| {
                     if e.len() >= PAR_THRESHOLD {
-                        e.par_iter().enumerate()
-                            .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
-                            .map(|(idx, _)| idx as i64).unwrap_or(0)
+                        e.par_iter()
+                            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                            .map(|(val, _)| *val as i64).unwrap_or(0)
                     } else {
-                        e.iter().enumerate()
-                            .max_by(|a, b| (a.1).1.partial_cmp(&(b.1).1).unwrap_or(std::cmp::Ordering::Equal))
-                            .map(|(idx, _)| idx as i64).unwrap_or(0)
+                        e.iter()
+                            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal))
+                            .map(|(val, _)| *val as i64).unwrap_or(0)
                     }
                 }, ctx, *dst),
 

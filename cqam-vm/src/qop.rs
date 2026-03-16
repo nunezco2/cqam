@@ -294,60 +294,84 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
             }
         }
 
-        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            if let Some(handle) = ctx.qregs[*src_q as usize] {
-                let c0 = ctx.iregs.get(*ctx0)? as usize;
-                let c1 = ctx.iregs.get(*ctx1)? as usize;
-                let obs_result = backend.sample(handle, *mode, c0, c1)?;
-
-                let hval = match obs_result {
-                    ObserveResult::Dist(pairs) => HybridValue::Dist(pairs),
-                    ObserveResult::Prob(p) => HybridValue::Complex(p, 0.0),
-                    ObserveResult::Amp(c) => HybridValue::Complex(c.0, c.1),
-                    ObserveResult::Sample(k) => HybridValue::Int(k),
-                };
-                ctx.hregs.set(*dst_h, hval)?;
-                Ok(())
-            } else {
-                Err(CqamError::UninitializedRegister {
-                    file: "Q".to_string(),
-                    index: *src_q,
-                })
-            }
-        }
-
         Instruction::QLoad { dst_q, addr } => {
-            if let Some(qmem_handle) = ctx.qmem.load(*addr) {
-                let new_handle = backend.clone_state(*qmem_handle)?;
-                ctx.set_qreg(*dst_q, new_handle, backend);
-                ctx.psw.qf = true;
-                ctx.psw.sf = false;
-                ctx.psw.ef = false;
-                ctx.psw.inf = false;
-                Ok(())
-            } else {
-                Err(CqamError::UninitializedRegister {
+            // Teleportation semantics: MOVE from QMEM[addr] to Q[dst] (consumes QMEM slot)
+            let handle = ctx.qmem.take(*addr)
+                .ok_or_else(|| CqamError::UninitializedRegister {
                     file: "QMEM".to_string(),
                     index: *addr,
-                })
+                })?;
+
+            // Check Bell pair budget (0 = unlimited)
+            if ctx.bell_pair_budget == 0 && ctx.config.bell_pair_budget != 0 {
+                // Put handle back before returning error
+                ctx.qmem.store(*addr, handle);
+                ctx.psw.int_quantum_err = true;
+                return Err(CqamError::BellPairExhausted {
+                    instruction: "QLOAD".to_string(),
+                });
             }
+            if ctx.config.bell_pair_budget != 0 {
+                ctx.bell_pair_budget -= 1;
+            }
+
+            // Release old Q register occupant if any
+            if let Some(old) = ctx.qregs[*dst_q as usize].take() {
+                backend.release(old);
+            }
+
+            // MOVE handle from QMEM[addr] to Q[dst] (teleportation -- consumes QMEM slot)
+            ctx.qregs[*dst_q as usize] = Some(handle);
+
+            // Apply teleportation noise if noise model is active
+            backend.apply_teleportation_noise(handle)?;
+
+            // PSW: quantum register now active
+            ctx.psw.qf = true;
+            ctx.psw.sf = false;
+            ctx.psw.ef = false;
+            ctx.psw.inf = false;
+
+            Ok(())
         }
 
         Instruction::QStore { src_q, addr } => {
-            if let Some(handle) = ctx.qregs[*src_q as usize] {
-                let cloned = backend.clone_state(handle)?;
-                // Release any previous QMEM handle at this address
-                if let Some(old) = ctx.qmem.take(*addr) {
-                    backend.release(old);
-                }
-                ctx.qmem.store(*addr, cloned);
-                Ok(())
-            } else {
-                Err(CqamError::UninitializedRegister {
+            // Teleportation semantics: MOVE from Q[src] to QMEM[addr] (consumes source)
+            let handle = ctx.qregs[*src_q as usize]
+                .ok_or_else(|| CqamError::UninitializedRegister {
                     file: "Q".to_string(),
                     index: *src_q,
-                })
+                })?;
+
+            // Check Bell pair budget (0 = unlimited)
+            if ctx.bell_pair_budget == 0 && ctx.config.bell_pair_budget != 0 {
+                ctx.psw.int_quantum_err = true;
+                return Err(CqamError::BellPairExhausted {
+                    instruction: "QSTORE".to_string(),
+                });
             }
+            if ctx.config.bell_pair_budget != 0 {
+                ctx.bell_pair_budget -= 1;
+            }
+
+            // Release old QMEM occupant if any
+            if let Some(old) = ctx.qmem.take(*addr) {
+                backend.release(old);
+            }
+
+            // MOVE handle from Q[src] to QMEM[addr] (teleportation -- consumes source)
+            ctx.qregs[*src_q as usize] = None;
+            ctx.qmem.store(*addr, handle);
+
+            // Apply teleportation noise if noise model is active
+            backend.apply_teleportation_noise(handle)?;
+
+            // PSW: quantum memory active, no measurement occurred
+            ctx.psw.sf = false;
+            ctx.psw.ef = false;
+            ctx.psw.inf = false;
+
+            Ok(())
         }
 
         Instruction::QHadM { dst, src, mask_reg } => {

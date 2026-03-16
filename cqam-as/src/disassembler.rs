@@ -191,16 +191,6 @@ fn format_instruction(instr: &Instruction) -> String {
                 format!("QOBSERVE H{}, Q{}, {}, R{}, R{}", dst_h, src_q, u8::from(*mode), ctx0, ctx1)
             }
         }
-        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            use cqam_core::instruction::ObserveMode;
-            if *mode == ObserveMode::Dist && *ctx0 == 0 && *ctx1 == 0 {
-                format!("QSAMPLE H{}, Q{}", dst_h, src_q)
-            } else if *mode == ObserveMode::Prob {
-                format!("QSAMPLE H{}, Q{}, {}, R{}", dst_h, src_q, u8::from(*mode), ctx0)
-            } else {
-                format!("QSAMPLE H{}, Q{}, {}, R{}, R{}", dst_h, src_q, u8::from(*mode), ctx0, ctx1)
-            }
-        }
         Instruction::QLoad { dst_q, addr } => format!("QLOAD Q{}, {}", dst_q, addr),
         Instruction::QStore { src_q, addr } => format!("QSTORE Q{}, {}", src_q, addr),
         Instruction::QPrepR { dst, dist_reg } => format!("QPREPR Q{}, R{}", dst, dist_reg),

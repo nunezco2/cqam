@@ -180,49 +180,12 @@ cut_fmt:
 # Step 5: Measure and find the best cut
 # ===========================================================================
 
-# Sample probabilities of the max-cut states (C=3): k in {4,5,6,9,10,11}
-    ILDI R0, 4
-    QSAMPLE H0, Q0, 1, R0, R0
-    HREDUCE REALP, H0, F8    # F8 = P(|4>)
-
-    ILDI R0, 5
-    QSAMPLE H1, Q0, 1, R0, R0
-    HREDUCE REALP, H1, F9    # F9 = P(|5>)
-
-    # Sum of max-cut probabilities
-    FADD F10, F8, F9     # F10 = P(4) + P(5)
-
-    ILDI R0, 6
-    QSAMPLE H0, Q0, 1, R0, R0
-    HREDUCE REALP, H0, F8
-
-    FADD F10, F10, F8    # + P(6)
-
-    ILDI R0, 9
-    QSAMPLE H0, Q0, 1, R0, R0
-    HREDUCE REALP, H0, F8
-
-    FADD F10, F10, F8    # + P(9)
-
-    ILDI R0, 10
-    QSAMPLE H0, Q0, 1, R0, R0
-    HREDUCE REALP, H0, F8
-
-    FADD F10, F10, F8    # + P(10)
-
-    ILDI R0, 11
-    QSAMPLE H0, Q0, 1, R0, R0
-    HREDUCE REALP, H0, F8
-
-    FADD F10, F10, F8    # + P(11) => F10 = total P(max cut)
-
 # Destructive measurement
     QOBSERVE H2, Q0
     HREDUCE ARGMX, H2, R3   # R3 = argmax (best state)
 
 # Store results
     ISTR R3, 0           # CMEM[0] = best state
-    FSTR F10, 1          # CMEM[1] = P(max cut)
 
 # ===========================================================================
 # Print results
@@ -231,7 +194,7 @@ cut_fmt:
     ILDI R1, @cut_fmt.len
     ISUB R1, R1, R15
     ILDM R2, 0           # best state
-    FLDM F1, 1           # P(max cut)
+    FLDI F1, 0           # placeholder (P(max cut) not available without QSAMPLE)
     ECALL PRINT_STR
 
     HALT

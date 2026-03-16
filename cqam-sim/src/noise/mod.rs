@@ -83,6 +83,12 @@ pub trait NoiseModel: Send + Sync {
         let _ = state;
     }
 
+    /// Bell pair fidelity for teleportation noise (0.0 to 1.0).
+    /// 1.0 = perfect Bell pairs. Default: 1.0 (no teleportation noise).
+    fn bell_pair_fidelity(&self) -> f64 {
+        1.0
+    }
+
     /// Return the name of this noise model.
     fn name(&self) -> &str;
 

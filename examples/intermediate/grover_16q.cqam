@@ -80,9 +80,6 @@ LABEL: grov_pow2_done
 # --- Prepare uniform superposition ---
     QPREP Q0, 0          # Q0 = |+>^n (uniform over 2^n states)
 
-# --- Store initial state to quantum memory for later comparison ---
-    QSTORE Q0, 0         # QMEM[0] = initial uniform state
-
 # --- Grover iteration loop ---
 LABEL: grover_loop
 

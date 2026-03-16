@@ -71,9 +71,7 @@ res_fmt:
     QCNOT Q0, Q0, R0, R1  # CNOT(q0, q1): |000> -> |000> (data=0)
     QCNOT Q0, Q0, R0, R2  # CNOT(q0, q2): |000> -> |000>
 
-# Verify encoding: P(|000>) should be 1.0
-    QSAMPLE H0, Q0, 1, R4, R4
-    HREDUCE REALP, H0, F0    # F0 = P(|000>) -- expect 1.0
+# Runs blind — no mid-step observation (physical realism)
 
 # ===============================================
 # Step 2: Introduce bit-flip error on qubit 1
@@ -81,9 +79,7 @@ res_fmt:
 # Simulate a single-qubit X error on the middle qubit
     QFLIP Q0, Q0, R7    # Flip qubit 1: |000> -> |010>
 
-# Verify error: state should be |010> (state 2)
-    QSAMPLE H1, Q0, 1, R5, R5
-    HREDUCE REALP, H1, F1    # F1 = P(|010>) -- expect 1.0
+# Runs blind — no mid-step observation (physical realism)
 
 # ===============================================
 # Step 3: Syndrome extraction via QMEAS
@@ -143,28 +139,19 @@ LABEL: correct_q2
 # ===============================================
 LABEL: verify_code
 
-# After correction, should be back to |000>
-    QSAMPLE H2, Q1, 1, R4, R4
-    HREDUCE REALP, H2, F2    # F2 = P(|000>) after correction -- expect 1.0
-
-# Full distribution check
-    QSAMPLE H3, Q1, 0, R4, R4
-    HREDUCE MODEV, H3, R14  # R14 = mode -- expect 0
-
-# Destructive final measurement
+# Destructive final measurement -- verifies correction
     QOBSERVE H4, Q1
     HREDUCE MODEV, H4, R15  # R15 = final state -- expect 0
 
 # Verify success
+    HREDUCE MODEV, H4, R14  # R14 = mode of final measurement
     IEQ R14, R15, R4     # R14 = (final == |000>)
 
 # Consume remaining quantum register
     QOBSERVE H5, Q0
 
 # === Store results ===
-    FSTR F0, 0           # CMEM[0] = initial P(|000>) = 1.0
-    FSTR F1, 1           # CMEM[1] = P(|010>) after error = 1.0
-    FSTR F2, 2           # CMEM[2] = P(|000>) after correction = 1.0
+    ISTR R15, 0          # CMEM[0] = final corrected state
     ISTR R12, 3          # CMEM[3] = syndrome s1
     ISTR R13, 4          # CMEM[4] = syndrome s2
     ISTR R9, 5           # CMEM[5] = qubit 0 measurement

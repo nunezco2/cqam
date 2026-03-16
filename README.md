@@ -47,11 +47,13 @@ The full lifecycle of a hybrid computation in CQAM:
    tensor product.
 4. **Measurement.** `QOBSERVE` performs a projective measurement under the Born
    rule, collapsing the state and storing the outcome in the hybrid register
-   file. `QMEAS` measures a single qubit and stores the 0/1 result in an
-   integer register without consuming the quantum register.
-5. **State inspection.** `QSAMPLE` non-destructively reads probabilities from a
-   quantum register. `QPTRACE` computes the partial trace over subsystem B,
-   producing a reduced density matrix. `QRESET` resets a single qubit to |0>.
+   file. Observation is always destructive: Q[src] is consumed. `QMEAS`
+   measures a single qubit and stores the 0/1 result in an integer register;
+   the remaining qubits retain their coherence and the register is not consumed.
+5. **Structural operations.** `QPTRACE` computes the partial trace over
+   subsystem B, producing a reduced density matrix. `QRESET` resets a single
+   qubit to |0>. `QSTORE` and `QLOAD` move quantum state to and from QMEM via
+   quantum teleportation (each operation consumes the source and one Bell pair).
 6. **Classical post-processing.** `HREDUCE` applies one of 17 reduction
    functions (mean, mode, variance, magnitude, phase, expectation value, etc.)
    to extract a classical scalar from a measurement distribution, depositing it
@@ -175,8 +177,10 @@ macOS, and Windows.
                   └─────────────────────────────────┘
 ```
 
-This layered architecture enforces the no-cloning constraint: quantum state
-cannot be copied into the classical subsystem without measurement.
+This layered architecture enforces physical realism throughout. The no-cloning
+theorem is respected at every boundary: quantum state cannot be copied into the
+classical subsystem without measurement, QSTORE and QLOAD move state via
+teleportation (consuming the source), and all observation is destructive.
 
 ## Crate Structure
 
@@ -250,6 +254,7 @@ rng_seed            = 42     # fix RNG for reproducible measurements
 shots               = 1000   # shot count (equivalent to --shots 1000)
 noise_model         = "superconducting"  # built-in noise modality
 noise_method        = "density-matrix"  # noise simulation method
+bell_pair_budget    = 256    # Bell pairs available for QSTORE/QLOAD teleportation; 0 = unlimited
 ```
 
 Programs may also embed a qubit hint via the `#! qubits N` pragma on the first
@@ -607,15 +612,22 @@ implementation, backed by `QuantumRegister` (Pure/Mixed dispatch). Future
 QPU backends — targeting IBM Quantum, QuEra, IonQ, Rigetti, or Amazon
 Braket — will implement the same trait without requiring changes to the VM.
 
-The trait groups 21 methods into five categories:
+The trait groups methods into five categories:
 
 | Category | Methods |
 |----------|---------|
 | State preparation | `prep`, `prep_from_amplitudes`, `prep_mixed` |
 | Gate / kernel application | `apply_kernel`, `apply_single_gate`, `apply_two_qubit_gate`, `apply_custom_unitary` |
-| Observation / measurement | `observe`, `sample`, `measure_qubit` |
+| Observation / measurement | `observe`, `measure_qubit`, `apply_teleportation_noise` |
 | Composite operations | `tensor_product`, `partial_trace`, `reset_qubit` |
 | Handle lifecycle | `clone_state`, `release`, `num_qubits`, `dimension`, `max_qubits`, `set_rng_seed`, `purity`, `is_pure`, `diagonal_probabilities`, `get_element`, `amplitude` |
+
+The `apply_teleportation_noise` method is called by QSTORE and QLOAD when a
+noise model is active. Its default implementation is a no-op (perfect Bell
+pairs). Each noise modality provides a `bell_pair_fidelity()` value that
+controls the strength of the depolarizing channel applied during teleportation.
+`clone_state` is retained for internal handle management in masked gate
+operations (QHADM, QFLIP, QPHASE) and is not exposed as an ISA operation.
 
 ## Reference Documentation
 

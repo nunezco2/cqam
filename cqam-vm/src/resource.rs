@@ -257,14 +257,6 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
-        // Quantum sample: 1 cycle, non-destructive (no interference)
-        Instruction::QSample { .. } => ResourceDelta {
-            time: 1,
-            space: 1,
-            interference: 0.0,
-            ..Default::default()
-        },
-
         // Masked Hadamard: 2 cycles, creates/destroys superposition
         Instruction::QHadM { .. } => ResourceDelta {
             time: 2,
@@ -400,11 +392,12 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             interference: 0.5,
         },
 
-        // Quantum load/store: 1 cycle
+        // Quantum load/store: 3 cycles (teleportation), 1 Bell pair consumed
         Instruction::QLoad { .. }
         | Instruction::QStore { .. } => ResourceDelta {
-            time: 1,
+            time: 3,
             space: 1,
+            entanglement: 1.0,
             ..Default::default()
         },
 

@@ -585,6 +585,7 @@ fn copy_sim_config(c: &cqam_run::simconfig::SimConfig) -> cqam_run::simconfig::S
         shots: c.shots,
         noise_model: c.noise_model.clone(),
         noise_method: c.noise_method.clone(),
+        bell_pair_budget: c.bell_pair_budget,
     }
 }
 

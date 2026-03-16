@@ -1,12 +1,13 @@
-# adaptive_grover.cqam — Grover search with flag-based adaptive termination
+# adaptive_grover.cqam — Fixed-iteration Grover search (4 qubits, target=5)
 #
-# Uses QSTORE/QLOAD to probe convergence without destroying the
-# quantum state. Iterates until the distribution mode matches the
-# target or max iterations reached.
+# Uses the optimal iteration count: floor(pi/4 * sqrt(2^n)) = floor(pi/4 * 4) = 3
+# for n=4 qubits. Applies 3 Grover iterations then measures once.
+# On real hardware you cannot peek at the quantum state mid-algorithm.
+#
 # Flag usage:
 #   SF after GROV    — superposition intent maintained
 #   EF after GROV    — entanglement intent (Grover: EF=0)
-#   CF after QOBSERVE — collapse confirmed (cleared by HREDUCE)
+#   CF after QOBSERVE — collapse confirmed
 #   QF throughout    — quantum register active
 #
 #! qubits 4
@@ -14,15 +15,11 @@
 .data
     .org 1000
 banner:
-    .ascii "=== Adaptive Grover ===\n"
+    .ascii "=== Fixed-Iteration Grover ===\n"
 param_fmt:
-    .ascii "Target=%d max_iter=8\n"
-iter_fmt:
-    .ascii "Iter %d: mode=%d SF=%d EF=%d\n"
-conv_fmt:
-    .ascii "Converged at iter %d: found=%d\n"
-fail_fmt:
-    .ascii "Not converged after %d iterations: mode=%d\n"
+    .ascii "Target=%d iterations=3\n"
+res_fmt:
+    .ascii "Result: found=%d\n"
 
 .code
     ILDI R15, 1
@@ -41,74 +38,23 @@ fail_fmt:
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
-    ILDI R11, 8              # max iterations
-    ILDI R12, 0              # iteration counter
+    ILDI R11, 3              # optimal iterations for 4 qubits: floor(pi/4 * sqrt(16)) = 3
     QPREP Q0, 0              # uniform superposition
 
 LABEL: grover_loop
     QKERNEL GROV, Q0, Q0, R10, R14
-
-    # Read quantum flags after Grover iteration
-    JMPF SF, sf_set
-    ILDI R7, 0
-    JMP sf_done
-LABEL: sf_set
-    ILDI R7, 1
-LABEL: sf_done
-
-    JMPF EF, ef_set
-    ILDI R8, 0
-    JMP ef_done
-LABEL: ef_set
-    ILDI R8, 1
-LABEL: ef_done
-
-    # Probe: save → observe → check → restore if not converged
-    QSTORE Q0, 0
-    QOBSERVE H0, Q0
-    HREDUCE MODEV, H0, R5    # mode of distribution
-
-    # Print iteration with flag info
-    IADD R12, R12, R15
-    ISTR R5, 50              # save mode in CMEM
-    IADD R2, R12, R15
-    ISUB R2, R2, R15         # R2 = iter
-    ILDM R3, 50              # R3 = mode
-    IADD R4, R7, R15
-    ISUB R4, R4, R15         # R4 = SF
-    IADD R5, R8, R15
-    ISUB R5, R5, R15         # R5 = EF
-    ILDI R0, @iter_fmt
-    ILDI R1, @iter_fmt.len
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-    # Check convergence: mode == target?
-    ILDM R5, 50              # restore mode from CMEM
-    IEQ R6, R5, R10
-    JIF R6, converged
-
-    # Restore state and continue
-    QLOAD Q0, 0
     ISUB R11, R11, R15
     JIF R11, grover_loop
 
-    # Max iterations reached without convergence
-    IADD R2, R12, R15
-    ISUB R2, R2, R15
-    ILDM R3, 50
-    ILDI R0, @fail_fmt
-    ILDI R1, @fail_fmt.len
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-    HALT
+    # Single final measurement
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R5    # mode of distribution
 
-LABEL: converged
-    IADD R2, R12, R15
-    ISUB R2, R2, R15
-    ILDM R3, 50
-    ILDI R0, @conv_fmt
-    ILDI R1, @conv_fmt.len
+    # Print result
+    IADD R2, R5, R15
+    ISUB R2, R2, R15         # R2 = found state
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
     ISUB R1, R1, R15
     ECALL PRINT_STR
 

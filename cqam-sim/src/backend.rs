@@ -32,7 +32,7 @@ use crate::kernels::phase::PhaseShift;
 use crate::kernels::rotate::Rotate;
 use crate::quantum_register::QuantumRegister;
 use crate::constants::{MAX_SV_QUBITS, MAX_QUBITS};
-use crate::noise::{NoiseModel, NoiseMethod};
+use crate::noise::{NoiseModel, NoiseMethod, channels};
 
 /// Concrete QuantumBackend implementation using the cqam-sim simulation engine.
 ///
@@ -708,17 +708,6 @@ impl QuantumBackend for SimulationBackend {
         result
     }
 
-    fn sample(
-        &mut self,
-        handle: QRegHandle,
-        mode: ObserveMode,
-        ctx0: usize,
-        ctx1: usize,
-    ) -> Result<ObserveResult, CqamError> {
-        let qr = self.get_state(handle)?;
-        self.observe_impl(qr, mode, ctx0, ctx1, None)
-    }
-
     fn measure_qubit(
         &mut self,
         handle: QRegHandle,
@@ -809,6 +798,46 @@ impl QuantumBackend for SimulationBackend {
         let result = Self::op_result(&post_qr);
         let new_handle = self.alloc(post_qr);
         Ok((new_handle, result))
+    }
+
+    fn apply_teleportation_noise(&mut self, handle: QRegHandle) -> Result<(), CqamError> {
+        // Extract fidelity and method before borrowing states mutably
+        let (fidelity, method) = match self.noise_model {
+            Some(ref noise) => (noise.bell_pair_fidelity(), self.noise_method),
+            None => return Ok(()),
+        };
+        if fidelity >= 1.0 {
+            return Ok(());
+        }
+        let p = 1.0 - fidelity; // depolarizing parameter
+        let kraus = channels::depolarizing_single(p);
+        let qr = self.states.get_mut(&handle.0).ok_or_else(|| {
+            CqamError::UninitializedRegister {
+                file: "Q".to_string(),
+                index: 0,
+            }
+        })?;
+        let n = qr.num_qubits();
+        match method {
+            Some(NoiseMethod::DensityMatrix) => {
+                Self::ensure_density_matrix(qr);
+                let dm = Self::as_density_matrix_mut(qr);
+                for q in 0..n {
+                    dm.apply_single_qubit_channel(q, &kraus);
+                }
+            }
+            Some(NoiseMethod::Trajectory) => {
+                if let QuantumRegister::Pure(sv) = qr {
+                    for q in 0..n {
+                        crate::noise::trajectory::apply_kraus_to_statevector_single(
+                            sv.amplitudes_mut(), n, q, &kraus, &mut self.rng,
+                        );
+                    }
+                }
+            }
+            None => {}
+        }
+        Ok(())
     }
 
     fn clone_state(

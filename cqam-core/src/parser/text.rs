@@ -374,7 +374,6 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             Ok(Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 })
         }
         "QOBSERVE" => parse_qobserve(&ops, "QOBSERVE", line_num),
-        "QSAMPLE" => parse_qobserve(&ops, "QSAMPLE", line_num),
         "QLOAD" => {
             if ops.len() != 2 {
                 return Err(CqamError::ParseError {

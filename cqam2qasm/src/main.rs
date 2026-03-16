@@ -53,7 +53,7 @@ fn print_doc_reference() {
     eprintln!("  Quantum gates:        QHADM  QPHASE  QFLIP  QROT");
     eprintln!("  Quantum two-qubit:    QCNOT  QCZ  QSWAP  QTENSOR");
     eprintln!("  Quantum kernels:      QKERNEL  QKERNELF  QKERNELZ  QCUSTOM");
-    eprintln!("  Quantum measurement:  QSAMPLE  QOBSERVE  QMEAS");
+    eprintln!("  Quantum measurement:  QOBSERVE  QMEAS");
     eprintln!("  Quantum memory:       QLOAD  QSTORE  QPTRACE  QRESET");
     eprintln!();
     eprintln!("  Hybrid:               HFORK  HMERGE  JMPF  HREDUCE");

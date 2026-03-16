@@ -552,27 +552,7 @@ fn roundtrip_qobserve_max() {
     assert_eq!(roundtrip(&instr), instr);
 }
 
-// =============================================================================
-// Round-trip tests: QO-format (QSAMPLE)
-// =============================================================================
-
-#[test]
-fn roundtrip_qsample() {
-    let instr = Instruction::QSample { dst_h: 2, src_q: 5, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
-    assert_eq!(roundtrip(&instr), instr);
-}
-
-#[test]
-fn roundtrip_qsample_max() {
-    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
-    assert_eq!(roundtrip(&instr), instr);
-}
-
-#[test]
-fn roundtrip_qsample_zero() {
-    let instr = Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
-    assert_eq!(roundtrip(&instr), instr);
-}
+// (QSAMPLE round-trip tests removed: QSAMPLE was removed from the ISA.)
 
 // =============================================================================
 // Round-trip tests: QO-format with mode (QOBSERVE mode dispatch)
@@ -591,18 +571,6 @@ fn roundtrip_qobserve_mode_amp() {
 }
 
 #[test]
-fn roundtrip_qsample_mode_prob() {
-    let instr = Instruction::QSample { dst_h: 1, src_q: 3, mode: ObserveMode::Prob, ctx0: 6, ctx1: 0 };
-    assert_eq!(roundtrip(&instr), instr);
-}
-
-#[test]
-fn roundtrip_qsample_mode_amp() {
-    let instr = Instruction::QSample { dst_h: 5, src_q: 2, mode: ObserveMode::Amp, ctx0: 8, ctx1: 9 };
-    assert_eq!(roundtrip(&instr), instr);
-}
-
-#[test]
 fn roundtrip_qobserve_backward_compat() {
     // mode=0, ctx0=0, ctx1=0 should round-trip identically to legacy format
     let instr = Instruction::QObserve { dst_h: 3, src_q: 6, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
@@ -613,12 +581,6 @@ fn roundtrip_qobserve_backward_compat() {
 fn roundtrip_qobserve_mode_max_ctx() {
     // Max ctx0/ctx1 values (4 bits each = 15)
     let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Amp, ctx0: 15, ctx1: 15 };
-    assert_eq!(roundtrip(&instr), instr);
-}
-
-#[test]
-fn roundtrip_qsample_mode_max_ctx() {
-    let instr = Instruction::QSample { dst_h: 7, src_q: 7, mode: ObserveMode::Amp, ctx0: 15, ctx1: 15 };
     assert_eq!(roundtrip(&instr), instr);
 }
 
@@ -831,13 +793,7 @@ fn error_decode_invalid_opcode_0xfe() {
     assert!(result.is_err());
 }
 
-#[test]
-fn decode_qsample_opcode_0x40() {
-    // 0x40 is now assigned to QSAMPLE
-    let word: u32 = 0x40_000000;
-    let result = decode(word).unwrap();
-    assert_eq!(result, Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 });
-}
+// (decode_qsample_opcode_0x40 removed: 0x40 is now reserved, QSAMPLE removed from ISA.)
 
 #[test]
 fn decode_reti_opcode_0x2d() {
@@ -1104,7 +1060,6 @@ fn mnemonic_all_assigned_opcodes() {
         (op::QOBSERVE, "QOBSERVE"),
         (op::QLOAD, "QLOAD"),
         (op::QSTORE, "QSTORE"),
-        (op::QSAMPLE, "QSAMPLE"),
         (op::QKERNELF, "QKERNELF"),
         (op::QKERNELZ, "QKERNELZ"),
         (op::ILDX, "ILDX"),
@@ -1313,7 +1268,6 @@ fn roundtrip_all_variants_comprehensive() {
         Instruction::QPrep { dst: 7, dist: DistId::Ghz },
         Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Fourier, ctx0: 3, ctx1: 4 },
         Instruction::QObserve { dst_h: 2, src_q: 5, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
-        Instruction::QSample { dst_h: 1, src_q: 3, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::QLoad { dst_q: 3, addr: 100 },
         Instruction::QStore { src_q: 0, addr: 0 },
     ];

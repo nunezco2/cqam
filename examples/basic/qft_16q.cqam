@@ -5,7 +5,7 @@
 # frequency-domain distribution. The QFT maps computational basis states
 # to phase states, analogous to the classical DFT.
 #
-# Pipeline: Prepare -> Entangle -> QFT -> Sample (non-destructive) ->
+# Pipeline: Prepare -> Entangle -> QFT ->
 #           Phase-shift -> QFT again -> Observe -> Reduce
 #
 #! qubits 16
@@ -49,15 +49,7 @@ res_fmt:
 # --- Stage 2: Apply QFT ---
     QKERNEL QFFT, Q1, Q0, R0, R2   # Q1 = QFT(Q0)
 
-# --- Stage 3: Non-destructive sampling of QFT output ---
-    QSAMPLE H0, Q1, 0, R0, R0   # H0 = full distribution (DIST mode)
-    HREDUCE MEANT, H0, F0           # F0 = mean frequency
-
-# Single-state probability check
-    QSAMPLE H1, Q1, 1, R0, R0   # H1 = P(|0>) in QFT domain (PROB mode)
-    HREDUCE REALP, H1, F1            # F1 = real part (it's a Float, so real = value)
-
-# --- Stage 4: Apply phase shift and re-transform ---
+# --- Stage 3: Apply phase shift and re-transform ---
     ZLDI Z0, 1, 1        # Z0 = (1, 1) -> |Z0| = sqrt(2)
     ZLDI Z1, 0, 0        # Z1 = (0, 0) unused
     QKERNELZ PHSH, Q2, Q1, Z0, Z1  # Q2 = phase_shift(QFT(Q0))
@@ -65,7 +57,7 @@ res_fmt:
 # Second QFT (inverse-like behavior with phase)
     QKERNEL QFFT, Q3, Q2, R0, R2   # Q3 = QFT(phase_shift(QFT(Q0)))
 
-# --- Stage 5: Extract density matrix element (AMP mode) ---
+# --- Stage 4: Extract density matrix element (AMP mode) ---
     ILDI R3, 0            # row = 0
     ILDI R4, 1            # col = 1
     QOBSERVE H2, Q3, 2, R3, R4  # H2 = rho[0][1] as Complex (destructive)
@@ -76,7 +68,7 @@ res_fmt:
     ILDI R2, 10           # Show top 10
     ECALL PRINT_HIST
 
-# --- Stage 6: Complex reductions ---
+# --- Stage 5: Complex reductions ---
     HREDUCE MAGNI, H2, F2    # F2 = magnitude of rho[0][1]
     HREDUCE PHASE, H2, F3    # F3 = phase of rho[0][1]
     HREDUCE REALP, H2, F4    # F4 = real part
@@ -85,16 +77,15 @@ res_fmt:
     HREDUCE NEGTZ, H2, Z3   # Z3 = negation of rho[0][1]
 
 # --- Store frequency-domain metrics ---
-    FSTR F0, 0            # CMEM[0] = mean frequency
-    FSTR F2, 1            # CMEM[1] = off-diagonal magnitude
-    FSTR F3, 2            # CMEM[2] = off-diagonal phase
+    FSTR F2, 0            # CMEM[0] = off-diagonal magnitude
+    FSTR F3, 1            # CMEM[1] = off-diagonal phase
 
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    FLDM F1, 0           # F1 = mean freq (stored as float via FSTR)
+    FLDM F1, 0           # F1 = off-diagonal magnitude
     ECALL PRINT_STR
 
     HALT

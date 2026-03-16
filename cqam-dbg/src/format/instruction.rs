@@ -134,12 +134,6 @@ pub fn format_instruction(instr: &Instruction) -> String {
                 dst_h, src_q, mode.name(), ctx0, ctx1
             )
         }
-        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } => {
-            format!(
-                "QSAMPLE H{}, Q{}, {}, R{}, R{}",
-                dst_h, src_q, mode.name(), ctx0, ctx1
-            )
-        }
         Instruction::QLoad { dst_q, addr } => format!("QLOAD Q{}, {}", dst_q, addr),
         Instruction::QStore { src_q, addr } => format!("QSTORE Q{}, {}", src_q, addr),
         Instruction::QEncode { dst, src_base, count, file_sel } => {
@@ -222,7 +216,6 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         | Instruction::QKernelF { .. }
         | Instruction::QKernelZ { .. }
         | Instruction::QObserve { .. }
-        | Instruction::QSample { .. }
         | Instruction::QLoad { .. }
         | Instruction::QStore { .. }
         | Instruction::QEncode { .. }

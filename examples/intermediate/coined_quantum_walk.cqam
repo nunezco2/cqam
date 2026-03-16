@@ -101,13 +101,10 @@ res_fmt:
 # --- Initial coin flip ---
     QHADM Q0, Q0, R4     # Hadamard on coin qubit
 
-# Store initial state
-    QSTORE Q0, 0         # QMEM[0] = initial state
-
-# Measure initial distribution
-    QSAMPLE H0, Q0, 0, R3, R3
-    HREDUCE VARNC, H0, F3   # F3 = initial variance
-    FSTR F3, 200         # CMEM[200] = initial variance
+# Park initial state in QMEM for variance comparison at end
+    QPREP Q1, 1          # Q1 = |000> (reference copy)
+    QHADM Q1, Q1, R4     # Same initial coin flip
+    QSTORE Q1, 0         # Teleport reference to QMEM[0] (Q1 consumed, 1 Bell pair)
 
 # === Quantum walk loop ===
 LABEL: walk_step
@@ -118,14 +115,7 @@ LABEL: walk_step
 # Step 2: Shift operation — apply permutation from CMEM
     QKERNEL PERM, Q0, Q0, R5, R3  # Shift conditioned on coin
 
-# Track distribution at each step
-    QSAMPLE H1, Q0, 0, R3, R3
-    HREDUCE VARNC, H1, F4   # F4 = variance at current step
-    HREDUCE MEANT, H1, F5   # F5 = mean position at current step
-
-# Store step statistics
-    FSTR F4, 300         # Overwritten each step
-    FSTR F5, 301
+# Runs blind — no mid-step observation (physical realism)
 
 # Advance step counter
     IADD R2, R2, R1
@@ -133,25 +123,16 @@ LABEL: walk_step
     JIF R0, walk_step
 
 # === Final measurement ===
-    QSAMPLE H2, Q0, 0, R3, R3
-    HREDUCE MEANT, H2, F6   # F6 = final mean
-    HREDUCE VARNC, H2, F7   # F7 = final variance
-
-# Check specific state probabilities
-    ILDI R8, 0
-    QSAMPLE H3, Q0, 1, R8, R8  # P(|000>)
-    HREDUCE REALP, H3, F8           # F8 = P(origin, coin=0)
-
-# Destructive measurement
     QOBSERVE H4, Q0
     HREDUCE MODEV, H4, R9   # R9 = mode (most probable state)
     HREDUCE ARGMX, H4, R10  # R10 = argmax
+    HREDUCE MEANT, H4, F6   # F6 = final mean
+    HREDUCE VARNC, H4, F7   # F7 = final variance
 
-# Load initial state for comparison
-    QLOAD Q1, 0
-    QSAMPLE H5, Q1, 0, R3, R3
-    HREDUCE VARNC, H5, F9   # F9 = initial variance
+# Retrieve reference state from QMEM (teleport back, 1 Bell pair)
+    QLOAD Q1, 0          # QMEM[0] consumed — single load completes round-trip
     QOBSERVE H6, Q1
+    HREDUCE VARNC, H6, F9   # F9 = initial variance
 
 # Compute variance ratio (ballistic signature: var ~ t^2)
     FLDI F10, 0
@@ -166,11 +147,10 @@ LABEL: store_walk_results
 # === Store results ===
     FSTR F6, 400         # CMEM[400] = final mean
     FSTR F7, 401         # CMEM[401] = final variance
-    FSTR F8, 402         # CMEM[402] = P(origin)
     ISTR R9, 403         # CMEM[403] = mode (most probable)
     ISTR R2, 404         # CMEM[404] = total steps
     FSTR F10, 405        # CMEM[405] = variance ratio (ballistic check)
-    FSTR F3, 406         # CMEM[406] = initial variance
+    FSTR F9, 406         # CMEM[406] = initial variance
 
 # --- Print results ---
     ILDI R0, @res_fmt

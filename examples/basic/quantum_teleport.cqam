@@ -62,10 +62,7 @@ res_fmt:
     FLDI F1, 0           # F1 = unused
     QKERNELF DROT, Q0, Q0, F0, F1  # Q0 = Rotate(|0>, theta=2) = |psi>
 
-# Record |psi>'s signature for later verification
-    QSAMPLE H0, Q0, 0, R0, R0   # H0 = distribution of |psi>
-    HREDUCE MEANT, H0, F2           # F2 = mean of |psi> (fingerprint)
-    HREDUCE VARNC, H0, F3           # F3 = variance of |psi>
+# Note: |psi>'s signature is not observed before teleportation (physical realism)
 
 # ===============================================
 # Step 2: Create shared Bell pair
@@ -121,12 +118,7 @@ LABEL: apply_z_correction
 # ===============================================
 LABEL: teleport_verify
 
-# Measure Bob's state
-    QSAMPLE H2, Q2, 0, R0, R0
-    HREDUCE MEANT, H2, F4   # F4 = mean of Bob's state
-    HREDUCE VARNC, H2, F5   # F5 = variance of Bob's state
-
-# Final destructive measurement
+# Final destructive measurement of Bob's state
     QOBSERVE H3, Q2
     HREDUCE MODEV, H3, R7   # R7 = Bob's measured state
 
@@ -135,8 +127,6 @@ LABEL: teleport_verify
     HREDUCE MODEV, H4, R8   # R8 = Bell pair measurement result
 
 # --- Store results ---
-    FSTR F2, 0           # CMEM[0] = |psi> mean (original)
-    FSTR F4, 1           # CMEM[1] = Bob's mean (should match)
     ISTR R4, 2           # CMEM[2] = Alice's measurement bits
     ISTR R7, 3           # CMEM[3] = Bob's measurement result
 

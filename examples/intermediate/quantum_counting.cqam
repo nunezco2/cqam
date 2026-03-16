@@ -68,9 +68,6 @@ LABEL: grover_count_inner
     ILT R8, R7, R5      # R8 = (R7 < R5)
     JIF R8, grover_count_inner
 
-# --- Store Grover-amplified state ---
-    QSTORE Q0, 0
-
 # --- Apply QFT to extract phase ---
     QKERNEL QFFT, Q1, Q0, R1, R1   # Q1 = QFT(Grover^k state)
 

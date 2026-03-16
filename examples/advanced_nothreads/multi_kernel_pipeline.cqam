@@ -1,5 +1,5 @@
 # multi_kernel_pipeline.cqam — All 11 quantum kernels, all distributions,
-#                              QPREPR, QKERNELF, QKERNELZ, QSTORE/QLOAD,
+#                              QPREPR, QKERNELF, QKERNELZ,
 #                              masked gates, quantum flags, HREDUCE dist fns
 #
 # Chains every kernel across Q0-Q7, checks flags after each stage,
@@ -39,8 +39,8 @@ mask_msg:
     .ascii "Masked ops mode=%d\n"
 expct_msg:
     .ascii "Expectation=%f\n"
-qmem_msg:
-    .ascii "QMEM restore OK\n"
+done_msg:
+    .ascii "Pipeline complete\n"
 
 .code
     ILDI R15, 1
@@ -102,22 +102,10 @@ LABEL: ef_print
     QKERNEL GROV, Q3, Q3, R5, R14
     QKERNEL GROV, Q3, Q3, R5, R14
 
-    # Save to QMEM before destructive observe
-    QSTORE Q3, 0
-
     QOBSERVE H0, Q3
     HREDUCE ARGMX, H0, R2
     ILDI R0, @grov_msg
     ILDI R1, @grov_msg.len
-    ISUB R1, R1, R15
-    ECALL PRINT_STR
-
-    # Restore from QMEM
-    QLOAD Q3, 0
-    QOBSERVE H0, Q3              # verify restore works
-    HREDUCE MODEV, H0, R6
-    ILDI R0, @qmem_msg
-    ILDI R1, @qmem_msg.len
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
@@ -167,19 +155,22 @@ LABEL: ef_print
     QOBSERVE H3, Q6
 
 # ============================================
-# Stage 8: DIAG + PERM
+# Stage 8: DIAG + PERM (uses QMEM pipeline buffer)
 # ============================================
     QPREP Q7, 0
     ILDI R3, @diag_data
     ILDI R4, @diag_data.len
     QKERNEL DIAG, Q7, Q7, R3, R4
-    QOBSERVE H4, Q7
+    QSTORE Q7, 0                 # Park DIAG result in QMEM[0] (Q7 consumed, 1 Bell pair)
 
-    QPREP Q0, 0                  # reuse Q0
+    QPREP Q0, 0                  # reuse Q0 for PERM while DIAG result is parked
     ILDI R3, @perm_table
     ILDI R4, @perm_table.len
     QKERNEL PERM, Q0, Q0, R3, R4
     QOBSERVE H5, Q0
+
+    QLOAD Q7, 0                  # Retrieve DIAG result (QMEM[0] consumed, 1 Bell pair)
+    QOBSERVE H4, Q7
 
 # ============================================
 # QPREPR: register-parameterized distribution

@@ -170,70 +170,7 @@ fn test_e2e_complex_kernel_phase_shift_to_z_file() {
     }
 }
 
-// =============================================================================
-// Test 4: QSAMPLE non-destructive -> multiple reads
-// =============================================================================
-
-/// Verify non-destructive sampling:
-///   QPREP Q0, BELL  ->  QSAMPLE H0, Q0, DIST  ->  QSAMPLE H1, Q0, PROB, R0
-///   ->  verify Q0 still alive  ->  QOBSERVE H2, Q0, DIST  ->  Q0 is None
-///
-/// Assertions:
-///   - After first QSAMPLE, Q0 is still Some
-///   - After second QSAMPLE, Q0 is still Some
-///   - H0 is Dist with Bell-state probabilities
-///   - H1 is Complex(probability, 0.0) of state R0
-///   - After QOBSERVE, Q0 is None
-///   - PSW.DF only set after QOBSERVE, not after QSAMPLE
-#[test]
-fn test_e2e_qsample_nondestructive_then_observe() {
-    // We'll execute step by step to check intermediate states
-    let instrs = vec![
-        Instruction::ILdi { dst: 0, imm: 0 }, // R0 = 0 (for PROB mode)
-        Instruction::QPrep { dst: 0, dist: DistId::Bell },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
-    ];
-
-    let mut ctx = ExecutionContext::new(instrs);
-    let mut fm = ForkManager::new();
-    let mut backend = SimulationBackend::new();
-
-    let program = std::sync::Arc::clone(&ctx.program);
-
-    // Execute ILDI and QPREP
-    execute_instruction(&mut ctx, &program[0], &mut fm, &mut backend).unwrap();
-    execute_instruction(&mut ctx, &program[1], &mut fm, &mut backend).unwrap();
-
-    assert!(ctx.qregs[0].is_some());
-
-    // Execute QSAMPLE (DIST mode)
-    execute_instruction(&mut ctx, &program[2], &mut fm, &mut backend).unwrap();
-
-    // Q0 should still be alive
-    assert!(ctx.qregs[0].is_some());
-    // H0 should be Dist
-    assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Dist(_)));
-    // PSW.DF should NOT be set (QSAMPLE is non-destructive)
-    assert!(!ctx.psw.df);
-
-    // Now do a second QSAMPLE with PROB mode
-    let qsample_prob = Instruction::QSample { dst_h: 1, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 };
-    execute_instruction(&mut ctx, &qsample_prob, &mut fm, &mut backend).unwrap();
-
-    // Q0 still alive
-    assert!(ctx.qregs[0].is_some());
-    // H1 should be Complex (probability with im=0.0)
-    assert!(matches!(ctx.hregs.get(1).unwrap(), HybridValue::Complex(_, _)));
-
-    // Now QOBSERVE to consume
-    let qobs = Instruction::QObserve { dst_h: 2, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 };
-    execute_instruction(&mut ctx, &qobs, &mut fm, &mut backend).unwrap();
-
-    // Q0 should now be None
-    assert!(ctx.qregs[0].is_none());
-    // PSW.DF should be set after QOBSERVE
-    assert!(ctx.psw.df);
-}
+// (Test 4 removed: QSAMPLE was removed from the ISA — no non-destructive observation.)
 
 // =============================================================================
 // Test 5: QOBSERVE mode=PROB single probability extraction
@@ -309,27 +246,27 @@ fn test_e2e_qobserve_amp_mode() {
 // =============================================================================
 
 /// Verify register-parameterized preparation:
-///   ILDI R0, 1  ->  QPREPR Q0, R0  ->  QSAMPLE H0, Q0, DIST
+///   ILDI R0, 1  ->  QPREPR Q0, R0  ->  QOBSERVE H0, Q0, DIST
 ///
-/// R0=1 means ZERO distribution. The sampled distribution should have
+/// R0=1 means ZERO distribution. The observed distribution should have
 /// P(0) = 1.0.
 ///
 /// Assertions:
-///   - Q0 is a valid density matrix
 ///   - H0 is Dist with a single entry (0, 1.0)
+///   - Q0 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qprepr_dynamic_dist() {
     let instrs = vec![
         Instruction::ILdi { dst: 0, imm: 1 },  // R0 = ZERO dist_id
         Instruction::QPrepR { dst: 0, dist_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
     let (ctx, _backend) = run_program(instrs);
 
-    // Q0 should still be alive (QSAMPLE is non-destructive)
-    assert!(ctx.qregs[0].is_some());
+    // Q0 should be consumed after QOBSERVE
+    assert!(ctx.qregs[0].is_none());
 
     // H0 should be Dist with essentially P(0) = 1.0
     if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
@@ -348,14 +285,14 @@ fn test_e2e_qprepr_dynamic_dist() {
 /// Verify amplitude encoding from float registers:
 ///   FLDI F0, 1  ->  FLDI F1, 0  ->  FLDI F2, 0  ->  FLDI F3, 1
 ///   ->  QENCODE Q0, F0, 4, F_FILE
-///   ->  QSAMPLE H0, Q0, DIST
+///   ->  QOBSERVE H0, Q0, DIST
 ///
 /// The encoded state should be (|00> + |11>)/sqrt(2), i.e., a Bell-like state.
 ///
 /// Assertions:
-///   - Q0 is a 2-qubit state (dim=4)
 ///   - H0 has entries at state 0 and state 3, each ~0.5
 ///   - States 1 and 2 have probability ~0.0
+///   - Q0 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qencode_f_file_bell_like() {
     let instrs = vec![
@@ -364,14 +301,14 @@ fn test_e2e_qencode_f_file_bell_like() {
         Instruction::FLdi { dst: 2, imm: 0 },  // F2 = 0.0
         Instruction::FLdi { dst: 3, imm: 1 },  // F3 = 1.0
         Instruction::QEncode { dst: 0, src_base: 0, count: 4, file_sel: FileSel::FFile },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
     let (ctx, _backend) = run_program(instrs);
 
-    // Q0 should exist
-    assert!(ctx.qregs[0].is_some());
+    // Q0 should be consumed after QOBSERVE
+    assert!(ctx.qregs[0].is_none());
 
     // H0 should be Dist
     if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
@@ -395,13 +332,11 @@ fn test_e2e_qencode_f_file_bell_like() {
 /// Verify amplitude encoding from complex registers:
 ///   ZLDI Z0, 1, 0  ->  ZLDI Z1, 0, 1
 ///   ->  QENCODE Q0, Z0, 2, Z_FILE
-///   ->  QSAMPLE H0, Q0, DIST
-///   ->  QSAMPLE H1, Q0, AMP, R_row, R_col
+///   ->  QOBSERVE H0, Q0, AMP, R_row, R_col
 ///
 /// Assertions:
-///   - Q0 is a 1-qubit state (dim=2)
-///   - Both basis states have probability 0.5
 ///   - The off-diagonal element has non-zero imaginary part (phase information)
+///   - Q0 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qencode_z_file_with_phase() {
     let instrs = vec![
@@ -410,30 +345,22 @@ fn test_e2e_qencode_z_file_with_phase() {
         Instruction::ILdi { dst: 0, imm: 0 },  // R0 = 0 (row)
         Instruction::ILdi { dst: 1, imm: 1 },  // R1 = 1 (col)
         Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: FileSel::ZFile },
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
-        Instruction::QSample { dst_h: 1, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
         Instruction::Halt,
     ];
 
     let (ctx, _backend) = run_program(instrs);
 
-    // H0 should be Dist with two entries, each ~0.5
-    if let HybridValue::Dist(entries) = ctx.hregs.get(0).unwrap() {
-        let p0 = entries.iter().find(|(k, _)| *k == 0).map(|(_, p)| *p).unwrap_or(0.0);
-        let p1 = entries.iter().find(|(k, _)| *k == 1).map(|(_, p)| *p).unwrap_or(0.0);
-        assert!((p0 - 0.5).abs() < 1e-10, "P(0)={}, expected 0.5", p0);
-        assert!((p1 - 0.5).abs() < 1e-10, "P(1)={}, expected 0.5", p1);
-    } else {
-        panic!("Expected Dist variant in H0");
-    }
+    // Q0 should be consumed after QOBSERVE
+    assert!(ctx.qregs[0].is_none());
 
-    // H1 should be Complex with non-zero imaginary part (off-diagonal has phase info)
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(1).unwrap() {
+    // H0 should be Complex with non-zero imaginary part (off-diagonal has phase info)
+    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
         // rho[0][1] = z0 * conj(z1) / norm = (1,0) * (0,-1) / 2 = (0,-1)/2 = (0, -0.5)
         assert!(re.abs() < 1e-10, "re={}, expected 0.0", re);
         assert!(im.abs() > 1e-10, "im={}, expected non-zero", im);
     } else {
-        panic!("Expected Complex variant in H1");
+        panic!("Expected Complex variant in H0");
     }
 }
 
@@ -444,7 +371,7 @@ fn test_e2e_qencode_z_file_with_phase() {
 /// Verify QHADM creates selective superposition:
 ///   QPREP Q0, ZERO  ->  ILDI R0, 1 (mask=0b01: qubit 0)
 ///   ->  QHADM Q1, Q0, R0
-///   ->  QSAMPLE H0, Q1, DIST
+///   ->  QOBSERVE H0, Q1, DIST
 ///
 /// Starting from |00>, Hadamard on qubit 0 (MSB in the density matrix convention)
 /// gives (|0>+|1>)/sqrt(2) tensor |0>, i.e., states |00>=0 and |10>=2.
@@ -453,13 +380,14 @@ fn test_e2e_qencode_z_file_with_phase() {
 /// Assertions:
 ///   - H0 has entries at state 0 and state 2, each ~0.5
 ///   - States 1 and 3 have probability ~0.0
+///   - Q1 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qhadm_selective_superposition() {
     let instrs = vec![
         Instruction::QPrep { dst: 0, dist: DistId::Zero },
         Instruction::ILdi { dst: 0, imm: 1 },  // mask = 0b01 (qubit 0 = MSB)
         Instruction::QHadM { dst: 1, src: 0, mask_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
@@ -486,20 +414,21 @@ fn test_e2e_qhadm_selective_superposition() {
 /// Verify QFLIP performs selective bit-flip:
 ///   QPREP Q0, ZERO  ->  ILDI R0, 3 (mask=0b11: both qubits)
 ///   ->  QFLIP Q1, Q0, R0
-///   ->  QSAMPLE H0, Q1, DIST
+///   ->  QOBSERVE H0, Q1, DIST
 ///
 /// X on both qubits of |00> gives |11>, so P(3) = 1.0.
 ///
 /// Assertions:
 ///   - H0 has single entry (3, 1.0)
 ///   - No superposition (deterministic state)
+///   - Q1 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qflip_both_qubits() {
     let instrs = vec![
         Instruction::QPrep { dst: 0, dist: DistId::Zero },
         Instruction::ILdi { dst: 0, imm: 3 },  // mask = 0b11 (both qubits)
         Instruction::QFlip { dst: 1, src: 0, mask_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
@@ -526,20 +455,21 @@ fn test_e2e_qflip_both_qubits() {
 /// Verify QPHASE applies phase flip:
 ///   QPREP Q0, UNIFORM  ->  ILDI R0, 1 (mask=0b01: qubit 0)
 ///   ->  QPHASE Q1, Q0, R0
-///   ->  QSAMPLE H0, Q1, DIST
+///   ->  QOBSERVE H0, Q1, DIST
 ///
 /// Phase flip does not change diagonal probabilities (populations unchanged).
 /// The distribution should still be uniform.
 ///
 /// Assertions:
 ///   - H0 has 4 entries, each ~0.25
+///   - Q1 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qphase_preserves_probabilities() {
     let instrs = vec![
         Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         Instruction::ILdi { dst: 0, imm: 1 },  // mask = 0b01 (qubit 0)
         Instruction::QPhase { dst: 1, src: 0, mask_reg: 0 },
-        Instruction::QSample { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
@@ -611,64 +541,7 @@ fn test_e2e_conj_z_and_negate_z_reductions() {
     assert!(z1_im.abs() < 1e-10, "Z1.im={}, expected 0.0", z1_im);
 }
 
-// =============================================================================
-// Test 14: Multi-stage pipeline with QSAMPLE feedback loop
-// =============================================================================
-
-/// Verify a realistic multi-step computation:
-///   1. QPREP Q0, UNIFORM
-///   2. QKERNELF Q0, Q0, ROTATE, F_theta (apply rotation)
-///   3. QSAMPLE H0, Q0, PROB, R_target (check probability of target)
-///   4. HREDUCE H0, F1, REAL (extract probability as float from Complex(prob, 0.0))
-///   5. Verify F1 contains a valid probability in [0, 1]
-///
-/// This tests the pattern of "peek at quantum state, use result classically"
-/// without destroying the quantum register.
-///
-/// Assertions:
-///   - Q0 still alive after QSAMPLE
-///   - F1 is in [0.0, 1.0]
-///   - A second QKERNEL can still be applied to Q0
-#[test]
-fn test_e2e_qsample_feedback_loop() {
-    let instrs = vec![
-        // Set up parameters
-        Instruction::FLdi { dst: 0, imm: 1 },  // F0 = theta = 1.0
-        Instruction::FLdi { dst: 1, imm: 0 },  // F1 = 0 (unused)
-        Instruction::ILdi { dst: 0, imm: 0 },  // R0 = 0 (target state for PROB mode)
-        // Prepare uniform
-        Instruction::QPrep { dst: 0, dist: DistId::Uniform },
-        // Apply ROTATE kernel
-        Instruction::QKernelF { dst: 0, src: 0, kernel: KernelId::Rotate, fctx0: 0, fctx1: 1 },
-        // Non-destructive sample: get probability of state 0
-        Instruction::QSample { dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 },
-        // H0 is Complex(probability, 0.0). HREDUCE/REAL can extract the probability.
-        Instruction::Halt,
-    ];
-
-    let (ctx, mut backend) = run_program(instrs);
-
-    // Q0 should still be alive after QSAMPLE
-    assert!(ctx.qregs[0].is_some());
-
-    // H0 should be Complex(prob, 0.0) with value in [0, 1]
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!(*re >= 0.0 && *re <= 1.0, "prob={}, expected [0,1]", re);
-        assert!(im.abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
-    } else {
-        panic!("Expected Complex variant in H0");
-    }
-
-    // Now apply another kernel to Q0 (proving it's still alive)
-    let mut ctx2 = ctx;
-    let mut fm = ForkManager::new();
-    let second_kernel = Instruction::QKernelF {
-        dst: 0, src: 0, kernel: KernelId::Rotate, fctx0: 0, fctx1: 1,
-    };
-    execute_instruction(&mut ctx2, &second_kernel, &mut fm, &mut backend).unwrap();
-    // Q0 should still be alive after second kernel
-    assert!(ctx2.qregs[0].is_some());
-}
+// (Test 14 removed: QSAMPLE feedback loop was removed from the ISA — no non-destructive observation.)
 
 // =============================================================================
 // Test 15: Full 4-stage pipeline: Z -> Q -> H -> Z

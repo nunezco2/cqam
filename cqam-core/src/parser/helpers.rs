@@ -303,7 +303,7 @@ pub(crate) fn parse_observe_mode(token: &str) -> Option<crate::instruction::Obse
     }
 }
 
-/// Helper: parse QOBSERVE/QSAMPLE with 2-5 operands.
+/// Helper: parse QOBSERVE with 2-5 operands.
 ///
 /// Syntax forms:
 ///   QOBSERVE H0, Q0              -> mode=0, ctx0=0, ctx1=0 (backward compat)
@@ -349,11 +349,7 @@ pub(crate) fn parse_qobserve(ops: &[&str], name: &str, line_num: usize) -> Parse
     } else {
         0
     };
-    match name {
-        "QOBSERVE" => Ok(Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 }),
-        "QSAMPLE" => Ok(Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 }),
-        _ => unreachable!(),
-    }
+    Ok(Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 })
 }
 
 /// Helper: parse reg, u16 instruction (e.g. ILDM, ISTR).

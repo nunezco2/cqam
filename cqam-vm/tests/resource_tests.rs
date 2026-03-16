@@ -121,8 +121,9 @@ fn test_resource_qload_qstore() {
         Instruction::QStore { src_q: 0, addr: 20 },
     ];
     let t = accumulate_resources(&instrs);
-    assert_eq!(t.total_time, 2); // 1+1
+    assert_eq!(t.total_time, 6); // 3+3 (teleportation)
     assert_eq!(t.total_space, 2); // 1+1
+    assert!((t.total_entanglement - 2.0).abs() < 1e-10); // 1 Bell pair each
     assert!((t.total_superposition).abs() < 1e-10);
 }
 

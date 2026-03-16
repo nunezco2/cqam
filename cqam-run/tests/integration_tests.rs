@@ -31,6 +31,7 @@ fn test_config() -> SimConfig {
         shots: None,
         noise_model: None,
         noise_method: None,
+        bell_pair_budget: None,
     }
 }
 

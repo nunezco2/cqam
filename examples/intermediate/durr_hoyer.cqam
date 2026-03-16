@@ -86,10 +86,11 @@ LABEL: dh_grover_inner
 # QMEAS provides non-destructive single-qubit measurement
     QMEAS R10, Q0, R7   # R10 = measurement of qubit 0 (0 or 1)
 
-# --- Step 4: Sample full distribution for candidate ---
-    QSAMPLE H1, Q0, 0, R1, R1
-    HREDUCE ARGMX, H1, R11  # R11 = argmax (candidate solution)
-    HREDUCE MEANT, H1, F0   # F0 = mean of post-Grover distribution
+# --- Step 4: Candidate from QMEAS outcome ---
+# Runs blind — no mid-step observation (physical realism)
+# Use the QMEAS result and current threshold as candidate
+    ILDI R11, 0
+    IADD R11, R10, R11   # R11 = measurement outcome as candidate
 
 # --- Step 5: Threshold update via JIF ---
 # If measured state is different from current threshold, it may be better

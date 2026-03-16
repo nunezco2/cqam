@@ -116,6 +116,7 @@ fn run_program_with_config_metadata_and_data(
     // Build unified VmConfig from SimConfig + metadata (CLI > pragma > default)
     let vm_config = config.to_vm_config(metadata);
     ctx.thread_count = vm_config.default_threads;
+    ctx.bell_pair_budget = vm_config.bell_pair_budget;
     ctx.config = vm_config;
 
     // Wire density-matrix backend flag

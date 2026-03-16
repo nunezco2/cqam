@@ -263,8 +263,6 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         // -- QO-format (quantum observe, extended) --------------------------------
         Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } =>
             encode_qo_ext(op::QOBSERVE, *dst_h, *src_q, u8::from(*mode), *ctx0, *ctx1),
-        Instruction::QSample { dst_h, src_q, mode, ctx0, ctx1 } =>
-            encode_qo_ext(op::QSAMPLE, *dst_h, *src_q, u8::from(*mode), *ctx0, *ctx1),
 
         // -- QS-format (quantum memory) ---------------------------------------
         Instruction::QLoad { dst_q, addr } => encode_qs(op::QLOAD, *dst_q, *addr),
