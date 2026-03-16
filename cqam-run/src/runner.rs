@@ -251,16 +251,11 @@ fn is_quantum_entry(instr: &Instruction) -> bool {
     )
 }
 
-/// Check if instructions [start..=end] contain a mid-circuit measurement
-/// feedback pattern (QMEAS followed by a quantum gate).
-fn section_is_adaptive(program: &[Instruction], start: usize, end: usize) -> bool {
-    let mut seen_meas = false;
-    for instr in &program[start..=end] {
-        match instr {
-            Instruction::QMeas { .. } => {
-                seen_meas = true;
-            }
-            Instruction::QKernel { .. }
+/// Check if an instruction is a quantum gate (kernel or primitive gate).
+fn is_quantum_gate(instr: &Instruction) -> bool {
+    matches!(
+        instr,
+        Instruction::QKernel { .. }
             | Instruction::QKernelF { .. }
             | Instruction::QKernelZ { .. }
             | Instruction::QHadM { .. }
@@ -271,13 +266,7 @@ fn section_is_adaptive(program: &[Instruction], start: usize, end: usize) -> boo
             | Instruction::QCz { .. }
             | Instruction::QSwap { .. }
             | Instruction::QCustom { .. }
-            if seen_meas => {
-                return true;
-            }
-            _ => {}
-        }
-    }
-    false
+    )
 }
 
 /// Run a program in shot mode with per-quantum-section shot loops.
@@ -302,9 +291,12 @@ fn run_with_shots(
 
     let mut cycle_count: usize = 0;
     let mut in_quantum_section = false;
-    let mut section_start_pc: usize = 0;
     let mut snapshot_ctx: Option<ExecutionContext> = None;
     let mut section_index: u64 = 0;
+    // Track adaptivity dynamically: set true when QMEAS is followed by
+    // a quantum gate within the same section (mid-circuit measurement feedback).
+    let mut section_seen_meas = false;
+    let mut section_adaptive = false;
 
     while ctx.pc < ctx.program.len() {
         if cycle_count >= max_cycles {
@@ -312,15 +304,24 @@ fn run_with_shots(
             break;
         }
 
-        let pc_before = ctx.pc;
         let instr = ctx.program[ctx.pc].clone();
         let qf_before = ctx.psw.qf;
 
         // Section entry: QF is false, about to execute quantum-entry instruction
         if !in_quantum_section && !qf_before && is_quantum_entry(&instr) {
-            section_start_pc = pc_before;
             snapshot_ctx = Some(ctx.clone());
             in_quantum_section = true;
+            section_seen_meas = false;
+            section_adaptive = false;
+        }
+
+        // Track adaptivity: QMEAS sets seen_meas; subsequent quantum gate confirms adaptive
+        if in_quantum_section {
+            if matches!(instr, Instruction::QMeas { .. }) {
+                section_seen_meas = true;
+            } else if section_seen_meas && is_quantum_gate(&instr) {
+                section_adaptive = true;
+            }
         }
 
         // Execute the instruction
@@ -332,9 +333,8 @@ fn run_with_shots(
 
         // Section exit: was in quantum section, QF just went false
         if in_quantum_section && qf_before && !ctx.psw.qf {
-            let section_end_pc = pc_before;
             let post_first_run = ctx.clone();
-            let adaptive = section_is_adaptive(&ctx.program, section_start_pc, section_end_pc);
+            let adaptive = section_adaptive;
 
             if adaptive {
                 // Slow path: replay section N-1 more times
@@ -368,17 +368,20 @@ fn run_with_shots(
                     backend.set_rng_seed(shot_seed);
                     let mut replay_fork_mgr = ForkManager::new();
 
-                    // Replay section (skip ECALL to avoid duplicating I/O side effects)
-                    while ctx.pc <= section_end_pc && ctx.pc < ctx.program.len() {
+                    // Replay section until QF goes false (QOBSERVE hit)
+                    // Skip ECALL to avoid duplicating I/O side effects
+                    while ctx.pc < ctx.program.len() {
                         let replay_instr = ctx.program[ctx.pc].clone();
                         if matches!(replay_instr, Instruction::Ecall { .. }) {
-                            // Skip ECALL but still advance PC past it
                             ctx.pc += 1;
                             continue;
                         }
+                        let qf_pre = ctx.psw.qf;
                         execute_instruction(ctx, &replay_instr, &mut replay_fork_mgr, backend)?;
                         dispatch_pending_traps(ctx, enable_interrupts);
                         if ctx.psw.trap_halt { break; }
+                        // Section ends when QF transitions from true to false
+                        if qf_pre && !ctx.psw.qf { break; }
                     }
 
                     // Collect outcomes

@@ -244,6 +244,13 @@ fn main() {
         config.noise_method = Some(method.clone());
     }
 
+    // D-03: warn if --noise-method given without --noise
+    if config.noise_method.is_some()
+        && (config.noise_model.is_none() || config.noise_model.as_deref() == Some("none"))
+    {
+        eprintln!("warning: --noise-method has no effect without --noise <model>");
+    }
+
     if cli.verbose {
         eprintln!("Config: {:?}", config);
     }

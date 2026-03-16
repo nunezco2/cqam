@@ -133,14 +133,24 @@ impl SimConfig {
         match self.noise_method.as_deref() {
             Some("density-matrix") => Some(NoiseMethod::DensityMatrix),
             Some("trajectory") => Some(NoiseMethod::Trajectory),
-            _ => {
-                // Auto-select: trajectory for large qubit counts with shots
-                if self.shots.is_some() && num_qubits > 10 {
-                    Some(NoiseMethod::Trajectory)
-                } else {
-                    Some(NoiseMethod::DensityMatrix)
-                }
+            Some(other) => {
+                eprintln!("warning: unknown --noise-method '{}', auto-selecting. \
+                           Valid: density-matrix, trajectory", other);
+                self.auto_select_noise_method(num_qubits)
             }
+            None => self.auto_select_noise_method(num_qubits),
+        }
+    }
+
+    /// Auto-select noise method based on qubit count and shots mode.
+    fn auto_select_noise_method(&self, num_qubits: u8) -> Option<cqam_sim::noise::NoiseMethod> {
+        use cqam_sim::noise::NoiseMethod;
+        // Trajectory for large qubit counts to avoid O(4^n) density matrix memory.
+        // 16 qubits density matrix = 2^32 entries * 16 bytes ≈ 64 GB.
+        if num_qubits > 12 || (self.shots.is_some() && num_qubits > 10) {
+            Some(NoiseMethod::Trajectory)
+        } else {
+            Some(NoiseMethod::DensityMatrix)
         }
     }
 
