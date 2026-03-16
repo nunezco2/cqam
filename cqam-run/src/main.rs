@@ -16,6 +16,8 @@
 //!   --density-matrix        Force density-matrix backend (no statevector)
 //!   --threads <n>           Default thread count for HFORK (1-256)
 //!   --shots <n>             Number of shots for QPU-realistic sampling
+//!   --noise <model|path>    Noise model name or .toml file with custom parameters
+//!   --noise-method <m>      Noise method: density-matrix, trajectory (auto if omitted)
 //!   --print-final-state     Dump all non-zero registers and memory after execution
 //!   --psw                   Print the Program State Word
 //!   --resources             Print cumulative resource usage counters
@@ -46,6 +48,9 @@ fn print_help() {
     eprintln!("  --density-matrix      Force density-matrix backend (no statevector)");
     eprintln!("  --threads <n>         Default thread count for HFORK (1-256)");
     eprintln!("  --shots <n>           Number of shots for QPU-realistic sampling");
+    eprintln!("  --noise <model|path>  Noise model name (superconducting, trapped-ion, neutral-atom,");
+    eprintln!("                        photonic, spin) or path to .toml file with custom parameters");
+    eprintln!("  --noise-method <m>    Noise method: density-matrix, trajectory (auto if omitted)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -63,6 +68,8 @@ struct CliArgs {
     print_psw: bool,
     print_resources: bool,
     verbose: bool,
+    noise: Option<String>,
+    noise_method: Option<String>,
 }
 
 fn parse_args() -> Result<CliArgs, String> {
@@ -89,6 +96,8 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut print_psw = false;
     let mut print_resources = false;
     let mut verbose = false;
+    let mut noise: Option<String> = None;
+    let mut noise_method: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -138,6 +147,16 @@ fn parse_args() -> Result<CliArgs, String> {
                 }
                 shots = Some(n);
             }
+            "--noise" => {
+                i += 1;
+                noise = Some(args.get(i).ok_or("--noise requires a model name")?.clone());
+            }
+            "--noise-method" => {
+                i += 1;
+                noise_method = Some(args.get(i)
+                    .ok_or("--noise-method requires 'density-matrix' or 'trajectory'")?
+                    .clone());
+            }
             "--density-matrix" => density_matrix = true,
             "--print-final-state" => print_state = true,
             "--psw" => print_psw = true,
@@ -173,6 +192,8 @@ fn parse_args() -> Result<CliArgs, String> {
         print_psw,
         print_resources,
         verbose,
+        noise,
+        noise_method,
     })
 }
 
@@ -215,6 +236,12 @@ fn main() {
     }
     if let Some(n) = cli.shots {
         config.shots = Some(n);
+    }
+    if let Some(ref noise_name) = cli.noise {
+        config.noise_model = Some(noise_name.clone());
+    }
+    if let Some(ref method) = cli.noise_method {
+        config.noise_method = Some(method.clone());
     }
 
     if cli.verbose {

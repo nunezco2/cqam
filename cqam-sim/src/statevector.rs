@@ -140,6 +140,13 @@ impl Statevector {
         &self.amplitudes
     }
 
+    /// Get a mutable reference to the full amplitude vector.
+    /// Used internally for trajectory noise injection.
+    #[inline]
+    pub fn amplitudes_mut(&mut self) -> &mut [C64] {
+        &mut self.amplitudes
+    }
+
     /// Number of qubits.
     #[inline]
     pub fn num_qubits(&self) -> u8 {

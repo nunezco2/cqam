@@ -121,6 +121,17 @@ fn run_program_with_config_metadata_and_data(
     // Wire density-matrix backend flag
     backend.set_force_density_matrix(config.force_density_matrix);
 
+    // Set up noise model if configured
+    if let Some(ref noise_name) = config.noise_model {
+        if noise_name != "none" {
+            let noise = crate::simconfig::build_noise_model(noise_name)?;
+            let num_qubits = ctx.config.default_qubits;
+            let method = config.resolve_noise_method(num_qubits)
+                .unwrap_or(cqam_sim::noise::NoiseMethod::DensityMatrix);
+            backend.set_noise_model(Some(noise), method);
+        }
+    }
+
     // Set RNG seed on backend if configured
     if let Some(seed) = config.rng_seed {
         backend.set_rng_seed(seed);

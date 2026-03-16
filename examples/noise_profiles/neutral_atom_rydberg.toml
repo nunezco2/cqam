@@ -1,0 +1,30 @@
+# Hypothetical Neutral Atom Processor (Rydberg Array)
+#
+# A 2D array of Cs-133 atoms in optical tweezers with Rydberg-mediated
+# CZ gates. Zoned architecture: storage zone with long coherence,
+# entangling zone with tightly-spaced atoms for strong blockade.
+#
+# Usage:
+#   cargo run --bin cqam-run -- program.cqam --noise examples/noise_profiles/neutral_atom_rydberg.toml --shots 1000
+
+modality = "neutral-atom"
+
+# Coherence times (seconds)
+t1 = 10.0                 # atom lifetime in deep tweezer trap, UHV chamber
+t2 = 50e-3                # clock-state qubit in magic-wavelength trap
+
+# Rydberg entangling gates
+rydberg_error = 1e-2       # finite blockade at 5 um spacing, Rydberg decay
+rydberg_gate_time = 1e-6   # two-photon excitation to n=70 Rydberg state
+
+# Single-qubit gates (global + local Raman)
+single_gate_error = 5e-3   # intensity inhomogeneity across the array
+single_gate_time = 10e-6   # stimulated Raman with AOD-based addressing
+
+# Atom loss
+atom_loss_rate = 5e-3      # per gate cycle; background gas collisions + Rydberg decay
+position_disorder = 3e-3   # thermal motion at 10 uK -> gate fidelity fluctuation
+
+# Readout
+readout_error = 0.02       # fluorescence imaging; atom loss during detection
+readout_time = 10e-3       # CCD exposure + atom recapture

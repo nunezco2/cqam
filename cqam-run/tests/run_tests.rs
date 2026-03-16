@@ -146,6 +146,8 @@ fn test_max_cycles_enforcement() {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -176,6 +178,8 @@ fn test_max_cycles_allows_short_programs() {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -264,6 +268,8 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -312,6 +318,8 @@ fn test_fidelity_threshold_wiring() {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -412,6 +420,8 @@ fn test_pragma_qubits_applied() {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     };
 
     let result = run_program_with_config_and_metadata(
@@ -441,6 +451,8 @@ fn test_cli_overrides_pragma() {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     };
 
     let result = run_program_with_config_and_metadata(

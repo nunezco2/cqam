@@ -1,0 +1,31 @@
+# Hypothetical Trapped-Ion Processor (Optical Qubit)
+#
+# A linear chain of Yb-171+ ions using optical qubits (S-D transition)
+# with individually-addressed Raman beams. Molmer-Sorensen gates via
+# shared motional modes. Low heating rate from cryogenic trap.
+#
+# Usage:
+#   cargo run --bin cqam-run -- program.cqam --noise examples/noise_profiles/trapped_ion_optical.toml --shots 1000
+
+modality = "trapped-ion"
+
+# Coherence times (seconds) -- optical qubit
+t1 = 1.0                  # D5/2 metastable state, spontaneous decay ~1 s
+t2 = 0.5                  # limited by magnetic field noise on optical transition
+
+# Single-qubit gates (stimulated Raman)
+single_gate_error = 1e-4   # composite pulse sequences for error suppression
+single_gate_time = 5e-6    # fast Raman transitions
+
+# Two-qubit gates (Molmer-Sorensen)
+ms_gate_error = 5e-3       # motional mode spectral crowding in 20+ ion chain
+ms_gate_time = 500e-6      # amplitude-shaped MS gate
+
+# Motional environment
+heating_rate = 2.0         # quanta/s, cryogenic trap at 4 K
+shuttle_heating = 0.3      # quanta added per ion shuttling event
+crosstalk_ratio = 5e-3     # light scattering to neighboring ions
+
+# Readout
+readout_error = 5e-3       # electron shelving on S-D, shorter detection window
+readout_time = 100e-6      # photon counting integration time

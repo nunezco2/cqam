@@ -1,0 +1,32 @@
+# Hypothetical Spin Qubit Processor (Silicon Quantum Dots)
+#
+# A linear array of electron spin qubits in isotopically-purified
+# Si-28/SiGe heterostructure quantum dots. Single-qubit gates via
+# EDSR (electric dipole spin resonance) with a micromagnet.
+# Two-qubit gates via exchange interaction (barrier-controlled).
+#
+# Usage:
+#   cargo run --bin cqam-run -- program.cqam --noise examples/noise_profiles/spin_silicon.toml --shots 1000
+
+modality = "spin"
+
+# Coherence times (seconds) -- isotopically purified Si-28
+t1 = 30e-3                # spin relaxation via spin-orbit + phonon; long in Si
+t2 = 20e-3                # Hahn echo; nuclear spin bath suppressed by 28Si
+t2_star = 100e-6           # free induction decay; residual 29Si and charge noise
+
+# Single-qubit gates (EDSR with micromagnet)
+single_gate_error = 2e-4   # pulse-optimized; limited by charge noise coupling
+single_gate_time = 0.5e-6  # fast EDSR in large gradient field
+
+# Two-qubit gates (exchange)
+exchange_error = 3e-3       # barrier-controlled J-coupling; charge noise on detuning
+two_gate_time = 0.5e-6      # fast exchange pulse (symmetric operating point)
+
+# Charge noise and crosstalk
+charge_noise = 5e-3         # 1/f charge noise spectral density; affects J-coupling
+crosstalk_fraction = 0.02   # capacitive coupling to next-nearest dot
+
+# Readout (Pauli spin blockade + rf reflectometry)
+readout_error = 0.015       # rf-SET charge sensing; singlet-triplet discrimination
+readout_time = 5e-6         # fast rf reflectometry

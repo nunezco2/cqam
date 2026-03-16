@@ -29,6 +29,8 @@ fn test_config() -> SimConfig {
         default_threads: None,
         rng_seed: None,
         shots: None,
+        noise_model: None,
+        noise_method: None,
     }
 }
 

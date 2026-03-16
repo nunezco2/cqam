@@ -79,6 +79,15 @@ pub struct SimConfig {
     /// Default: None (exact simulation).
     #[serde(default)]
     pub shots: Option<u32>,
+
+    /// Noise model name: "none", "superconducting", "trapped-ion",
+    /// "neutral-atom", "photonic", "spin".
+    #[serde(default)]
+    pub noise_model: Option<String>,
+
+    /// Noise simulation method override.
+    #[serde(default)]
+    pub noise_method: Option<String>,
 }
 
 impl Default for SimConfig {
@@ -92,6 +101,8 @@ impl Default for SimConfig {
             default_threads: None,
             rng_seed: None,
             shots: None,
+            noise_model: None,
+            noise_method: None,
         }
     }
 }
@@ -108,6 +119,29 @@ impl SimConfig {
         toml::from_str(&content).map_err(|e| CqamError::ConfigError(
             format!("Failed to parse config TOML: {}", e)
         ))
+    }
+
+    /// Resolve the noise method based on config and qubit count.
+    /// Returns None if noise is disabled.
+    pub fn resolve_noise_method(&self, num_qubits: u8) -> Option<cqam_sim::noise::NoiseMethod> {
+        use cqam_sim::noise::NoiseMethod;
+        if self.noise_model.is_none()
+            || self.noise_model.as_deref() == Some("none")
+        {
+            return None;
+        }
+        match self.noise_method.as_deref() {
+            Some("density-matrix") => Some(NoiseMethod::DensityMatrix),
+            Some("trajectory") => Some(NoiseMethod::Trajectory),
+            _ => {
+                // Auto-select: trajectory for large qubit counts with shots
+                if self.shots.is_some() && num_qubits > 10 {
+                    Some(NoiseMethod::Trajectory)
+                } else {
+                    Some(NoiseMethod::DensityMatrix)
+                }
+            }
+        }
     }
 
     /// Convert this runner config into a [`VmConfig`], applying metadata
@@ -136,5 +170,79 @@ impl SimConfig {
         }
 
         vm
+    }
+}
+
+/// TOML envelope used to extract the `modality` field before full deserialization.
+#[derive(serde::Deserialize)]
+struct NoiseTomlEnvelope {
+    modality: String,
+}
+
+/// Construct a noise model from a model name string or a `.toml` file path.
+///
+/// If `name` ends with `.toml`, the file is read, its `modality` field selects
+/// the noise struct, and all remaining fields are deserialized (missing fields
+/// fall back to `Default::default()`).  Otherwise the argument is treated as a
+/// built-in modality name and the default parameters are used.
+pub fn build_noise_model(
+    name: &str,
+) -> Result<std::sync::Arc<dyn cqam_sim::noise::NoiseModel>, CqamError> {
+    use cqam_sim::noise::*;
+    use std::sync::Arc;
+
+    if name.ends_with(".toml") {
+        let content = fs::read_to_string(name).map_err(|e| {
+            CqamError::ConfigError(format!("Cannot read noise TOML '{}': {}", name, e))
+        })?;
+        let envelope: NoiseTomlEnvelope = toml::from_str(&content).map_err(|e| {
+            CqamError::ConfigError(format!("Failed to parse noise TOML '{}': {}", name, e))
+        })?;
+        match envelope.modality.as_str() {
+            "superconducting" => {
+                let model: SuperconductingNoise = toml::from_str(&content).map_err(|e| {
+                    CqamError::ConfigError(format!("Failed to parse superconducting noise config: {}", e))
+                })?;
+                Ok(Arc::new(model))
+            }
+            "trapped-ion" => {
+                let model: TrappedIonNoise = toml::from_str(&content).map_err(|e| {
+                    CqamError::ConfigError(format!("Failed to parse trapped-ion noise config: {}", e))
+                })?;
+                Ok(Arc::new(model))
+            }
+            "neutral-atom" => {
+                let model: NeutralAtomNoise = toml::from_str(&content).map_err(|e| {
+                    CqamError::ConfigError(format!("Failed to parse neutral-atom noise config: {}", e))
+                })?;
+                Ok(Arc::new(model))
+            }
+            "photonic" => {
+                let model: PhotonicNoise = toml::from_str(&content).map_err(|e| {
+                    CqamError::ConfigError(format!("Failed to parse photonic noise config: {}", e))
+                })?;
+                Ok(Arc::new(model))
+            }
+            "spin" => {
+                let model: SpinQubitNoise = toml::from_str(&content).map_err(|e| {
+                    CqamError::ConfigError(format!("Failed to parse spin noise config: {}", e))
+                })?;
+                Ok(Arc::new(model))
+            }
+            other => Err(CqamError::ConfigError(
+                format!("unknown modality '{}' in noise TOML '{}'. Valid: superconducting, \
+                         trapped-ion, neutral-atom, photonic, spin", other, name))),
+        }
+    } else {
+        match name {
+            "superconducting" => Ok(Arc::new(SuperconductingNoise::default())),
+            "trapped-ion"     => Ok(Arc::new(TrappedIonNoise::default())),
+            "neutral-atom"    => Ok(Arc::new(NeutralAtomNoise::default())),
+            "photonic"        => Ok(Arc::new(PhotonicNoise::default())),
+            "spin"            => Ok(Arc::new(SpinQubitNoise::default())),
+            other => Err(CqamError::ConfigError(
+                format!("unknown noise model: '{}'. Valid: superconducting, \
+                         trapped-ion, neutral-atom, photonic, spin", other))),
+        }
     }
 }

@@ -5,6 +5,7 @@
 //! delegated to the existing kernel infrastructure in `cqam-sim`.
 
 use std::collections::HashMap;
+use std::sync::Arc;
 use rand::SeedableRng;
 use rand::Rng;
 use rand_chacha::ChaCha8Rng;
@@ -31,6 +32,7 @@ use crate::kernels::phase::PhaseShift;
 use crate::kernels::rotate::Rotate;
 use crate::quantum_register::QuantumRegister;
 use crate::constants::{MAX_SV_QUBITS, MAX_QUBITS};
+use crate::noise::{NoiseModel, NoiseMethod};
 
 /// Concrete QuantumBackend implementation using the cqam-sim simulation engine.
 ///
@@ -45,6 +47,11 @@ pub struct SimulationBackend {
     rng: ChaCha8Rng,
     /// Whether density matrix mode is forced (affects max_qubits).
     force_density_matrix: bool,
+    /// Optional noise model. When Some, noise is injected after every
+    /// gate, during idle periods, at prep, and at readout.
+    noise_model: Option<Arc<dyn NoiseModel>>,
+    /// Active noise simulation method.
+    noise_method: Option<NoiseMethod>,
 }
 
 impl SimulationBackend {
@@ -55,6 +62,8 @@ impl SimulationBackend {
             next_id: 0,
             rng: ChaCha8Rng::from_entropy(),
             force_density_matrix: false,
+            noise_model: None,
+            noise_method: None,
         }
     }
 
@@ -66,6 +75,92 @@ impl SimulationBackend {
     /// Whether density matrix mode is forced.
     pub fn force_density_matrix(&self) -> bool {
         self.force_density_matrix
+    }
+
+    /// Set the noise model and method. When noise_model is Some and
+    /// method is DensityMatrix, automatically forces density matrix mode.
+    pub fn set_noise_model(
+        &mut self,
+        model: Option<Arc<dyn NoiseModel>>,
+        method: NoiseMethod,
+    ) {
+        if model.is_some() && method == NoiseMethod::DensityMatrix {
+            self.force_density_matrix = true;
+        }
+        self.noise_model = model;
+        self.noise_method = Some(method);
+    }
+
+    /// Whether a noise model is active.
+    pub fn has_noise_model(&self) -> bool {
+        self.noise_model.is_some()
+    }
+
+    /// Ensure a QuantumRegister is in Mixed form.
+    fn ensure_density_matrix(qr: &mut QuantumRegister) {
+        if let QuantumRegister::Pure(_) = qr {
+            qr.ensure_mixed().expect(
+                "noise model requires density matrix but promotion failed"
+            );
+        }
+    }
+
+    /// Extract &mut DensityMatrix from a QuantumRegister that has been promoted.
+    fn as_density_matrix_mut(qr: &mut QuantumRegister) -> &mut DensityMatrix {
+        match qr {
+            QuantumRegister::Mixed(dm) => dm,
+            QuantumRegister::Pure(_) => panic!(
+                "expected Mixed variant after ensure_density_matrix"
+            ),
+        }
+    }
+
+    /// Apply post-gate noise to a quantum register for a single-qubit gate.
+    fn inject_single_gate_noise(&mut self, qr: &mut QuantumRegister, target_qubit: u8) {
+        if let Some(ref noise) = self.noise_model {
+            let gate_time = noise.single_gate_time();
+            match self.noise_method {
+                Some(NoiseMethod::DensityMatrix) => {
+                    Self::ensure_density_matrix(qr);
+                    let dm = Self::as_density_matrix_mut(qr);
+                    noise.post_single_gate(dm, target_qubit, gate_time);
+                }
+                Some(NoiseMethod::Trajectory) => {
+                    if let QuantumRegister::Pure(sv) = qr {
+                        let n = sv.num_qubits();
+                        noise.trajectory_single_gate(
+                            sv.amplitudes_mut(), n,
+                            target_qubit, gate_time, &mut self.rng,
+                        );
+                    }
+                }
+                None => {}
+            }
+        }
+    }
+
+    /// Apply post-gate noise to a quantum register for a two-qubit gate.
+    fn inject_two_qubit_gate_noise(&mut self, qr: &mut QuantumRegister, qubit_a: u8, qubit_b: u8) {
+        if let Some(ref noise) = self.noise_model {
+            let gate_time = noise.two_gate_time();
+            match self.noise_method {
+                Some(NoiseMethod::DensityMatrix) => {
+                    Self::ensure_density_matrix(qr);
+                    let dm = Self::as_density_matrix_mut(qr);
+                    noise.post_two_qubit_gate(dm, qubit_a, qubit_b, gate_time);
+                }
+                Some(NoiseMethod::Trajectory) => {
+                    if let QuantumRegister::Pure(sv) = qr {
+                        let n = sv.num_qubits();
+                        noise.trajectory_two_qubit_gate(
+                            sv.amplitudes_mut(), n,
+                            qubit_a, qubit_b, gate_time, &mut self.rng,
+                        );
+                    }
+                }
+                None => {}
+            }
+        }
     }
 
     /// Allocate a new handle and store the given state.
@@ -360,7 +455,13 @@ impl SimulationBackend {
     ) -> Result<ObserveResult, CqamError> {
         match mode {
             ObserveMode::Dist => {
-                let probs = qr.diagonal_probabilities();
+                let mut probs = qr.diagonal_probabilities();
+                // Apply readout noise to the full probability vector
+                if let Some(ref noise) = self.noise_model {
+                    if noise.has_readout_noise() {
+                        noise.readout_noise(&mut probs, 0);
+                    }
+                }
                 let dist_pairs: Vec<(u32, f64)> = probs
                     .iter()
                     .enumerate()
@@ -394,7 +495,13 @@ impl SimulationBackend {
                 Ok(ObserveResult::Amp(elem))
             }
             ObserveMode::Sample => {
-                let probs = qr.diagonal_probabilities();
+                let mut probs = qr.diagonal_probabilities();
+                // Apply readout noise before sampling
+                if let Some(ref noise) = self.noise_model {
+                    if noise.has_readout_noise() {
+                        noise.readout_noise(&mut probs, 0);
+                    }
+                }
                 let r: f64 = if let Some(rng) = rng {
                     rng.gen_range(0.0..1.0)
                 } else {
@@ -428,6 +535,8 @@ impl Clone for SimulationBackend {
             next_id: self.next_id,
             rng: self.rng.clone(),
             force_density_matrix: self.force_density_matrix,
+            noise_model: self.noise_model.clone(),
+            noise_method: self.noise_method,
         }
     }
 }
@@ -439,12 +548,20 @@ impl QuantumBackend for SimulationBackend {
         num_qubits: u8,
         force_mixed: bool,
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
-        let qr = match dist {
+        let mut qr = match dist {
             DistId::Uniform => QuantumRegister::new_uniform(num_qubits, force_mixed),
             DistId::Zero => QuantumRegister::new_zero_state(num_qubits, force_mixed),
             DistId::Bell => QuantumRegister::new_bell(force_mixed),
             DistId::Ghz => QuantumRegister::new_ghz(num_qubits, force_mixed)?,
         };
+        // Prep noise (density matrix mode only)
+        if let Some(ref noise) = self.noise_model {
+            if self.noise_method == Some(NoiseMethod::DensityMatrix) {
+                Self::ensure_density_matrix(&mut qr);
+                let dm = Self::as_density_matrix_mut(&mut qr);
+                noise.prep_noise(dm);
+            }
+        }
         let result = Self::op_result(&qr);
         let handle = self.alloc(qr);
         Ok((handle, result))
@@ -479,7 +596,15 @@ impl QuantumBackend for SimulationBackend {
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let qr = self.get_state(handle)?.clone();
         let k = self.build_kernel(kernel, params, &qr)?;
-        let result_qr = qr.apply_kernel(k.as_ref())?;
+        let mut result_qr = qr.apply_kernel(k.as_ref())?;
+        // Post-kernel noise
+        if let Some(ref noise) = self.noise_model {
+            if self.noise_method == Some(NoiseMethod::DensityMatrix) {
+                Self::ensure_density_matrix(&mut result_qr);
+                let dm = Self::as_density_matrix_mut(&mut result_qr);
+                noise.post_kernel(dm, 0, 0.0);
+            }
+        }
         let result = Self::op_result(&result_qr);
         let new_handle = self.alloc(result_qr);
         Ok((new_handle, result))
@@ -493,6 +618,7 @@ impl QuantumBackend for SimulationBackend {
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let mut qr = self.get_state(handle)?.clone();
         qr.apply_single_qubit_gate(target_qubit, gate);
+        self.inject_single_gate_noise(&mut qr, target_qubit);
         let result = Self::op_result(&qr);
         let new_handle = self.alloc(qr);
         Ok((new_handle, result))
@@ -507,6 +633,7 @@ impl QuantumBackend for SimulationBackend {
     ) -> Result<(QRegHandle, QOpResult), CqamError> {
         let mut qr = self.get_state(handle)?.clone();
         qr.apply_two_qubit_gate(qubit_a, qubit_b, gate);
+        self.inject_two_qubit_gate_noise(&mut qr, qubit_a, qubit_b);
         let result = Self::op_result(&qr);
         let new_handle = self.alloc(qr);
         Ok((new_handle, result))

@@ -1,0 +1,31 @@
+# Hypothetical Superconducting Transmon Processor
+#
+# A next-generation transmon chip with improved T1/T2 from tantalum
+# capacitor pads and Josephson junction optimization. Two-qubit gates
+# use tunable couplers for fast, high-fidelity CZ operations.
+#
+# Usage:
+#   cargo run --bin cqam-run -- program.cqam --noise examples/noise_profiles/superconducting_transmon.toml --shots 1000
+
+modality = "superconducting"
+
+# Coherence times (seconds)
+t1 = 500e-6              # improved via tantalum capacitors, low-loss substrates
+t2 = 350e-6              # dynamical decoupling pushes T2 closer to 2*T1 limit
+
+# Single-qubit gates (microwave-driven)
+single_gate_error = 1e-4  # derivative-based pulse shaping (DRAG)
+single_gate_time = 20e-9  # fast Gaussian envelope
+
+# Two-qubit gates (tunable coupler CZ)
+two_gate_error = 2e-3     # flux-activated, ZZ suppression via coupler
+two_gate_time = 60e-9     # parametric gate, faster than fixed-frequency ECR
+
+# Readout
+readout_error = [0.005, 0.015]  # [P(1|0), P(0|1)]; asymmetric due to T1 decay during readout
+readout_time = 400e-9           # dispersive readout with Purcell filter
+
+# Crosstalk and leakage
+crosstalk_zz = 62831.85   # 2*pi*10 kHz residual ZZ (reduced by tunable coupler)
+leakage_rate = 2e-4       # DRAG pulse suppresses |1>->|2> transitions
+thermal_population = 0.005 # active reset brings residual excitation below 1%

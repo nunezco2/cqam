@@ -47,6 +47,7 @@ pub mod complex;
 pub mod constants;
 pub mod density_matrix;
 pub mod statevector;
+pub mod noise;
 pub mod quantum_register;
 pub mod qdist;
 pub mod kernel;

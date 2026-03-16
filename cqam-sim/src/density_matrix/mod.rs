@@ -12,5 +12,6 @@ mod measurement;
 mod metrics;
 mod display;
 mod jacobi;
+mod noise;
 
 pub use self::core::DensityMatrix;
