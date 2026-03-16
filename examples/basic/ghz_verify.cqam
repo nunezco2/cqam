@@ -84,6 +84,13 @@ LABEL: ghz_pow2_done
 
 # Full distribution measurement
     QOBSERVE H3, Q0              # Destructive measurement
+
+# Print measurement histogram (top-10 for 16-qubit state)
+    ILDI R0, 3            # H3 = GHZ measurement distribution
+    ILDI R1, 3            # Mode 3: top-K
+    ILDI R2, 10           # Show top 10
+    ECALL PRINT_HIST
+
     HREDUCE MODEV, H3, R6           # R6 = mode (should be 0 or 2^N-1)
     HREDUCE VARNC, H3, F4           # F4 = variance (large for GHZ)
     HREDUCE MEANT, H3, F5           # F5 = mean

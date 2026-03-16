@@ -92,6 +92,16 @@ LABEL: simon_round
 
 # Step 5: Projective measurement -> y such that y . s = 0 (mod 2)
     QOBSERVE H0, Q0, SAMPLE  # H0 = Int(y), a single random outcome
+
+# Print measurement histogram for Simon's query result
+    ISTR R0, 90           # Save R0 (secret) to CMEM[90]
+    ISTR R1, 91           # Save R1 (ctx) to CMEM[91]
+    ILDI R0, 0            # H0 = Simon's measurement
+    ILDI R1, 0            # Mode 0: table
+    ECALL PRINT_HIST
+    ILDM R0, 90           # Restore R0
+    ILDM R1, 91           # Restore R1
+
     HREDUCE ROUND, H0, R7    # R7 = measured y value (ROUND, identity on Int)
 
 # Step 6: Store y value

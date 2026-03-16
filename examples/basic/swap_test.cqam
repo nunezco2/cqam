@@ -81,6 +81,12 @@ res_fmt:
     QOBSERVE H4, Q0
     QOBSERVE H5, Q1
 
+# Print measurement histogram for same-state test (top-10 for 16-qubit state)
+    ILDI R0, 4            # H4 = distribution from Q0 (same-state test)
+    ILDI R1, 3            # Mode 3: top-K
+    ILDI R2, 10           # Show top 10
+    ECALL PRINT_HIST
+
 # ===============================================
 # Test 2: Different states — overlap should be < 1
 # ===============================================
@@ -104,6 +110,12 @@ res_fmt:
 
     QOBSERVE H4, Q2
     QOBSERVE H5, Q3
+
+    # Print measurement histogram for different-state test (top-10 for 16-qubit state)
+    ILDI R0, 4            # H4 = distribution from Q2 (different-state test)
+    ILDI R1, 3            # Mode 3: top-K
+    ILDI R2, 10           # Show top 10
+    ECALL PRINT_HIST
 
 # ===============================================
 # Test 3: Parameterized states — vary overlap continuously

@@ -59,6 +59,15 @@ LABEL: rng_loop
 # Step 2: Projective measurement (collapse to random basis state)
     QOBSERVE H0, Q0, SAMPLE  # H0 = Int(k), a single random outcome
 
+# Print measurement histogram for random sample
+    ISTR R0, 90           # Save R0 (loop counter) to CMEM[90]
+    ISTR R1, 91           # Save R1 (constant 1) to CMEM[91]
+    ILDI R0, 0            # H0 = random sample
+    ILDI R1, 0            # Mode 0: table
+    ECALL PRINT_HIST
+    ILDM R0, 90           # Restore R0
+    ILDM R1, 91           # Restore R1
+
 # Step 3: Extract the random number
     HREDUCE ROUND, H0, R8    # R8 = sampled random number (ROUND, identity on Int)
     CVTIF F2, R8          # F2 = random number as float

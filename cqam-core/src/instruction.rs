@@ -1108,6 +1108,8 @@ pub enum ProcId {
     PrintChar = 3,
     /// Debug dump: print all non-zero registers to stderr.
     DumpRegs = 4,
+    /// Print H register histogram to stdout.
+    PrintHist = 5,
 }
 
 impl TryFrom<u8> for ProcId {
@@ -1119,6 +1121,7 @@ impl TryFrom<u8> for ProcId {
             2 => Ok(ProcId::PrintStr),
             3 => Ok(ProcId::PrintChar),
             4 => Ok(ProcId::DumpRegs),
+            5 => Ok(ProcId::PrintHist),
             _ => Err(CqamError::InvalidId { domain: "ProcId", value: v }),
         }
     }
@@ -1143,6 +1146,7 @@ impl ProcId {
             ProcId::PrintStr => "PRINT_STR",
             ProcId::PrintChar => "PRINT_CHAR",
             ProcId::DumpRegs => "DUMP_REGS",
+            ProcId::PrintHist => "PRINT_HIST",
         }
     }
 
@@ -1154,6 +1158,7 @@ impl ProcId {
             "PRINT_STR" => Some(ProcId::PrintStr),
             "PRINT_CHAR" => Some(ProcId::PrintChar),
             "DUMP_REGS" => Some(ProcId::DumpRegs),
+            "PRINT_HIST" => Some(ProcId::PrintHist),
             _ => None,
         }
     }

@@ -1,0 +1,49 @@
+# Test ECALL PRINT_HIST with different modes and HybridValue types
+# Prepares a GHZ-like state and observes it, then prints histograms
+
+#! qubits 3
+
+# --- Section 1: Uniform superposition, QOBSERVE DIST ---
+QPREP Q0, UNIFORM
+QOBSERVE H0, Q0, DIST, R0, R0
+
+# Print exact distribution (no shots) or histogram (with shots)
+# Mode 0: Table (default)
+ILDI R0, 0          # H register index
+ILDI R1, 0          # Mode 0: table
+ECALL PRINT_HIST
+
+# Mode 1: Bar chart
+ILDI R0, 0
+ILDI R1, 1
+ECALL PRINT_HIST
+
+# Mode 2: Sorted by state
+ILDI R0, 0
+ILDI R1, 2
+ECALL PRINT_HIST
+
+# Mode 3: Top-K (top 3)
+ILDI R0, 0
+ILDI R1, 3
+ILDI R2, 3
+ECALL PRINT_HIST
+
+# --- Section 2: GHZ state ---
+QPREP Q1, GHZ
+QOBSERVE H1, Q1, DIST, R0, R0
+
+ILDI R0, 1          # H register index 1
+ILDI R1, 0          # Mode 0: table
+ECALL PRINT_HIST
+
+ILDI R0, 1
+ILDI R1, 1          # Mode 1: bar chart
+ECALL PRINT_HIST
+
+# --- Print empty register ---
+ILDI R0, 7          # H7 is empty
+ILDI R1, 0
+ECALL PRINT_HIST
+
+HALT

@@ -104,6 +104,12 @@ LABEL: eig_loop
 
 # --- Measure ---
     QOBSERVE H0, Q3
+
+# Print measurement histogram
+    ILDI R0, 0            # H0 = eigenvalue estimation distribution
+    ILDI R1, 0            # Mode 0: table
+    ECALL PRINT_HIST
+
     HREDUCE ARGMX, H0, R7           # argmax (peak bin)
     HREDUCE MEANT, H0, F2           # mean
     HREDUCE VARNC, H0, F3           # variance

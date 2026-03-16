@@ -198,6 +198,11 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
                 ProcId::PrintFloat => { used.float_regs.insert(0); }
                 ProcId::PrintStr => { used.int_regs.insert(0); used.int_regs.insert(1); }
                 ProcId::DumpRegs => {}
+                ProcId::PrintHist => {
+                    used.int_regs.insert(0);
+                    used.int_regs.insert(1);
+                    used.int_regs.insert(2);
+                }
             }
         }
 

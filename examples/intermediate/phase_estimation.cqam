@@ -83,6 +83,14 @@ LABEL: qpe_loop
 # --- Destructive measurement for full distribution ---
     QOBSERVE H1, Q1              # H1 = full distribution (destructive)
 
+# Print measurement histogram (top-10 for 16-qubit state)
+    IMOV R5, R2           # Save R2 (constant 1)
+    ILDI R0, 1            # H1 = phase estimation distribution
+    ILDI R1, 3            # Mode 3: top-K
+    ILDI R2, 10           # Show top 10
+    ECALL PRINT_HIST
+    IMOV R2, R5           # Restore R2
+
 # --- Extract phase estimate ---
     HREDUCE MEANT, H1, F4  # F4 = mean of distribution (approximate phase index)
     HREDUCE VARNC, H1, F5  # F5 = variance (uncertainty in phase estimate)

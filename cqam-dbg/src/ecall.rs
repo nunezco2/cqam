@@ -93,6 +93,18 @@ impl EcallInterceptor {
                     format!("DUMP_REGS: {}", lines.join(" "))
                 }
             }
+            ProcId::PrintHist => {
+                let h_index = ctx.iregs.regs[0] as u8;
+                let mode = ctx.iregs.regs[1] as u32;
+                let top_k = if ctx.iregs.regs[2] > 0 { ctx.iregs.regs[2] as u32 } else { 5 };
+                if let Ok(value) = ctx.hregs.get(h_index) {
+                    cqam_vm::histogram_fmt::format_histogram(
+                        h_index, value, mode, top_k, ctx.config.default_qubits,
+                    )
+                } else {
+                    format!("H{}: (invalid index)", h_index)
+                }
+            }
             // All ProcId variants are exhaustively matched above.
         };
 

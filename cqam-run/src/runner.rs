@@ -140,17 +140,14 @@ fn run_program_with_config_metadata_and_data(
     // Store private section size
     let _ = private;
 
-    // If shots mode is enabled, run with shot sampling
+    // If shots mode is enabled, run with per-section shot sampling
     if let Some(shots) = config.shots {
-        return run_with_shots(
-            &mut ctx,
-            &mut backend,
-            &mut fork_mgr,
-            max_cycles,
-            enable_interrupts,
-            shots,
-            config.rng_seed.unwrap_or(42),
-        );
+        let base_seed = config.rng_seed.unwrap_or_else(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+        });
+        run_with_shots(&mut ctx, &mut backend, &mut fork_mgr, max_cycles, enable_interrupts, shots, base_seed)?;
+        return Ok(RunResult::Shots(ctx));
     }
 
     while ctx.pc < ctx.program.len() {
@@ -254,41 +251,43 @@ fn is_quantum_entry(instr: &Instruction) -> bool {
     )
 }
 
-/// Check if an instruction is a terminal observation (collapses quantum state).
-fn is_terminal_observation(instr: &Instruction) -> bool {
-    matches!(
-        instr,
-        Instruction::QObserve { .. } | Instruction::QSample { .. }
-    )
-}
-
-/// Check if a program section contains mid-circuit measurements.
-///
-/// A mid-circuit measurement is a QObserve/QSample that is followed by
-/// another quantum entry point (QPREP/etc.) before the section ends.
-fn section_has_mid_circuit_measurement(program: &[Instruction], section_start: usize) -> bool {
-    let mut seen_observation = false;
-    for instr in program.iter().skip(section_start) {
-        if matches!(instr, Instruction::Halt) {
-            break;
-        }
-        if is_terminal_observation(instr) {
-            seen_observation = true;
-        } else if seen_observation && is_quantum_entry(instr) {
-            return true;
+/// Check if instructions [start..=end] contain a mid-circuit measurement
+/// feedback pattern (QMEAS followed by a quantum gate).
+fn section_is_adaptive(program: &[Instruction], start: usize, end: usize) -> bool {
+    let mut seen_meas = false;
+    for instr in &program[start..=end] {
+        match instr {
+            Instruction::QMeas { .. } => {
+                seen_meas = true;
+            }
+            Instruction::QKernel { .. }
+            | Instruction::QKernelF { .. }
+            | Instruction::QKernelZ { .. }
+            | Instruction::QHadM { .. }
+            | Instruction::QFlip { .. }
+            | Instruction::QPhase { .. }
+            | Instruction::QCnot { .. }
+            | Instruction::QRot { .. }
+            | Instruction::QCz { .. }
+            | Instruction::QSwap { .. }
+            | Instruction::QCustom { .. }
+            if seen_meas => {
+                return true;
+            }
+            _ => {}
         }
     }
     false
 }
 
-/// Run a program in shot mode: execute the program once to get exact
-/// distributions, then resample all Dist values in H registers into
-/// ShotHistograms.
+/// Run a program in shot mode with per-quantum-section shot loops.
 ///
-/// This is the "fast path" — it runs the program once and resamples
-/// the resulting distributions. For programs with mid-circuit measurements
-/// that require re-execution, the slow path would re-run the program N times,
-/// but the fast path is sufficient for most use cases.
+/// Classical code (including ECALL) executes exactly once. Each quantum
+/// section (QPREP→QOBSERVE while QF is on) is independently sampled
+/// N times:
+///   - Fast path (non-adaptive): resample exact Dist in H registers N times
+///   - Slow path (adaptive, QMEAS→gate feedback): replay section N-1 more
+///     times from a snapshot, accumulate histogram
 fn run_with_shots(
     ctx: &mut ExecutionContext,
     backend: &mut SimulationBackend,
@@ -297,146 +296,168 @@ fn run_with_shots(
     enable_interrupts: bool,
     shots: u32,
     base_seed: u64,
-) -> Result<RunResult, CqamError> {
-    let has_mid_circuit = section_has_mid_circuit_measurement(&ctx.program, 0);
+) -> Result<(), CqamError> {
+    use std::collections::BTreeMap;
+    use cqam_core::shot::ShotHistogram;
 
-    if has_mid_circuit {
-        // Slow path: re-run program N times and accumulate results
-        run_shots_slow(ctx, backend, fork_mgr, max_cycles, enable_interrupts, shots, base_seed)
-    } else {
-        // Fast path: run once, resample distributions
-        run_shots_fast(ctx, backend, fork_mgr, max_cycles, enable_interrupts, shots, base_seed)
-    }
-}
-
-/// Fast-path shot mode: run program once exactly, then resample all
-/// Dist values in H registers into ShotHistograms.
-fn run_shots_fast(
-    ctx: &mut ExecutionContext,
-    backend: &mut SimulationBackend,
-    fork_mgr: &mut ForkManager,
-    max_cycles: usize,
-    enable_interrupts: bool,
-    shots: u32,
-    base_seed: u64,
-) -> Result<RunResult, CqamError> {
     let mut cycle_count: usize = 0;
+    let mut in_quantum_section = false;
+    let mut section_start_pc: usize = 0;
+    let mut snapshot_ctx: Option<ExecutionContext> = None;
+    let mut section_index: u64 = 0;
 
-    // Run the program to completion (exact simulation)
     while ctx.pc < ctx.program.len() {
         if cycle_count >= max_cycles {
             ctx.psw.trap_halt = true;
             break;
         }
 
+        let pc_before = ctx.pc;
         let instr = ctx.program[ctx.pc].clone();
+        let qf_before = ctx.psw.qf;
+
+        // Section entry: QF is false, about to execute quantum-entry instruction
+        if !in_quantum_section && !qf_before && is_quantum_entry(&instr) {
+            section_start_pc = pc_before;
+            snapshot_ctx = Some(ctx.clone());
+            in_quantum_section = true;
+        }
+
+        // Execute the instruction
         execute_instruction(ctx, &instr, fork_mgr, backend)?;
         cycle_count += 1;
-
         dispatch_pending_traps(ctx, enable_interrupts);
 
-        if ctx.psw.trap_halt {
-            break;
-        }
-    }
+        if ctx.psw.trap_halt { break; }
 
-    // Resample all Dist values in H registers into ShotHistograms
-    execute_section_fast(ctx, shots, base_seed);
+        // Section exit: was in quantum section, QF just went false
+        if in_quantum_section && qf_before && !ctx.psw.qf {
+            let section_end_pc = pc_before;
+            let post_first_run = ctx.clone();
+            let adaptive = section_is_adaptive(&ctx.program, section_start_pc, section_end_pc);
 
-    Ok(RunResult::Shots(ctx.clone()))
-}
+            if adaptive {
+                // Slow path: replay section N-1 more times
+                let mut accumulators: [BTreeMap<u32, u32>; 8] = Default::default();
 
-/// Resample all Dist values in H registers into ShotHistograms.
-fn execute_section_fast(ctx: &mut ExecutionContext, shots: u32, base_seed: u64) {
-    for i in 0..8u8 {
-        if let Ok(HybridValue::Dist(entries)) = ctx.hregs.get(i) {
-            let hist = resample_dist(entries, shots, base_seed.wrapping_add(i as u64));
-            let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
-        }
-    }
-}
-
-/// Slow-path shot mode: re-run the program N times and accumulate
-/// measurement results into histograms.
-///
-/// This handles programs with mid-circuit measurements where the
-/// quantum state depends on previous measurement outcomes.
-fn run_shots_slow(
-    ctx: &mut ExecutionContext,
-    backend: &mut SimulationBackend,
-    fork_mgr: &mut ForkManager,
-    max_cycles: usize,
-    enable_interrupts: bool,
-    shots: u32,
-    base_seed: u64,
-) -> Result<RunResult, CqamError> {
-    use std::collections::BTreeMap;
-    use cqam_core::shot::ShotHistogram;
-
-    // We need to snapshot the initial state and re-run for each shot
-    let initial_ctx = ctx.clone();
-
-    // Track histograms per H register across all shots
-    let mut accumulators: [BTreeMap<u32, u32>; 8] = Default::default();
-
-    for shot_idx in 0..shots {
-        // Reset to initial state
-        *ctx = initial_ctx.clone();
-        // Create a fresh backend for each shot with a unique seed
-        let shot_seed = base_seed.wrapping_add(shot_idx as u64);
-        backend.set_rng_seed(shot_seed);
-
-        let mut cycle_count: usize = 0;
-        *fork_mgr = ForkManager::new();
-
-        while ctx.pc < ctx.program.len() {
-            if cycle_count >= max_cycles {
-                ctx.psw.trap_halt = true;
-                break;
-            }
-
-            let instr = ctx.program[ctx.pc].clone();
-            execute_instruction(ctx, &instr, fork_mgr, backend)?;
-            cycle_count += 1;
-
-            dispatch_pending_traps(ctx, enable_interrupts);
-
-            if ctx.psw.trap_halt {
-                break;
-            }
-        }
-
-        // Accumulate measurement results from H registers
-        for i in 0..8u8 {
-            if let Ok(val) = ctx.hregs.get(i) {
-                match val {
-                    HybridValue::Dist(entries) => {
-                        // For Dist, find the mode (most probable outcome) as a single sample
-                        // In the slow path, each run produces a distribution — we
-                        // sample once from it for this shot
-                        let outcome = crate::shot::sample_from_dist_seeded(
-                            entries,
-                            base_seed.wrapping_add(shot_idx as u64).wrapping_add(i as u64 * 1000),
-                        );
-                        *accumulators[i as usize].entry(outcome).or_insert(0) += 1;
+                // Collect first shot outcomes
+                for i in 0..8u8 {
+                    if let Ok(val) = ctx.hregs.get(i) {
+                        let outcome = match val {
+                            HybridValue::Dist(entries) => {
+                                Some(crate::shot::sample_from_dist_seeded(
+                                    entries,
+                                    base_seed.wrapping_add(section_index * 1_000_000),
+                                ))
+                            }
+                            HybridValue::Int(k) => Some(*k as u32),
+                            _ => None,
+                        };
+                        if let Some(o) = outcome {
+                            *accumulators[i as usize].entry(o).or_insert(0) += 1;
+                        }
                     }
-                    HybridValue::Int(k) => {
-                        *accumulators[i as usize].entry(*k as u32).or_insert(0) += 1;
+                }
+
+                let snap = snapshot_ctx.as_ref().unwrap();
+                for shot_idx in 1..shots {
+                    *ctx = snap.clone();
+                    let shot_seed = base_seed
+                        .wrapping_add(section_index * 1_000_000)
+                        .wrapping_add(shot_idx as u64);
+                    backend.set_rng_seed(shot_seed);
+                    let mut replay_fork_mgr = ForkManager::new();
+
+                    // Replay section (skip ECALL to avoid duplicating I/O side effects)
+                    while ctx.pc <= section_end_pc && ctx.pc < ctx.program.len() {
+                        let replay_instr = ctx.program[ctx.pc].clone();
+                        if matches!(replay_instr, Instruction::Ecall { .. }) {
+                            // Skip ECALL but still advance PC past it
+                            ctx.pc += 1;
+                            continue;
+                        }
+                        execute_instruction(ctx, &replay_instr, &mut replay_fork_mgr, backend)?;
+                        dispatch_pending_traps(ctx, enable_interrupts);
+                        if ctx.psw.trap_halt { break; }
                     }
-                    _ => {}
+
+                    // Collect outcomes
+                    for i in 0..8u8 {
+                        if let Ok(val) = ctx.hregs.get(i) {
+                            let outcome = match val {
+                                HybridValue::Dist(entries) => {
+                                    Some(crate::shot::sample_from_dist_seeded(
+                                        entries,
+                                        shot_seed.wrapping_add(i as u64 * 1000),
+                                    ))
+                                }
+                                HybridValue::Int(k) => Some(*k as u32),
+                                _ => None,
+                            };
+                            if let Some(o) = outcome {
+                                *accumulators[i as usize].entry(o).or_insert(0) += 1;
+                            }
+                        }
+                    }
+                }
+
+                // Restore canonical post-section state, write histograms
+                *ctx = post_first_run;
+                for i in 0..8u8 {
+                    if !accumulators[i as usize].is_empty() {
+                        let mut hist = ShotHistogram::new(shots);
+                        hist.counts = accumulators[i as usize].clone();
+                        let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
+                    }
+                }
+            } else {
+                // Fast path: resample exact distributions
+                let section_seed = base_seed.wrapping_add(section_index * 1_000_000);
+                for i in 0..8u8 {
+                    match ctx.hregs.get(i) {
+                        Ok(HybridValue::Dist(entries)) => {
+                            let hist = resample_dist(
+                                entries, shots,
+                                section_seed.wrapping_add(i as u64),
+                            );
+                            let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
+                        }
+                        Ok(HybridValue::Int(k)) => {
+                            let mut hist = ShotHistogram::new(shots);
+                            hist.counts.insert(*k as u32, shots);
+                            let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
+                        }
+                        _ => {}
+                    }
                 }
             }
+
+            in_quantum_section = false;
+            snapshot_ctx = None;
+            section_index += 1;
         }
     }
 
-    // Reset ctx to the last run's state, then replace H registers with histograms
+    // Program-exit flush: convert any remaining Dist/Int in H registers to Hist.
+    // This handles programs that end without closing a quantum section (QF still true)
+    // or programs where QOBSERVE results were never resampled.
     for i in 0..8u8 {
-        if !accumulators[i as usize].is_empty() {
-            let mut hist = ShotHistogram::new(shots);
-            hist.counts = accumulators[i as usize].clone();
-            let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
+        match ctx.hregs.get(i) {
+            Ok(HybridValue::Dist(entries)) => {
+                let section_seed = base_seed.wrapping_add(section_index * 1_000_000);
+                let hist = resample_dist(
+                    entries, shots,
+                    section_seed.wrapping_add(i as u64),
+                );
+                let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
+            }
+            Ok(HybridValue::Int(k)) => {
+                let mut hist = ShotHistogram::new(shots);
+                hist.counts.insert(*k as u32, shots);
+                let _ = ctx.hregs.set(i, HybridValue::Hist(hist));
+            }
+            _ => {}
         }
     }
-
-    Ok(RunResult::Shots(ctx.clone()))
+    Ok(())
 }

@@ -96,6 +96,16 @@ res_fmt:
 
 # Destructive measurement
     QOBSERVE H2, Q1              # Full measurement
+
+# Print measurement histogram
+    ISTR R0, 90           # Save R0 (N=15) to CMEM[90]
+    ISTR R1, 91           # Save R1 (a=7) to CMEM[91]
+    ILDI R0, 2            # H2 = Shor's measurement distribution
+    ILDI R1, 0            # Mode 0: table
+    ECALL PRINT_HIST
+    ILDM R0, 90           # Restore R0
+    ILDM R1, 91           # Restore R1
+
     HREDUCE ARGMX, H2, R9           # R9 = argmax = s (encodes s/r)
     HREDUCE MODEV, H2, R10          # R10 = mode
 

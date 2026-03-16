@@ -159,6 +159,12 @@ LABEL: simon_round
 
 # Step 5: Destructive measurement
     QOBSERVE H0, Q0, SAMPLE
+
+# Print measurement histogram for Simon's query result
+    ILDI R0, 0            # H0 = Simon's measurement
+    ILDI R1, 0            # Mode 0: table
+    ECALL PRINT_HIST
+
     HREDUCE ROUND, H0, R7    # R7 = measured state (full 4-qubit outcome)
 
 # Extract y = upper 2 bits (query register)

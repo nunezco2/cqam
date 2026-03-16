@@ -76,6 +76,19 @@ LABEL: grover_count_inner
 
 # --- Measure the QFT output ---
     QOBSERVE H0, Q1      # Full distribution
+
+# Print measurement histogram (top-10 for 16-qubit state)
+    ISTR R0, 90           # Save R0 (target state) to CMEM[90]
+    ISTR R1, 91           # Save R1 (ctx) to CMEM[91]
+    ISTR R2, 92           # Save R2 (remaining iterations) to CMEM[92]
+    ILDI R0, 0            # H0 = quantum counting distribution
+    ILDI R1, 3            # Mode 3: top-K
+    ILDI R2, 10           # Show top 10
+    ECALL PRINT_HIST
+    ILDM R0, 90           # Restore R0
+    ILDM R1, 91           # Restore R1
+    ILDM R2, 92           # Restore R2
+
     HREDUCE ARGMX, H0, R9   # R9 = argmax (peak frequency bin)
     HREDUCE MEANT, H0, F0   # F0 = mean frequency
 

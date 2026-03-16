@@ -77,6 +77,18 @@ LABEL: grover_inner_count
 
 # --- Measure the IQFT output ---
     QOBSERVE H0, Q1             # H0 = full distribution (destructive)
+
+# Print measurement histogram
+    ISTR R0, 90                 # Save R0 (target state) to CMEM[90]
+    ISTR R1, 91                 # Save R1 (ctx) to CMEM[91]
+    ISTR R2, 92                 # Save R2 (remaining levels) to CMEM[92]
+    ILDI R0, 0                  # H0 = approx counting distribution
+    ILDI R1, 0                  # Mode 0: table
+    ECALL PRINT_HIST
+    ILDM R0, 90                 # Restore R0
+    ILDM R1, 91                 # Restore R1
+    ILDM R2, 92                 # Restore R2
+
     HREDUCE ARGMX, H0, R9          # R9 = argmax (peak frequency bin)
     HREDUCE MEANT, H0, F0          # F0 = mean frequency
     HREDUCE VARNC, H0, F1          # F1 = variance

@@ -25,7 +25,8 @@ pub struct ProgramStateWord {
 
     // --- Quantum state flags ---
 
-    /// Quantum active: at least one Q register is currently occupied.
+    /// Quantum section active: set by QPREP, cleared by QOBSERVE.
+    /// Acts as a section delimiter, not a register occupancy tracker.
     pub qf: bool,
     /// Superposition intent: the last quantum operation intends to
     /// create or maintain superposition.
@@ -115,7 +116,7 @@ impl ProgramStateWord {
     /// Sets qf=true (callers always have a live register).
     /// SF, EF, and IF are NOT set here -- they are intent-based flags set
     /// directly by each quantum operation handler.
-    /// QOBSERVE manages qf separately via register occupancy scan.
+    /// QOBSERVE unconditionally clears qf (section delimiter semantics).
     /// Raises int_quantum_err when purity drops below the threshold.
     pub fn update_from_qmeta(&mut self, purity: f64, threshold: f64) {
         self.qf = true;

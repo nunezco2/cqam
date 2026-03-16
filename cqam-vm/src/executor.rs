@@ -517,6 +517,31 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
                         }
                     }
                 }
+                ProcId::PrintHist => {
+                    let h_index = ctx.iregs.get(0)? as u8;
+                    let mode = ctx.iregs.get(1)? as u32;
+                    let top_k = match ctx.iregs.get(2) {
+                        Ok(v) if v > 0 => v as u32,
+                        _ => 5,
+                    };
+
+                    if h_index >= 8 {
+                        return Err(CqamError::TypeMismatch {
+                            instruction: "ECALL PRINT_HIST".to_string(),
+                            detail: format!("H register index {} out of range 0-7", h_index),
+                        });
+                    }
+
+                    let value = ctx.hregs.get(h_index)?;
+                    let output = crate::histogram_fmt::format_histogram(
+                        h_index,
+                        value,
+                        mode,
+                        top_k,
+                        ctx.config.default_qubits,
+                    );
+                    println!("{}", output);
+                }
             }
         }
 

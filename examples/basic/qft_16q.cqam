@@ -70,6 +70,12 @@ res_fmt:
     ILDI R4, 1            # col = 1
     QOBSERVE H2, Q3, 2, R3, R4  # H2 = rho[0][1] as Complex (destructive)
 
+# Print measurement histogram (top-10 for 16-qubit state)
+    ILDI R0, 2            # H2 = QFT density matrix element
+    ILDI R1, 3            # Mode 3: top-K
+    ILDI R2, 10           # Show top 10
+    ECALL PRINT_HIST
+
 # --- Stage 6: Complex reductions ---
     HREDUCE MAGNI, H2, F2    # F2 = magnitude of rho[0][1]
     HREDUCE PHASE, H2, F3    # F3 = phase of rho[0][1]

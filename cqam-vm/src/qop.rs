@@ -284,7 +284,7 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                 ctx.psw.inf = false;
                 ctx.psw.mark_decohered();
                 ctx.psw.mark_collapsed();
-                ctx.psw.qf = ctx.qregs.iter().any(|q| q.is_some());
+                ctx.psw.qf = false;
                 Ok(())
             } else {
                 Err(CqamError::UninitializedRegister {

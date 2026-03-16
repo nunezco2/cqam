@@ -62,5 +62,6 @@ pub mod resource;
 pub mod qop;
 pub mod psw;
 pub mod isr;
+pub mod histogram_fmt;
 pub mod hybrid;
 pub mod thread_pool;
