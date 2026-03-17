@@ -13,8 +13,8 @@ mod rotation;
 mod diagonal;
 mod permutation;
 
-use cqam_core::circuit_ir::{self, Op, QWire};
-use cqam_core::instruction::KernelId;
+use cqam_core::circuit_ir::{self, ApplyGate1q, ApplyGate2q, Gate1q, Gate2q, Op, QWire};
+use cqam_core::instruction::{DistId, KernelId};
 use cqam_core::quantum_backend::KernelParams;
 use crate::error::MicroError;
 
@@ -27,7 +27,9 @@ use crate::error::MicroError;
 /// Walks the ops list. For each op:
 /// - Gate1q/Gate2q already in standard set: pass through unchanged.
 /// - Kernel ops: dispatch to kernel-specific decomposer.
-/// - Prep, Measure, Barrier, Reset, MeasQubit: pass through unchanged.
+/// - Prep with non-Zero distribution: decompose into gate sequence after a
+///   Zero-state prep (hardware assumes |0> reset; gates create the target state).
+/// - Measure, Barrier, Reset, MeasQubit: pass through unchanged.
 /// - CustomUnitary: return MicroError::UnsupportedGate.
 pub fn decompose_to_standard(
     program: &circuit_ir::MicroProgram,
@@ -36,6 +38,18 @@ pub fn decompose_to_standard(
     out.wire_map = program.wire_map.clone();
     for op in &program.ops {
         match op {
+            Op::Prep(p) => {
+                // Always emit a Zero prep (hardware reset to |0...0>).
+                out.push(Op::Prep(circuit_ir::Prepare {
+                    wires: p.wires.clone(),
+                    dist: DistId::Zero,
+                }));
+                // Then emit gates to create the target distribution.
+                let gates = decompose_prep_dist(&p.wires, p.dist);
+                for g in gates {
+                    out.push(g);
+                }
+            }
             Op::Kernel(k) => {
                 let gates = decompose_kernel(&k.wires, &k.kernel, &k.params)?;
                 for g in gates {
@@ -51,6 +65,41 @@ pub fn decompose_to_standard(
         }
     }
     Ok(out)
+}
+
+/// Decompose a distribution prep into standard gates (applied after |0...0> reset).
+///
+/// - Zero: no gates needed (already |0...0>).
+/// - Uniform: H on every wire → equal superposition.
+/// - Bell: H on wire[0], CX(wire[0], wire[1]). Requires >= 2 wires.
+/// - Ghz: H on wire[0], CX(wire[0], wire[k]) for k in 1..n.
+fn decompose_prep_dist(wires: &[QWire], dist: DistId) -> Vec<Op> {
+    match dist {
+        DistId::Zero => vec![],
+        DistId::Uniform => {
+            wires.iter().map(|&w| Op::Gate1q(ApplyGate1q { wire: w, gate: Gate1q::H })).collect()
+        }
+        DistId::Bell => {
+            if wires.len() < 2 {
+                return vec![];
+            }
+            vec![
+                Op::Gate1q(ApplyGate1q { wire: wires[0], gate: Gate1q::H }),
+                Op::Gate2q(ApplyGate2q { wire_a: wires[0], wire_b: wires[1], gate: Gate2q::Cx }),
+            ]
+        }
+        DistId::Ghz => {
+            if wires.len() < 2 {
+                return wires.iter().map(|&w| Op::Gate1q(ApplyGate1q { wire: w, gate: Gate1q::H })).collect();
+            }
+            let mut ops = Vec::with_capacity(wires.len());
+            ops.push(Op::Gate1q(ApplyGate1q { wire: wires[0], gate: Gate1q::H }));
+            for &w in &wires[1..] {
+                ops.push(Op::Gate2q(ApplyGate2q { wire_a: wires[0], wire_b: w, gate: Gate2q::Cx }));
+            }
+            ops
+        }
+    }
 }
 
 /// Dispatch to the appropriate kernel decomposer.
@@ -854,5 +903,87 @@ mod tests {
             matrix: vec![C64::ONE; 4],
         });
         assert!(decompose_to_standard(&mp).is_err());
+    }
+
+    // =========================================================================
+    // Prep distribution decomposition tests
+    // =========================================================================
+
+    #[test]
+    fn test_prep_zero_no_gates() {
+        let mut mp = circuit_ir::MicroProgram::new(2);
+        mp.push(Op::Prep(circuit_ir::Prepare {
+            wires: make_wires(2),
+            dist: DistId::Zero,
+        }));
+        let result = decompose_to_standard(&mp).unwrap();
+        // Should only have the Prep op, no extra gates
+        assert_eq!(result.ops.len(), 1);
+        assert!(matches!(&result.ops[0], Op::Prep(_)));
+    }
+
+    #[test]
+    fn test_prep_uniform_produces_hadamards() {
+        let n = 3;
+        let mut mp = circuit_ir::MicroProgram::new(n);
+        mp.push(Op::Prep(circuit_ir::Prepare {
+            wires: make_wires(n as usize),
+            dist: DistId::Uniform,
+        }));
+        let result = decompose_to_standard(&mp).unwrap();
+        // Prep + n Hadamard gates
+        assert_eq!(result.ops.len(), 1 + n as usize);
+        // Verify the statevector is uniform
+        let dim = 1 << n;
+        let zero = vec![C64::ZERO; dim];
+        let mut sv = zero.clone();
+        sv[0] = C64::ONE;
+        let sv = apply_ops_to_sv(&sv, &result.ops, n as u8);
+        let expected = 1.0 / (dim as f64).sqrt();
+        for amp in &sv {
+            assert!((amp.0 - expected).abs() < 1e-10, "expected uniform amplitude {expected}, got {}", amp.0);
+            assert!(amp.1.abs() < 1e-10);
+        }
+    }
+
+    #[test]
+    fn test_prep_bell_produces_bell_state() {
+        let mut mp = circuit_ir::MicroProgram::new(2);
+        mp.push(Op::Prep(circuit_ir::Prepare {
+            wires: make_wires(2),
+            dist: DistId::Bell,
+        }));
+        let result = decompose_to_standard(&mp).unwrap();
+        // Prep + H + CX = 3 ops
+        assert_eq!(result.ops.len(), 3);
+        let sv = apply_ops_to_sv(&[C64::ONE, C64::ZERO, C64::ZERO, C64::ZERO], &result.ops, 2);
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        // Bell state: (|00> + |11>) / sqrt(2)
+        assert!((sv[0].0 - h).abs() < 1e-10, "|00> amplitude wrong");
+        assert!(sv[1].norm_sq() < 1e-10, "|01> should be zero");
+        assert!(sv[2].norm_sq() < 1e-10, "|10> should be zero");
+        assert!((sv[3].0 - h).abs() < 1e-10, "|11> amplitude wrong");
+    }
+
+    #[test]
+    fn test_prep_ghz_3q() {
+        let mut mp = circuit_ir::MicroProgram::new(3);
+        mp.push(Op::Prep(circuit_ir::Prepare {
+            wires: make_wires(3),
+            dist: DistId::Ghz,
+        }));
+        let result = decompose_to_standard(&mp).unwrap();
+        // Prep + H + 2 CX = 4 ops
+        assert_eq!(result.ops.len(), 4);
+        let mut sv = vec![C64::ZERO; 8];
+        sv[0] = C64::ONE;
+        let sv = apply_ops_to_sv(&sv, &result.ops, 3);
+        let h = std::f64::consts::FRAC_1_SQRT_2;
+        // GHZ: (|000> + |111>) / sqrt(2)
+        assert!((sv[0].0 - h).abs() < 1e-10, "|000> amplitude wrong");
+        for i in 1..7 {
+            assert!(sv[i].norm_sq() < 1e-10, "|{i:03b}> should be zero");
+        }
+        assert!((sv[7].0 - h).abs() < 1e-10, "|111> amplitude wrong");
     }
 }
