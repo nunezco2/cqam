@@ -43,6 +43,7 @@
 //! ```
 
 pub mod backend;
+pub mod circuit_backend;
 pub mod complex;
 pub mod constants;
 pub mod density_matrix;

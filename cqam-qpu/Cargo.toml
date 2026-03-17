@@ -3,5 +3,10 @@ name = "cqam-qpu"
 version = "0.1.0"
 edition = "2024"
 
+[features]
+mock = ["rand", "rand_chacha"]
+
 [dependencies]
 cqam-core = { path = "../cqam-core" }
+rand = { version = "0.8", optional = true }
+rand_chacha = { version = "0.3", optional = true }

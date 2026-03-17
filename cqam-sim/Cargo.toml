@@ -5,7 +5,12 @@ edition = "2024"
 
 [dependencies]
 cqam-core = { path = "../cqam-core" }
+cqam-qpu = { path = "../cqam-qpu" }
+cqam-micro = { path = "../cqam-micro" }
 serde = { version = "1", features = ["derive"] }
 rand = "0.8"
 rand_chacha = "0.3"
 rayon = "1.10"
+
+[dev-dependencies]
+cqam-qpu = { path = "../cqam-qpu", features = ["mock"] }
