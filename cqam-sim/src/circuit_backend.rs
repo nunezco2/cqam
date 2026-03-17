@@ -41,6 +41,7 @@ use cqam_qpu::traits::{
 /// Allocates contiguous wire ranges for each `prep()` call. Wires are NOT
 /// recycled within a buffer lifetime (prep-to-observe). Reset is called
 /// when the buffer is flushed.
+#[derive(Clone)]
 struct WireAllocator {
     next_wire: u32,
 }
@@ -673,6 +674,35 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
     }
 }
 
+impl<Q: QpuBackend + Clone> Clone for CircuitBackend<Q> {
+    /// Clone the backend for use in a fork thread.
+    ///
+    /// The cloned backend:
+    /// - Has an independent copy of the QPU handle (stateless except for RNG).
+    /// - Has a fresh empty compilation pipeline cache (fork threads run short-lived
+    ///   sections that will not benefit from the parent's cached circuits).
+    /// - Has `buffer: None` (quantum registers must be fully observed before HFORK).
+    /// - Copies all handle bookkeeping maps (these should also be empty at fork time
+    ///   because QF=0 is required before HFORK).
+    fn clone(&self) -> Self {
+        Self {
+            qpu: self.qpu.clone(),
+            pipeline: self.pipeline.clone(),
+            buffer: None,
+            wire_allocator: self.wire_allocator.clone(),
+            handle_wires: self.handle_wires.clone(),
+            handle_num_qubits: self.handle_num_qubits.clone(),
+            handle_dist: self.handle_dist.clone(),
+            next_handle: self.next_handle,
+            evolved_handles: self.evolved_handles.clone(),
+            convergence: self.convergence.clone(),
+            shot_budget: self.shot_budget,
+            metrics: self.metrics.clone(),
+            rng_seed: self.rng_seed,
+        }
+    }
+}
+
 impl<Q: QpuBackend> CircuitQuantumBackend for CircuitBackend<Q> {
     fn metrics(&self) -> &QpuMetrics {
         &self.metrics
@@ -966,5 +996,38 @@ mod tests {
         let cb = make_backend();
         // MockQpuBackend was created with max_qubits=8
         assert_eq!(cb.max_qubits(), 8);
+    }
+
+    #[test]
+    fn test_circuit_backend_clone_empty_buffer() {
+        let mut cb = make_backend();
+        // Prep a register (creates a buffer) then observe (flushes it)
+        let (h, _) = cb.prep(DistId::Zero, 1, false).unwrap();
+        let _ = cb.observe(h, ObserveMode::Dist, 0, 0).unwrap();
+        // Now buffer is None; clone should also have buffer None
+        let cloned = cb.clone();
+        assert!(cloned.buffer.is_none(), "cloned backend must have buffer: None");
+    }
+
+    #[test]
+    fn test_circuit_backend_clone_forces_buffer_none() {
+        let mut cb = make_backend();
+        // Add some state: prep but do NOT observe (buffer is Some mid-circuit)
+        let (_h, _) = cb.prep(DistId::Zero, 2, false).unwrap();
+        assert!(cb.buffer.is_some());
+        // The Clone impl must always produce buffer: None regardless of parent state
+        let cloned = cb.clone();
+        assert!(cloned.buffer.is_none(), "Clone impl must always produce buffer: None");
+    }
+
+    #[test]
+    fn test_circuit_backend_clone_independent() {
+        let cb = make_backend();
+        let mut cloned = cb.clone();
+        // Cloned backend must be independently functional
+        let (h, _) = cloned.prep(DistId::Zero, 1, false).unwrap();
+        assert!(cloned.buffer.is_some());
+        let _ = cloned.observe(h, ObserveMode::Dist, 0, 0).unwrap();
+        assert!(cloned.buffer.is_none());
     }
 }

@@ -91,6 +91,21 @@ impl CompilationPipeline {
     }
 }
 
+impl Clone for CompilationPipeline {
+    /// Clone the pipeline, but start with a fresh empty cache.
+    ///
+    /// Fork threads run short-lived quantum sections that will not benefit from
+    /// the parent's cached compiled circuits, so the cache is not copied.
+    fn clone(&self) -> Self {
+        Self {
+            gate_set: self.gate_set.clone(),
+            connectivity: self.connectivity.clone(),
+            cache: CircuitCache::new(self.cache.capacity()),
+            metrics: self.metrics.clone(),
+        }
+    }
+}
+
 /// Extract all Resolved parameter values from a MicroProgram, in op order.
 fn extract_resolved_params(program: &circuit_ir::MicroProgram) -> Vec<f64> {
     let mut params = Vec::new();

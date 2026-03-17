@@ -77,6 +77,11 @@ impl CircuitCache {
     pub fn misses(&self) -> u64 {
         self.misses
     }
+
+    /// Maximum number of entries this cache can hold.
+    pub fn capacity(&self) -> usize {
+        self.capacity
+    }
 }
 
 /// Rebind parameters in a cached template using new parameter values.

@@ -32,6 +32,7 @@ fn test_config() -> SimConfig {
         noise_model: None,
         noise_method: None,
         bell_pair_budget: None,
+        backend: None,
     }
 }
 

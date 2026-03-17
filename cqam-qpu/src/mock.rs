@@ -127,6 +127,18 @@ impl Default for MockQpuBackend {
     }
 }
 
+impl Clone for MockQpuBackend {
+    fn clone(&self) -> Self {
+        Self {
+            connectivity: self.connectivity.clone(),
+            gate_set: self.gate_set.clone(),
+            max_qubits: self.max_qubits,
+            calibration: self.calibration.clone(),
+            rng: self.rng.clone(),
+        }
+    }
+}
+
 impl QpuBackend for MockQpuBackend {
     fn gate_set(&self) -> &NativeGateSet {
         &self.gate_set
@@ -618,6 +630,25 @@ mod tests {
         );
         // Ensure no other outcomes appear
         assert_eq!(result.counts.len(), 1, "Only |0> should appear in counts");
+    }
+
+    #[test]
+    fn test_mock_qpu_clone_independent_rng() {
+        // Two clones from the same seeded backend must produce identical results
+        // (each clone gets its own copy of the RNG state at clone time).
+        let circuit = make_circuit_bell();
+        let conv = convergence();
+
+        let base = make_backend_seeded(99999);
+        let mut c1 = base.clone();
+        let mut c2 = base.clone();
+
+        let r1 = c1.submit(&circuit, &conv, 500).unwrap();
+        let r2 = c2.submit(&circuit, &conv, 500).unwrap();
+
+        // Both clones start from identical RNG state, so results must match
+        assert_eq!(r1.counts, r2.counts, "clones from same state must produce identical results");
+        assert_eq!(r1.total_shots, r2.total_shots);
     }
 
     #[test]

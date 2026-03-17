@@ -8,6 +8,8 @@ cqam-core = { path = "../cqam-core" }
 cqam-as = { path = "../cqam-as" }
 cqam-sim = { path = "../cqam-sim" }
 cqam-vm = { path = "../cqam-vm" }
+cqam-qpu = { path = "../cqam-qpu", features = ["mock"] }
+cqam-micro = { path = "../cqam-micro" }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.7"
 log = "0.4"

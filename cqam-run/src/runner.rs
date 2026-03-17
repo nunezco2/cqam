@@ -18,12 +18,16 @@ use cqam_core::instruction::Instruction;
 use cqam_core::parser::{DataSection, ProgramMetadata, SharedSection, PrivateSection};
 use cqam_core::quantum_backend::QuantumBackend;
 use cqam_core::register::HybridValue;
+use cqam_qpu::mock::{MockCalibrationData, MockQpuBackend};
+use cqam_qpu::traits::{ConnectivityGraph, ConvergenceCriterion};
+use cqam_core::native_ir::NativeGateSet;
 use cqam_sim::backend::SimulationBackend;
+use cqam_sim::circuit_backend::CircuitBackend;
 use cqam_vm::context::ExecutionContext;
 use cqam_vm::executor::execute_instruction;
 use cqam_vm::fork::ForkManager;
 use cqam_vm::isr::{self, Trap, MaskableTrap};
-use crate::simconfig::SimConfig;
+use crate::simconfig::{BackendChoice, SimConfig};
 use crate::shot::{RunResult, resample_dist};
 
 /// Run a complete CQAM program to termination with simulator configuration.
@@ -83,6 +87,145 @@ fn run_program_with_config_metadata_and_data(
     shared: &SharedSection,
     private: &PrivateSection,
 ) -> Result<RunResult, CqamError> {
+    match config.backend_choice() {
+        BackendChoice::Simulation => {
+            let mut backend = SimulationBackend::new();
+            configure_sim_backend(&mut backend, config)?;
+            run_sim_with_backend(program, config, metadata, data, shared, private, backend)
+        }
+        BackendChoice::Qpu { ref provider, ref device, shot_budget, confidence } => {
+            match provider.as_str() {
+                "mock" => {
+                    let qpu = build_mock_qpu(device.as_deref());
+                    let convergence = ConvergenceCriterion {
+                        confidence,
+                        ..ConvergenceCriterion::default()
+                    };
+                    let mut backend = CircuitBackend::new(qpu, convergence, shot_budget);
+                    if let Some(seed) = config.rng_seed {
+                        backend.set_rng_seed(seed);
+                    }
+                    run_with_backend(program, config, metadata, data, shared, private, backend)
+                }
+                other => Err(CqamError::ConfigError(
+                    format!("unknown QPU provider: '{}'. Valid: mock", other)
+                )),
+            }
+        }
+    }
+}
+
+/// Run with a `SimulationBackend`, handling shots mode if configured.
+///
+/// Shots mode is simulation-specific: it replays quantum sections using the
+/// exact state-vector distributions. QPU backends handle shots internally
+/// via their own shot-sampling mechanism, so this wrapper is only used for
+/// the `Simulation` backend choice.
+fn run_sim_with_backend(
+    program: Vec<Instruction>,
+    config: &SimConfig,
+    metadata: &ProgramMetadata,
+    data: Option<&DataSection>,
+    shared: &SharedSection,
+    private: &PrivateSection,
+    mut backend: SimulationBackend,
+) -> Result<RunResult, CqamError> {
+    if let Some(shots) = config.shots {
+        let mut ctx = ExecutionContext::new(program);
+
+        // Pre-load .data section into CMEM
+        if let Some(ds) = data {
+            if !ds.cells.is_empty() {
+                ctx.cmem.load_data(&ds.cells);
+            }
+        }
+
+        // Pre-load .shared section into CMEM at shared.base
+        if !shared.cells.is_empty() {
+            let base = shared.base as usize;
+            for (i, &val) in shared.cells.iter().enumerate() {
+                ctx.cmem.store((base + i) as u16, val);
+            }
+            let end = shared.base + shared.cells.len() as u16;
+            ctx.shared_region = Some((shared.base, end));
+        }
+
+        let mut fork_mgr = ForkManager::new();
+        let max_cycles = config.max_cycles.unwrap_or(1000);
+        let enable_interrupts = config.enable_interrupts.unwrap_or(true);
+
+        let vm_config = config.to_vm_config(metadata);
+        ctx.thread_count = vm_config.default_threads;
+        ctx.bell_pair_budget = vm_config.bell_pair_budget;
+        ctx.config = vm_config;
+
+        let _ = private;
+
+        let base_seed = config.rng_seed.unwrap_or_else(|| {
+            use std::time::{SystemTime, UNIX_EPOCH};
+            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
+        });
+        run_with_shots(&mut ctx, &mut backend, &mut fork_mgr, max_cycles, enable_interrupts, shots, base_seed)?;
+        return Ok(RunResult::Shots(ctx));
+    }
+
+    // Non-shots path: delegate to the generic helper
+    run_with_backend(program, config, metadata, data, shared, private, backend)
+}
+
+/// Configure simulation-specific settings on a `SimulationBackend`.
+///
+/// These settings (noise model, density-matrix mode) do not apply to
+/// `CircuitBackend` and must not be called in the generic path.
+fn configure_sim_backend(
+    backend: &mut SimulationBackend,
+    config: &SimConfig,
+) -> Result<(), CqamError> {
+    backend.set_force_density_matrix(config.force_density_matrix);
+    if let Some(ref noise_name) = config.noise_model {
+        if noise_name != "none" {
+            let noise = crate::simconfig::build_noise_model(noise_name)?;
+            let num_qubits = config.default_qubits.unwrap_or(2);
+            let method = config.resolve_noise_method(num_qubits)
+                .unwrap_or(cqam_sim::noise::NoiseMethod::DensityMatrix);
+            backend.set_noise_model(Some(noise), method);
+        }
+    }
+    if let Some(seed) = config.rng_seed {
+        backend.set_rng_seed(seed);
+    }
+    Ok(())
+}
+
+/// Build a `MockQpuBackend` with sensible defaults.
+///
+/// `device` is currently unused (Phase 4 has one mock topology). Future
+/// phases can dispatch on the device name to select different topologies.
+fn build_mock_qpu(_device: Option<&str>) -> MockQpuBackend {
+    MockQpuBackend::with_config(
+        ConnectivityGraph::all_to_all(27),
+        NativeGateSet::Superconducting,
+        27,
+        MockCalibrationData::default(),
+        None,
+    )
+}
+
+/// Generic execution loop: creates context, loads memory sections, and runs
+/// the program with the supplied backend.
+///
+/// This is the single authority on the fetch-execute loop. SimulationBackend-
+/// specific configuration (`set_force_density_matrix`, `set_noise_model`)
+/// must be applied by the caller before passing the backend here.
+fn run_with_backend<B: QuantumBackend + Clone + Send + 'static>(
+    program: Vec<Instruction>,
+    config: &SimConfig,
+    metadata: &ProgramMetadata,
+    data: Option<&DataSection>,
+    shared: &SharedSection,
+    private: &PrivateSection,
+    mut backend: B,
+) -> Result<RunResult, CqamError> {
     let mut ctx = ExecutionContext::new(program);
 
     // Pre-load .data section into CMEM
@@ -105,9 +248,6 @@ fn run_program_with_config_metadata_and_data(
         ctx.shared_region = Some((shared.base, end));
     }
 
-    // Create the simulation backend
-    let mut backend = SimulationBackend::new();
-
     let mut fork_mgr = ForkManager::new();
     let max_cycles = config.max_cycles.unwrap_or(1000);
     let enable_interrupts = config.enable_interrupts.unwrap_or(true);
@@ -119,37 +259,8 @@ fn run_program_with_config_metadata_and_data(
     ctx.bell_pair_budget = vm_config.bell_pair_budget;
     ctx.config = vm_config;
 
-    // Wire density-matrix backend flag
-    backend.set_force_density_matrix(config.force_density_matrix);
-
-    // Set up noise model if configured
-    if let Some(ref noise_name) = config.noise_model {
-        if noise_name != "none" {
-            let noise = crate::simconfig::build_noise_model(noise_name)?;
-            let num_qubits = ctx.config.default_qubits;
-            let method = config.resolve_noise_method(num_qubits)
-                .unwrap_or(cqam_sim::noise::NoiseMethod::DensityMatrix);
-            backend.set_noise_model(Some(noise), method);
-        }
-    }
-
-    // Set RNG seed on backend if configured
-    if let Some(seed) = config.rng_seed {
-        backend.set_rng_seed(seed);
-    }
-
     // Store private section size
     let _ = private;
-
-    // If shots mode is enabled, run with per-section shot sampling
-    if let Some(shots) = config.shots {
-        let base_seed = config.rng_seed.unwrap_or_else(|| {
-            use std::time::{SystemTime, UNIX_EPOCH};
-            SystemTime::now().duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64
-        });
-        run_with_shots(&mut ctx, &mut backend, &mut fork_mgr, max_cycles, enable_interrupts, shots, base_seed)?;
-        return Ok(RunResult::Shots(ctx));
-    }
 
     while ctx.pc < ctx.program.len() {
         // Enforce max_cycles loop guard

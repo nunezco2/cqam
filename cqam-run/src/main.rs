@@ -30,7 +30,7 @@ use std::process;
 use cqam_run::loader::load_program;
 use cqam_run::runner::run_program_with_data;
 use cqam_run::report::print_report;
-use cqam_run::simconfig::SimConfig;
+use cqam_run::simconfig::{BackendChoice, SimConfig};
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
@@ -51,6 +51,10 @@ fn print_help() {
     eprintln!("  --noise <model|path>  Noise model name (superconducting, trapped-ion, neutral-atom,");
     eprintln!("                        photonic, spin) or path to .toml file with custom parameters");
     eprintln!("  --noise-method <m>    Noise method: density-matrix, trajectory (auto if omitted)");
+    eprintln!("  --backend <choice>    Backend: simulation (default), mock");
+    eprintln!("  --qpu-shots <n>       Shot budget for QPU backends (default: 8192)");
+    eprintln!("  --qpu-confidence <f>  Bayesian confidence level 0.0-1.0 (default: 0.95)");
+    eprintln!("  --qpu-device <name>   QPU device name (provider-specific)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -70,6 +74,10 @@ struct CliArgs {
     verbose: bool,
     noise: Option<String>,
     noise_method: Option<String>,
+    backend: Option<String>,
+    qpu_shots: Option<u32>,
+    qpu_confidence: Option<f64>,
+    qpu_device: Option<String>,
 }
 
 fn parse_args() -> Result<CliArgs, String> {
@@ -98,6 +106,10 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut verbose = false;
     let mut noise: Option<String> = None;
     let mut noise_method: Option<String> = None;
+    let mut backend: Option<String> = None;
+    let mut qpu_shots: Option<u32> = None;
+    let mut qpu_confidence: Option<f64> = None;
+    let mut qpu_device: Option<String> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -162,6 +174,40 @@ fn parse_args() -> Result<CliArgs, String> {
             "--psw" => print_psw = true,
             "--resources" => print_resources = true,
             "--verbose" => verbose = true,
+            "--backend" => {
+                i += 1;
+                let val = args.get(i).ok_or("--backend requires a value")?;
+                match val.as_str() {
+                    "simulation" | "mock" => backend = Some(val.clone()),
+                    other => return Err(format!(
+                        "unknown backend: '{}'. Valid: simulation, mock", other
+                    )),
+                }
+            }
+            "--qpu-shots" => {
+                i += 1;
+                let n: u32 = args.get(i)
+                    .ok_or("--qpu-shots requires a number")?
+                    .parse()
+                    .map_err(|_| "--qpu-shots must be a positive integer")?;
+                if n == 0 { return Err("--qpu-shots must be >= 1".to_string()); }
+                qpu_shots = Some(n);
+            }
+            "--qpu-confidence" => {
+                i += 1;
+                let f: f64 = args.get(i)
+                    .ok_or("--qpu-confidence requires a number")?
+                    .parse()
+                    .map_err(|_| "--qpu-confidence must be a float 0.0-1.0")?;
+                if !(0.0..=1.0).contains(&f) {
+                    return Err("--qpu-confidence must be between 0.0 and 1.0".to_string());
+                }
+                qpu_confidence = Some(f);
+            }
+            "--qpu-device" => {
+                i += 1;
+                qpu_device = Some(args.get(i).ok_or("--qpu-device requires a name")?.clone());
+            }
             // Backward compatibility
             "--psw-report" => print_psw = true,
             "--resource-usage" => print_resources = true,
@@ -194,6 +240,10 @@ fn parse_args() -> Result<CliArgs, String> {
         verbose,
         noise,
         noise_method,
+        backend,
+        qpu_shots,
+        qpu_confidence,
+        qpu_device,
     })
 }
 
@@ -244,8 +294,48 @@ fn main() {
         config.noise_method = Some(method.clone());
     }
 
+    // Construct BackendChoice from CLI args and store in config
+    let backend_choice = match cli.backend.as_deref() {
+        None | Some("simulation") => BackendChoice::Simulation,
+        Some("mock") => BackendChoice::Qpu {
+            provider: "mock".to_string(),
+            device: cli.qpu_device.clone(),
+            shot_budget: cli.qpu_shots.unwrap_or(8192),
+            confidence: cli.qpu_confidence.unwrap_or(0.95),
+        },
+        Some(other) => {
+            eprintln!("Error: unknown backend '{}'", other);
+            process::exit(1);
+        }
+    };
+    config.backend = Some(backend_choice);
+
+    // Incompatible-flag validation for QPU backends
+    if !matches!(config.backend_choice(), BackendChoice::Simulation) {
+        if config.noise_model.is_some() && config.noise_model.as_deref() != Some("none") {
+            eprintln!("Error: --noise is not compatible with QPU backends. \
+                       Noise injection is simulation-only.");
+            process::exit(1);
+        }
+        if config.noise_method.is_some() {
+            eprintln!("Error: --noise-method is not compatible with QPU backends. \
+                       Noise injection is simulation-only.");
+            process::exit(1);
+        }
+        if config.force_density_matrix {
+            eprintln!("warning: --density-matrix has no effect with QPU backends \
+                       (QPU mode has no density-matrix representation).");
+        }
+        if config.shots.is_some() {
+            eprintln!("warning: --shots with QPU backend causes redundant shot sampling. \
+                       QPU backends already produce shot-based histograms internally. \
+                       Consider using --qpu-shots instead.");
+        }
+    }
+
     // D-03: warn if --noise-method given without --noise
-    if config.noise_method.is_some()
+    if matches!(config.backend_choice(), BackendChoice::Simulation)
+        && config.noise_method.is_some()
         && (config.noise_model.is_none() || config.noise_model.as_deref() == Some("none"))
     {
         eprintln!("warning: --noise-method has no effect without --noise <model>");

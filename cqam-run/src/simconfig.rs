@@ -21,6 +21,29 @@ use cqam_core::config::VmConfig;
 use cqam_core::error::CqamError;
 use cqam_core::parser::ProgramMetadata;
 
+// =============================================================================
+// BackendChoice
+// =============================================================================
+
+/// Which execution backend to use for this run.
+#[derive(Debug, Clone, Default)]
+pub enum BackendChoice {
+    /// Full statevector / density-matrix simulation (default).
+    #[default]
+    Simulation,
+    /// QPU execution via circuit compilation and submission.
+    Qpu {
+        /// Provider name: "mock" (Phase 4), "ibm" (Phase 5+).
+        provider: String,
+        /// Device name (provider-specific, optional).
+        device: Option<String>,
+        /// Total shot budget ceiling for the entire program.
+        shot_budget: u32,
+        /// Bayesian estimator confidence level (0.0 to 1.0).
+        confidence: f64,
+    },
+}
+
 /// Simulator configuration loaded from a TOML file or built from defaults.
 ///
 /// All fields are `Option<T>` to support partial TOML files; `None` means
@@ -93,6 +116,11 @@ pub struct SimConfig {
     /// Default: None (use VmConfig default of 256).
     #[serde(default)]
     pub bell_pair_budget: Option<u32>,
+
+    /// Backend selection. Set via CLI flags; not deserialized from TOML.
+    /// Default: Simulation.
+    #[serde(skip)]
+    pub backend: Option<BackendChoice>,
 }
 
 impl Default for SimConfig {
@@ -109,11 +137,17 @@ impl Default for SimConfig {
             noise_model: None,
             noise_method: None,
             bell_pair_budget: None,
+            backend: None,
         }
     }
 }
 
 impl SimConfig {
+    /// Resolve the backend choice, defaulting to `Simulation`.
+    pub fn backend_choice(&self) -> BackendChoice {
+        self.backend.clone().unwrap_or_default()
+    }
+
     /// Load simulator configuration from a TOML file.
     ///
     /// # Errors
