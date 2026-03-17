@@ -1,0 +1,319 @@
+//! `IbmQpuBackend` — implements `cqam_qpu::traits::QpuBackend` for IBM hardware.
+//!
+//! Workflow:
+//! 1. `compile`: convert the `native_ir::Circuit` → `QkCircuit`, optionally
+//!    transpile it for the IBM native gate set via the Qiskit C API.
+//! 2. `submit`: convert + transpile → serialize to QASM → POST to IBM REST API.
+//! 3. `poll_results`: GET the result endpoint and parse counts.
+//! 4. `calibration`: return a snapshot of `IbmCalibrationData`.
+
+use std::collections::BTreeMap;
+
+use cqam_core::error::CqamError;
+use cqam_core::native_ir::{self, NativeGateSet};
+use cqam_qpu::traits::{
+    CalibrationData, ConnectivityGraph, ConvergenceCriterion, QpuBackend, QpuMetrics, RawResults,
+};
+
+use crate::calibration::IbmCalibrationData;
+use crate::convert::native_to_qk;
+use crate::error::IbmError;
+use crate::rest::{parse_counts, IbmRestClient};
+
+// ---------------------------------------------------------------------------
+// IbmQpuBackend
+// ---------------------------------------------------------------------------
+
+/// IBM QPU backend.
+///
+/// Holds configuration, a REST client, and the last-known calibration
+/// snapshot.  Circuit→QkCircuit conversion and transpilation are performed
+/// lazily on `submit`.
+#[derive(Clone)]
+pub struct IbmQpuBackend {
+    /// IBM backend device name (e.g. `"ibm_nairobi"`).
+    #[allow(dead_code)]
+    backend_name: String,
+    /// Physical qubit count of the target device.
+    num_qubits: u32,
+    /// Device connectivity topology.
+    connectivity: ConnectivityGraph,
+    /// REST client for job submission and polling.
+    rest: IbmRestClient,
+    /// Calibration snapshot.
+    calibration: IbmCalibrationData,
+    /// Optimization level forwarded to `qk_transpile` (0–3).
+    optimization_level: u8,
+    /// Whether to run IBM transpilation before REST submission.
+    use_transpiler: bool,
+}
+
+impl IbmQpuBackend {
+    /// Construct a new backend with sensible defaults.
+    ///
+    /// `token` is an IBM Quantum API token.
+    /// `backend_name` identifies the device (e.g. `"ibm_nairobi"`).
+    /// `num_qubits` and `edges` describe the device topology.
+    pub fn new(
+        token: impl Into<String>,
+        backend_name: impl Into<String>,
+        num_qubits: u32,
+        edges: &[(u32, u32)],
+    ) -> Self {
+        let backend_name = backend_name.into();
+        let rest = IbmRestClient::new(token, &backend_name);
+        let connectivity = ConnectivityGraph::from_edges(num_qubits, edges);
+        let calibration = IbmCalibrationData::synthetic(num_qubits);
+
+        Self {
+            backend_name,
+            num_qubits,
+            connectivity,
+            rest,
+            calibration,
+            optimization_level: 1,
+            use_transpiler: true,
+        }
+    }
+
+    /// Set the Qiskit transpiler optimization level (0–3).
+    pub fn with_optimization_level(mut self, level: u8) -> Self {
+        self.optimization_level = level.min(3);
+        self
+    }
+
+    /// Disable IBM transpilation (circuit is submitted as-is after conversion).
+    pub fn without_transpiler(mut self) -> Self {
+        self.use_transpiler = false;
+        self
+    }
+
+    /// Replace the calibration snapshot.
+    pub fn with_calibration(mut self, cal: IbmCalibrationData) -> Self {
+        self.calibration = cal;
+        self
+    }
+
+    // Internal: convert + optionally transpile, return a placeholder QASM string.
+    // Full OpenQASM 3 serialization of QkCircuit is Phase 6; here we produce a
+    // minimal valid stub that satisfies the REST client's interface contract.
+    fn to_qasm(&self, circuit: &native_ir::Circuit) -> Result<String, IbmError> {
+        let mut qk_circ = native_to_qk(circuit)?;
+
+        if self.use_transpiler {
+            let output = crate::transpile::transpile_for_ibm(
+                &qk_circ,
+                self.num_qubits,
+                self.optimization_level,
+                None,
+            )?;
+            qk_circ = output.circuit;
+        }
+
+        // Phase 5 stub: emit an OpenQASM 3 header with qubit/clbit counts.
+        // Phase 6 will use the Qiskit QASM exporter.
+        let num_q = qk_circ.num_qubits();
+        let num_c = qk_circ.num_clbits();
+        let qasm = format!(
+            "OPENQASM 3;\ninclude \"stdgates.inc\";\nqubit[{}] q;\nbit[{}] c;\n",
+            num_q, num_c
+        );
+        Ok(qasm)
+    }
+}
+
+impl QpuBackend for IbmQpuBackend {
+    fn gate_set(&self) -> &NativeGateSet {
+        &NativeGateSet::Superconducting
+    }
+
+    fn connectivity(&self) -> &ConnectivityGraph {
+        &self.connectivity
+    }
+
+    fn max_qubits(&self) -> u32 {
+        self.num_qubits
+    }
+
+    fn compile(&self, circuit: &native_ir::Circuit) -> Result<(), CqamError> {
+        // Validate: check qubit count against device capacity
+        if circuit.num_physical_qubits > self.num_qubits {
+            return Err(CqamError::QpuQubitAllocationFailed {
+                required: circuit.num_physical_qubits,
+                available: self.num_qubits,
+            });
+        }
+        // Validate: dry-run conversion (ensures all gates are in the native set)
+        native_to_qk(circuit).map(|_| ()).map_err(|e| e.into())
+    }
+
+    fn submit(
+        &mut self,
+        circuit: &native_ir::Circuit,
+        _convergence: &ConvergenceCriterion,
+        shot_budget: u32,
+    ) -> Result<RawResults, CqamError> {
+        if circuit.num_physical_qubits > self.num_qubits {
+            return Err(CqamError::QpuQubitAllocationFailed {
+                required: circuit.num_physical_qubits,
+                available: self.num_qubits,
+            });
+        }
+
+        let qasm = self.to_qasm(circuit).map_err(CqamError::from)?;
+        let job_id = self
+            .rest
+            .submit_job(&qasm, shot_budget)
+            .map_err(CqamError::from)?;
+
+        let result = self
+            .rest
+            .poll_until_done(&job_id, None, None)
+            .map_err(CqamError::from)?;
+
+        // Aggregate counts across all experiments (typically just one)
+        let mut counts: BTreeMap<u64, u32> = BTreeMap::new();
+        let mut total_shots = 0u32;
+        for exp in &result.results {
+            total_shots += exp.shots;
+            for (bits, &count) in &parse_counts(&exp.data.counts) {
+                *counts.entry(*bits).or_insert(0) += count;
+            }
+        }
+
+        Ok(RawResults {
+            counts,
+            total_shots,
+            metrics: QpuMetrics {
+                shots_used: total_shots,
+                circuit_depth: circuit.depth,
+                swap_count: circuit.swap_count,
+                physical_qubits_used: circuit.num_physical_qubits,
+                estimated_fidelity: self.calibration.estimate_circuit_fidelity(circuit),
+                ..QpuMetrics::default()
+            },
+        })
+    }
+
+    fn poll_results(&self, job_id: &str) -> Result<Option<RawResults>, CqamError> {
+        let status = self
+            .rest
+            .get_job_status(job_id)
+            .map_err(CqamError::from)?;
+
+        match status.status.to_uppercase().as_str() {
+            "COMPLETED" | "DONE" => {}
+            "FAILED" | "CANCELLED" | "ERROR" => {
+                return Err(IbmError::UnexpectedStatus {
+                    job_id: job_id.to_string(),
+                    status: status.status,
+                }
+                .into());
+            }
+            // Not yet complete
+            _ => return Ok(None),
+        }
+
+        let result = self
+            .rest
+            .get_job_results(job_id)
+            .map_err(CqamError::from)?;
+
+        let mut counts: BTreeMap<u64, u32> = BTreeMap::new();
+        let mut total_shots = 0u32;
+        for exp in &result.results {
+            total_shots += exp.shots;
+            for (bits, &count) in &parse_counts(&exp.data.counts) {
+                *counts.entry(*bits).or_insert(0) += count;
+            }
+        }
+
+        Ok(Some(RawResults {
+            counts,
+            total_shots,
+            metrics: QpuMetrics {
+                shots_used: total_shots,
+                ..QpuMetrics::default()
+            },
+        }))
+    }
+
+    fn calibration(&self) -> Result<Box<dyn CalibrationData>, CqamError> {
+        Ok(Box::new(self.calibration.clone()))
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use cqam_core::native_ir::{ApplyGate1q, Circuit, NativeGate1, Op, PhysicalQubit};
+
+    fn make_backend() -> IbmQpuBackend {
+        IbmQpuBackend::new(
+            "fake_token",
+            "ibm_nairobi",
+            7,
+            &[(0,1),(1,2),(2,3),(3,4),(4,5),(5,6)],
+        )
+        .without_transpiler() // avoid calling the C library in pure unit tests
+    }
+
+    #[test]
+    fn test_gate_set_is_superconducting() {
+        let b = make_backend();
+        assert_eq!(b.gate_set(), &NativeGateSet::Superconducting);
+    }
+
+    #[test]
+    fn test_max_qubits() {
+        let b = make_backend();
+        assert_eq!(b.max_qubits(), 7);
+    }
+
+    #[test]
+    fn test_compile_too_many_qubits() {
+        let b = make_backend();
+        let big = Circuit::new(100);
+        assert!(b.compile(&big).is_err());
+    }
+
+    #[test]
+    fn test_compile_valid_circuit() {
+        let b = make_backend();
+        let mut c = Circuit::new(2);
+        c.ops.push(Op::Gate1q(ApplyGate1q {
+            qubit: PhysicalQubit(0),
+            gate: NativeGate1::Sx,
+        }));
+        // Should convert successfully (no actual hardware call)
+        assert!(b.compile(&c).is_ok());
+    }
+
+    #[test]
+    fn test_calibration_returns_correct_type() {
+        let b = make_backend();
+        let cal = b.calibration().unwrap();
+        // T1 for qubit 0 should be > 0
+        assert!(cal.t1(0) > 0.0);
+    }
+
+    #[test]
+    fn test_connectivity_edges() {
+        let b = make_backend();
+        assert!(b.connectivity().are_connected(0, 1));
+        assert!(b.connectivity().are_connected(5, 6));
+        assert!(!b.connectivity().are_connected(0, 6));
+    }
+
+    #[test]
+    fn test_builder_without_transpiler() {
+        let b = IbmQpuBackend::new("t", "dev", 5, &[])
+            .without_transpiler()
+            .with_optimization_level(3);
+        assert_eq!(b.max_qubits(), 5);
+    }
+}
