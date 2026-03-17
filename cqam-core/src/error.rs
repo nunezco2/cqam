@@ -100,6 +100,19 @@ pub enum CqamError {
 
     /// Bell pair budget exhausted during teleportation-based QSTORE/QLOAD.
     BellPairExhausted { instruction: String },
+
+    /// QPU job submission failed.
+    QpuSubmissionFailed { provider: String, detail: String },
+    /// QPU device offline or unavailable.
+    QpuDeviceOffline { provider: String },
+    /// Not enough physical qubits on the target device.
+    QpuQubitAllocationFailed { required: u32, available: u32 },
+    /// Operation not supported by the QPU backend.
+    QpuUnsupportedOperation { operation: String, detail: String },
+    /// QPU shot budget exhausted.
+    QpuShotBudgetExhausted { budget: u32, used: u32 },
+    /// QPU calibration data error.
+    QpuCalibrationError { detail: String },
 }
 
 impl fmt::Display for CqamError {
@@ -220,7 +233,75 @@ impl fmt::Display for CqamError {
             CqamError::BellPairExhausted { instruction } => {
                 write!(f, "Bell pair budget exhausted during {}", instruction)
             }
+            CqamError::QpuSubmissionFailed { provider, detail } => {
+                write!(f, "QPU submission to {} failed: {}", provider, detail)
+            }
+            CqamError::QpuDeviceOffline { provider } => {
+                write!(f, "QPU device offline: {}", provider)
+            }
+            CqamError::QpuQubitAllocationFailed { required, available } => {
+                write!(f, "QPU qubit allocation failed: need {} qubits, only {} available", required, available)
+            }
+            CqamError::QpuUnsupportedOperation { operation, detail } => {
+                write!(f, "QPU unsupported operation {}: {}", operation, detail)
+            }
+            CqamError::QpuShotBudgetExhausted { budget, used } => {
+                write!(f, "QPU shot budget exhausted: used {}/{}", used, budget)
+            }
+            CqamError::QpuCalibrationError { detail } => {
+                write!(f, "QPU calibration error: {}", detail)
+            }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_qpu_submission_failed_display() {
+        let err = CqamError::QpuSubmissionFailed {
+            provider: "IBM".into(),
+            detail: "timeout".into(),
+        };
+        let msg = format!("{}", err);
+        assert!(msg.contains("IBM"));
+        assert!(msg.contains("timeout"));
+    }
+
+    #[test]
+    fn test_qpu_device_offline_display() {
+        let err = CqamError::QpuDeviceOffline { provider: "IonQ".into() };
+        assert!(format!("{}", err).contains("IonQ"));
+    }
+
+    #[test]
+    fn test_qpu_qubit_allocation_display() {
+        let err = CqamError::QpuQubitAllocationFailed { required: 30, available: 27 };
+        let msg = format!("{}", err);
+        assert!(msg.contains("30") && msg.contains("27"));
+    }
+
+    #[test]
+    fn test_qpu_unsupported_op_display() {
+        let err = CqamError::QpuUnsupportedOperation {
+            operation: "QTENSOR".into(),
+            detail: "not supported".into(),
+        };
+        assert!(format!("{}", err).contains("QTENSOR"));
+    }
+
+    #[test]
+    fn test_qpu_shot_budget_display() {
+        let err = CqamError::QpuShotBudgetExhausted { budget: 8192, used: 8192 };
+        assert!(format!("{}", err).contains("8192"));
+    }
+
+    #[test]
+    fn test_qpu_calibration_error_display() {
+        let err = CqamError::QpuCalibrationError { detail: "stale data".into() };
+        assert!(format!("{}", err).contains("stale"));
     }
 }
 

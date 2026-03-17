@@ -46,3 +46,5 @@ pub mod memory;
 pub mod parser;
 pub mod opcode;
 pub mod shot;
+pub mod circuit_ir;
+pub mod native_ir;
