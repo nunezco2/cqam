@@ -1,0 +1,11 @@
+[package]
+name = "cqam-micro"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+cqam-core = { path = "../cqam-core" }
+cqam-qpu = { path = "../cqam-qpu" }
+
+[dev-dependencies]
+cqam-sim = { path = "../cqam-sim" }
