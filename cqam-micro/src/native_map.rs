@@ -99,11 +99,14 @@ fn map_gate1q_superconducting(
     use circuit_ir::Gate1q;
     match gate {
         Gate1q::H => {
-            // H = Rz(pi).SX.Rz(pi) up to global phase
+            // H = Rz(pi/2).SX.Rz(pi/2) up to global phase e^{-i*pi/4}.
+            // This follows the IBM superconducting decomposition convention.
+            // Using Rz(pi) instead would produce the wrong relative phase between
+            // |0> and |1> components, breaking multi-gate circuits such as QFT.
             Ok(vec![
-                g1(q, NativeGate1::Rz(PI)),
+                g1(q, NativeGate1::Rz(PI / 2.0)),
                 g1(q, NativeGate1::Sx),
-                g1(q, NativeGate1::Rz(PI)),
+                g1(q, NativeGate1::Rz(PI / 2.0)),
             ])
         }
         Gate1q::X => Ok(vec![g1(q, NativeGate1::X)]),
@@ -186,15 +189,15 @@ fn map_gate2q_superconducting(
     match gate {
         Gate2q::Cx => Ok(vec![g2(qa, qb, NativeGate2::Cx)]),
         Gate2q::Cz => {
-            // CZ = H(b).CX(a,b).H(b), where H = Rz(pi).SX.Rz(pi)
+            // CZ = H(b).CX(a,b).H(b), where H = Rz(pi/2).SX.Rz(pi/2) (IBM convention).
             Ok(vec![
-                g1(qb, NativeGate1::Rz(PI)),
+                g1(qb, NativeGate1::Rz(PI / 2.0)),
                 g1(qb, NativeGate1::Sx),
-                g1(qb, NativeGate1::Rz(PI)),
+                g1(qb, NativeGate1::Rz(PI / 2.0)),
                 g2(qa, qb, NativeGate2::Cx),
-                g1(qb, NativeGate1::Rz(PI)),
+                g1(qb, NativeGate1::Rz(PI / 2.0)),
                 g1(qb, NativeGate1::Sx),
-                g1(qb, NativeGate1::Rz(PI)),
+                g1(qb, NativeGate1::Rz(PI / 2.0)),
             ])
         }
         Gate2q::Swap => {

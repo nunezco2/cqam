@@ -9,3 +9,4 @@ cqam-qpu = { path = "../cqam-qpu" }
 
 [dev-dependencies]
 cqam-sim = { path = "../cqam-sim" }
+cqam-qpu = { path = "../cqam-qpu", features = ["mock"] }
