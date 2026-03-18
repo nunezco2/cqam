@@ -1,8 +1,7 @@
 //! IBM Quantum Platform REST client.
 //!
 //! Handles authentication, job submission, status polling, and result
-//! retrieval.  The actual IBM API base URL and endpoint paths are
-//! placeholder values -- full REST integration is Phase 6.
+//! retrieval against the IBM Quantum Platform v2 API (api.quantum.ibm.com).
 
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
@@ -12,11 +11,18 @@ use serde::{Deserialize, Serialize};
 use crate::error::IbmError;
 
 // ---------------------------------------------------------------------------
-// Constants (placeholder -- Phase 6 will wire real endpoints)
+// Constants
 // ---------------------------------------------------------------------------
 
-const IBM_API_BASE: &str = "https://quantum-computing.ibm.com/api";
-const IBM_JOBS_ENDPOINT: &str = "/Network/jobs";
+/// IBM Quantum Platform API base URL (v2).
+const IBM_API_BASE: &str = "https://api.quantum.ibm.com";
+
+/// Job submission / listing path.
+///   POST  /api/v1/jobs         -> submit
+///   GET   /api/v1/jobs/{id}    -> status
+///   GET   /api/v1/jobs/{id}/results -> results
+const IBM_JOBS_PATH: &str = "/api/v1/jobs";
+
 const DEFAULT_POLL_INTERVAL_MS: u64 = 2_000;
 const DEFAULT_TIMEOUT_SECS: u64 = 600;
 
@@ -24,14 +30,30 @@ const DEFAULT_TIMEOUT_SECS: u64 = 600;
 // REST data types
 // ---------------------------------------------------------------------------
 
-/// Serialized job submission payload (QASM / OpenQASM 3).
+/// Job submission payload for the IBM Quantum Platform v2 API.
+///
+/// Serializes to:
+/// ```json
+/// {
+///   "program": { "qasm": "...", "shots": 4096 },
+///   "backend": "ibm_brisbane"
+/// }
+/// ```
 #[derive(Debug, Serialize)]
-pub struct JobSubmitRequest {
-    pub backend_name: String,
+pub struct JobSubmitPayload {
+    /// The program to execute.
+    pub program: ProgramPayload,
+    /// Backend device name (e.g. `"ibm_brisbane"`).
+    pub backend: String,
+}
+
+/// Program specification within a job submission.
+#[derive(Debug, Serialize)]
+pub struct ProgramPayload {
+    /// OpenQASM 3 source string.
     pub qasm: String,
+    /// Number of measurement shots.
     pub shots: u32,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub memory: Option<bool>,
 }
 
 /// Minimal shape of the IBM job creation response.
@@ -78,15 +100,26 @@ pub struct ExperimentData {
 pub struct IbmRestClient {
     token: String,
     backend_name: String,
+    base_url: String,
     http: reqwest::blocking::Client,
 }
 
 impl IbmRestClient {
-    /// Construct a new client with the given IBM Quantum API token.
+    /// Construct a client targeting the production IBM Quantum Platform.
     pub fn new(token: impl Into<String>, backend_name: impl Into<String>) -> Self {
+        Self::with_base_url(token, backend_name, IBM_API_BASE)
+    }
+
+    /// Construct a client with a custom base URL (for testing or staging).
+    pub fn with_base_url(
+        token: impl Into<String>,
+        backend_name: impl Into<String>,
+        base_url: impl Into<String>,
+    ) -> Self {
         Self {
             token: token.into(),
             backend_name: backend_name.into(),
+            base_url: base_url.into(),
             http: reqwest::blocking::Client::new(),
         }
     }
@@ -95,14 +128,15 @@ impl IbmRestClient {
     ///
     /// `qasm_str` is an OpenQASM 3 string produced from the transpiled circuit.
     pub fn submit_job(&self, qasm_str: &str, shots: u32) -> Result<String, IbmError> {
-        let payload = JobSubmitRequest {
-            backend_name: self.backend_name.clone(),
-            qasm: qasm_str.to_string(),
-            shots,
-            memory: Some(false),
+        let payload = JobSubmitPayload {
+            program: ProgramPayload {
+                qasm: qasm_str.to_string(),
+                shots,
+            },
+            backend: self.backend_name.clone(),
         };
 
-        let url = format!("{}{}", IBM_API_BASE, IBM_JOBS_ENDPOINT);
+        let url = format!("{}{}", self.base_url, IBM_JOBS_PATH);
         let resp = self
             .http
             .post(&url)
@@ -167,7 +201,7 @@ impl IbmRestClient {
 
     /// Fetch current status of a job.
     pub fn get_job_status(&self, job_id: &str) -> Result<JobStatusResponse, IbmError> {
-        let url = format!("{}{}/{}", IBM_API_BASE, IBM_JOBS_ENDPOINT, job_id);
+        let url = format!("{}{}/{}", self.base_url, IBM_JOBS_PATH, job_id);
         let resp = self
             .http
             .get(&url)
@@ -188,7 +222,7 @@ impl IbmRestClient {
 
     /// Fetch the final result of a completed job.
     pub fn get_job_results(&self, job_id: &str) -> Result<JobResultResponse, IbmError> {
-        let url = format!("{}{}/{}/results", IBM_API_BASE, IBM_JOBS_ENDPOINT, job_id);
+        let url = format!("{}{}/{}/results", self.base_url, IBM_JOBS_PATH, job_id);
         let resp = self
             .http
             .get(&url)
@@ -234,6 +268,8 @@ pub fn parse_counts(raw: &BTreeMap<String, u32>) -> BTreeMap<u64, u32> {
 mod tests {
     use super::*;
 
+    // --- parse_counts (unchanged) -------------------------------------------
+
     #[test]
     fn test_parse_counts_hex() {
         let mut raw = BTreeMap::new();
@@ -256,5 +292,89 @@ mod tests {
     fn test_parse_counts_empty() {
         let raw = BTreeMap::new();
         assert!(parse_counts(&raw).is_empty());
+    }
+
+    // --- base URL / constructor tests ----------------------------------------
+
+    impl IbmRestClient {
+        /// Expose base_url for test assertions.
+        fn base_url(&self) -> &str {
+            &self.base_url
+        }
+    }
+
+    #[test]
+    fn test_default_base_url() {
+        let client = IbmRestClient::new("tok", "dev");
+        assert_eq!(client.base_url(), "https://api.quantum.ibm.com");
+    }
+
+    #[test]
+    fn test_custom_base_url() {
+        let client = IbmRestClient::with_base_url("tok", "dev", "http://localhost:8080");
+        assert_eq!(client.base_url(), "http://localhost:8080");
+    }
+
+    // --- URL construction tests ----------------------------------------------
+
+    #[test]
+    fn test_job_submit_url_format() {
+        let base = "http://mock:9999";
+        let expected = format!("{}/api/v1/jobs", base);
+        let constructed = format!("{}{}", base, IBM_JOBS_PATH);
+        assert_eq!(constructed, expected);
+    }
+
+    #[test]
+    fn test_job_status_url_format() {
+        let base = "http://mock:9999";
+        let job_id = "abc-123";
+        let expected = format!("{}/api/v1/jobs/{}", base, job_id);
+        let constructed = format!("{}{}/{}", base, IBM_JOBS_PATH, job_id);
+        assert_eq!(constructed, expected);
+    }
+
+    #[test]
+    fn test_job_results_url_format() {
+        let base = "http://mock:9999";
+        let job_id = "abc-123";
+        let expected = format!("{}/api/v1/jobs/{}/results", base, job_id);
+        let constructed = format!("{}{}/{}/results", base, IBM_JOBS_PATH, job_id);
+        assert_eq!(constructed, expected);
+    }
+
+    // --- payload serialization test ------------------------------------------
+
+    #[test]
+    fn test_submit_payload_serialization() {
+        let payload = JobSubmitPayload {
+            program: ProgramPayload {
+                qasm: "OPENQASM 3.0;\nqubit q;\nh q;\nmeasure q;".to_string(),
+                shots: 4096,
+            },
+            backend: "ibm_brisbane".to_string(),
+        };
+
+        let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
+
+        // Top-level keys
+        assert!(json.get("program").is_some(), "must have 'program' key");
+        assert!(json.get("backend").is_some(), "must have 'backend' key");
+        assert!(
+            json.get("backend_name").is_none(),
+            "must NOT have old 'backend_name' key"
+        );
+        assert!(
+            json.get("memory").is_none(),
+            "must NOT have old 'memory' key"
+        );
+
+        // Nested program
+        let program = &json["program"];
+        assert_eq!(program["shots"], 4096);
+        assert!(program["qasm"].as_str().unwrap().contains("OPENQASM 3.0"));
+
+        // Backend
+        assert_eq!(json["backend"], "ibm_brisbane");
     }
 }
