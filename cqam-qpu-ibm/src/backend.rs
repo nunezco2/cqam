@@ -94,9 +94,7 @@ impl IbmQpuBackend {
         self
     }
 
-    // Internal: convert + optionally transpile, return a placeholder QASM string.
-    // Full OpenQASM 3 serialization of QkCircuit is Phase 6; here we produce a
-    // minimal valid stub that satisfies the REST client's interface contract.
+    /// Convert + optionally transpile a native IR circuit, then emit OpenQASM 3.
     fn to_qasm(&self, circuit: &native_ir::Circuit) -> Result<String, IbmError> {
         let mut qk_circ = native_to_qk(circuit)?;
 
@@ -110,15 +108,7 @@ impl IbmQpuBackend {
             qk_circ = output.circuit;
         }
 
-        // Phase 5 stub: emit an OpenQASM 3 header with qubit/clbit counts.
-        // Phase 6 will use the Qiskit QASM exporter.
-        let num_q = qk_circ.num_qubits();
-        let num_c = qk_circ.num_clbits();
-        let qasm = format!(
-            "OPENQASM 3;\ninclude \"stdgates.inc\";\nqubit[{}] q;\nbit[{}] c;\n",
-            num_q, num_c
-        );
-        Ok(qasm)
+        crate::qasm::circuit_to_qasm3(&qk_circ)
     }
 }
 

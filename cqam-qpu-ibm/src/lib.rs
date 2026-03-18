@@ -8,6 +8,7 @@ pub mod calibration;
 pub mod convert;
 pub mod error;
 pub mod ffi;
+pub mod qasm;
 pub mod rest;
 pub mod safe;
 pub mod transpile;
