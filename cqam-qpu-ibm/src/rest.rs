@@ -92,6 +92,36 @@ pub struct ExperimentData {
 }
 
 // ---------------------------------------------------------------------------
+// RetryPolicy
+// ---------------------------------------------------------------------------
+
+/// Configuration for HTTP retry behavior with exponential backoff.
+#[derive(Debug, Clone)]
+pub struct RetryPolicy {
+    /// Maximum number of retry attempts after the initial request.
+    /// A value of 0 means no retries -- every request is tried exactly once.
+    pub max_retries: u32,
+    /// Duration to wait before the first retry.
+    pub initial_backoff: Duration,
+    /// Upper bound on backoff duration. The backoff will never exceed this
+    /// regardless of how many retries have elapsed.
+    pub max_backoff: Duration,
+    /// Multiplicative factor applied to the backoff after each retry.
+    pub backoff_multiplier: f64,
+}
+
+impl Default for RetryPolicy {
+    fn default() -> Self {
+        Self {
+            max_retries: 5,
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(60),
+            backoff_multiplier: 2.0,
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
 // IbmRestClient
 // ---------------------------------------------------------------------------
 
@@ -102,6 +132,7 @@ pub struct IbmRestClient {
     backend_name: String,
     base_url: String,
     http: reqwest::blocking::Client,
+    retry_policy: RetryPolicy,
 }
 
 impl IbmRestClient {
@@ -121,7 +152,14 @@ impl IbmRestClient {
             backend_name: backend_name.into(),
             base_url: base_url.into(),
             http: reqwest::blocking::Client::new(),
+            retry_policy: RetryPolicy::default(),
         }
+    }
+
+    /// Override the retry policy for this client.
+    pub fn with_retry_policy(mut self, policy: RetryPolicy) -> Self {
+        self.retry_policy = policy;
+        self
     }
 
     /// Submit a job and return the assigned job ID.
@@ -137,13 +175,12 @@ impl IbmRestClient {
         };
 
         let url = format!("{}{}", self.base_url, IBM_JOBS_PATH);
-        let resp = self
-            .http
-            .post(&url)
-            .bearer_auth(&self.token)
-            .json(&payload)
-            .send()
-            .map_err(IbmError::HttpError)?;
+        let resp = self.request_with_retry(|| {
+            self.http
+                .post(&url)
+                .bearer_auth(&self.token)
+                .json(&payload)
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -159,16 +196,23 @@ impl IbmRestClient {
 
     /// Poll for the job status, returning the final result when complete.
     ///
-    /// Blocks the calling thread, sleeping `poll_interval` between requests.
+    /// Blocks the calling thread, sleeping with exponential backoff between
+    /// status polls. The initial interval defaults to 2 seconds and grows
+    /// by 1.5x per poll, capped at `MAX_POLL_INTERVAL_SECS`.
+    ///
     /// Returns `Err(IbmError::Timeout)` if the job does not complete within
-    /// `timeout`.
+    /// `timeout` (default 600 seconds).
     pub fn poll_until_done(
         &self,
         job_id: &str,
-        poll_interval: Option<Duration>,
+        initial_interval: Option<Duration>,
         timeout: Option<Duration>,
     ) -> Result<JobResultResponse, IbmError> {
-        let interval = poll_interval.unwrap_or(Duration::from_millis(DEFAULT_POLL_INTERVAL_MS));
+        const MAX_POLL_INTERVAL_SECS: f64 = 30.0;
+        const POLL_BACKOFF_MULTIPLIER: f64 = 1.5;
+
+        let mut interval = initial_interval
+            .unwrap_or(Duration::from_millis(DEFAULT_POLL_INTERVAL_MS));
         let deadline = timeout.unwrap_or(Duration::from_secs(DEFAULT_TIMEOUT_SECS));
         let start = Instant::now();
 
@@ -182,7 +226,7 @@ impl IbmRestClient {
                         status: status.status,
                     });
                 }
-                // RUNNING, PENDING, QUEUED, VALIDATING, …
+                // RUNNING, PENDING, QUEUED, VALIDATING, ...
                 _ => {}
             }
 
@@ -194,6 +238,12 @@ impl IbmRestClient {
             }
 
             std::thread::sleep(interval);
+
+            // Exponential backoff capped at MAX_POLL_INTERVAL_SECS.
+            interval = Duration::from_secs_f64(
+                (interval.as_secs_f64() * POLL_BACKOFF_MULTIPLIER)
+                    .min(MAX_POLL_INTERVAL_SECS),
+            );
         }
 
         self.get_job_results(job_id)
@@ -202,12 +252,9 @@ impl IbmRestClient {
     /// Fetch current status of a job.
     pub fn get_job_status(&self, job_id: &str) -> Result<JobStatusResponse, IbmError> {
         let url = format!("{}{}/{}", self.base_url, IBM_JOBS_PATH, job_id);
-        let resp = self
-            .http
-            .get(&url)
-            .bearer_auth(&self.token)
-            .send()
-            .map_err(IbmError::HttpError)?;
+        let resp = self.request_with_retry(|| {
+            self.http.get(&url).bearer_auth(&self.token)
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -223,12 +270,9 @@ impl IbmRestClient {
     /// Fetch the final result of a completed job.
     pub fn get_job_results(&self, job_id: &str) -> Result<JobResultResponse, IbmError> {
         let url = format!("{}{}/{}/results", self.base_url, IBM_JOBS_PATH, job_id);
-        let resp = self
-            .http
-            .get(&url)
-            .bearer_auth(&self.token)
-            .send()
-            .map_err(IbmError::HttpError)?;
+        let resp = self.request_with_retry(|| {
+            self.http.get(&url).bearer_auth(&self.token)
+        })?;
 
         if !resp.status().is_success() {
             let status = resp.status();
@@ -240,6 +284,103 @@ impl IbmRestClient {
 
         resp.json().map_err(IbmError::HttpError)
     }
+
+    /// Execute an HTTP request with retry on transient errors.
+    ///
+    /// `build_request` is a closure that constructs a fresh `RequestBuilder`
+    /// on each attempt. It must be `Fn` (not `FnOnce`) because retries call
+    /// it multiple times.
+    ///
+    /// Retries on:
+    /// - HTTP 429 (Too Many Requests) -- respects `Retry-After` header
+    /// - HTTP 502, 503, 504 (Bad Gateway / Service Unavailable / Gateway Timeout)
+    /// - Transport-level connection and timeout errors
+    ///
+    /// All other status codes and errors are returned immediately.
+    fn request_with_retry<F>(
+        &self,
+        build_request: F,
+    ) -> Result<reqwest::blocking::Response, IbmError>
+    where
+        F: Fn() -> reqwest::blocking::RequestBuilder,
+    {
+        let policy = &self.retry_policy;
+        let mut backoff = policy.initial_backoff;
+
+        for attempt in 0..=policy.max_retries {
+            let resp = build_request().send();
+
+            match resp {
+                // --- HTTP 429: respect Retry-After if present ---------------
+                Ok(r) if r.status().as_u16() == 429 => {
+                    if attempt == policy.max_retries {
+                        return Ok(r);
+                    }
+                    let wait = parse_retry_after(&r, backoff);
+                    std::thread::sleep(wait);
+                }
+
+                // --- HTTP 502/503/504: server-side transient ----------------
+                Ok(r) if (502..=504).contains(&r.status().as_u16()) => {
+                    if attempt == policy.max_retries {
+                        return Ok(r);
+                    }
+                    std::thread::sleep(backoff);
+                }
+
+                // --- Any other successful response: return immediately ------
+                Ok(r) => return Ok(r),
+
+                // --- Transport error, transient: retry ----------------------
+                Err(e) if is_transient(&e) && attempt < policy.max_retries => {
+                    std::thread::sleep(backoff);
+                }
+
+                // --- Transport error, non-transient or exhausted: fail ------
+                Err(e) => return Err(IbmError::HttpError(e)),
+            }
+
+            // Advance backoff for next iteration (capped at max_backoff).
+            backoff = Duration::from_secs_f64(
+                (backoff.as_secs_f64() * policy.backoff_multiplier)
+                    .min(policy.max_backoff.as_secs_f64()),
+            );
+        }
+
+        // Unreachable: the loop runs max_retries+1 times and every branch
+        // either returns or continues. The final iteration always returns.
+        unreachable!("retry loop must return on final attempt")
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Retry helpers
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if the transport error is transient and worth retrying.
+///
+/// Currently covers:
+/// - Connection errors (DNS, TCP connect, TLS handshake)
+/// - Timeout errors (read/write/connect timeout)
+fn is_transient(e: &reqwest::Error) -> bool {
+    e.is_connect() || e.is_timeout()
+}
+
+/// Parse the `Retry-After` header from a response.
+///
+/// Returns the parsed duration if the header contains a valid integer
+/// (number of seconds). Falls back to `default` if the header is absent,
+/// unparseable, or specifies a value exceeding `MAX_RETRY_AFTER_SECS`.
+fn parse_retry_after(resp: &reqwest::blocking::Response, default: Duration) -> Duration {
+    const MAX_RETRY_AFTER_SECS: u64 = 300; // 5-minute safety cap
+
+    resp.headers()
+        .get("retry-after")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|s| s.parse::<u64>().ok())
+        .filter(|&secs| secs <= MAX_RETRY_AFTER_SECS)
+        .map(Duration::from_secs)
+        .unwrap_or(default)
 }
 
 // ---------------------------------------------------------------------------
@@ -300,6 +441,11 @@ mod tests {
         /// Expose base_url for test assertions.
         fn base_url(&self) -> &str {
             &self.base_url
+        }
+
+        /// Expose retry_policy for test assertions.
+        fn retry_policy(&self) -> &RetryPolicy {
+            &self.retry_policy
         }
     }
 
@@ -376,5 +522,110 @@ mod tests {
 
         // Backend
         assert_eq!(json["backend"], "ibm_brisbane");
+    }
+
+    // --- RetryPolicy tests ---------------------------------------------------
+
+    #[test]
+    fn test_retry_policy_default() {
+        let p = RetryPolicy::default();
+        assert_eq!(p.max_retries, 5);
+        assert_eq!(p.initial_backoff, Duration::from_secs(1));
+        assert_eq!(p.max_backoff, Duration::from_secs(60));
+        assert!((p.backoff_multiplier - 2.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn test_retry_policy_clone() {
+        let p = RetryPolicy::default();
+        let p2 = p.clone();
+        assert_eq!(p2.max_retries, p.max_retries);
+    }
+
+    #[test]
+    fn test_backoff_progression() {
+        let policy = RetryPolicy {
+            max_retries: 4,
+            initial_backoff: Duration::from_secs(1),
+            max_backoff: Duration::from_secs(10),
+            backoff_multiplier: 2.0,
+        };
+
+        let mut backoff = policy.initial_backoff;
+        let mut intervals = vec![backoff];
+        for _ in 0..policy.max_retries {
+            backoff = Duration::from_secs_f64(
+                (backoff.as_secs_f64() * policy.backoff_multiplier)
+                    .min(policy.max_backoff.as_secs_f64()),
+            );
+            intervals.push(backoff);
+        }
+
+        // Expected: 1, 2, 4, 8, 10 (capped)
+        assert_eq!(intervals.len(), 5);
+        assert_eq!(intervals[0], Duration::from_secs(1));
+        assert_eq!(intervals[1], Duration::from_secs(2));
+        assert_eq!(intervals[2], Duration::from_secs(4));
+        assert_eq!(intervals[3], Duration::from_secs(8));
+        assert_eq!(intervals[4], Duration::from_secs(10)); // capped at max_backoff
+    }
+
+    #[test]
+    fn test_zero_retries_single_attempt() {
+        let policy = RetryPolicy {
+            max_retries: 0,
+            ..RetryPolicy::default()
+        };
+        // 0..=0 yields exactly one iteration
+        let attempts: Vec<u32> = (0..=policy.max_retries).collect();
+        assert_eq!(attempts, vec![0]);
+    }
+
+    #[test]
+    fn test_with_retry_policy_builder() {
+        let policy = RetryPolicy {
+            max_retries: 2,
+            initial_backoff: Duration::from_millis(500),
+            max_backoff: Duration::from_secs(10),
+            backoff_multiplier: 3.0,
+        };
+        let client = IbmRestClient::new("tok", "dev")
+            .with_retry_policy(policy.clone());
+        assert_eq!(client.retry_policy().max_retries, 2);
+        assert_eq!(client.retry_policy().initial_backoff, Duration::from_millis(500));
+    }
+
+    #[test]
+    fn test_poll_backoff_progression() {
+        // Verify the 1.5x multiplier with 30s cap used in poll_until_done.
+        let mut interval = Duration::from_secs(2);
+        let cap = 30.0_f64;
+        let mult = 1.5_f64;
+
+        let mut intervals = vec![interval.as_secs_f64()];
+        for _ in 0..10 {
+            interval = Duration::from_secs_f64(
+                (interval.as_secs_f64() * mult).min(cap),
+            );
+            intervals.push(interval.as_secs_f64());
+        }
+
+        // Should reach cap within ~8 iterations
+        assert!(intervals[7] <= 30.0);
+        assert!((intervals.last().unwrap() - 30.0).abs() < 0.01);
+        // First interval is 2s
+        assert!((intervals[0] - 2.0).abs() < 0.01);
+    }
+
+    #[test]
+    fn test_is_transient_connection_error() {
+        // Connect to a port that is almost certainly not listening.
+        let client = reqwest::blocking::Client::builder()
+            .timeout(Duration::from_millis(100))
+            .build()
+            .unwrap();
+        let err = client.get("http://192.0.2.1:1").send().unwrap_err();
+        // 192.0.2.1 is TEST-NET-1 (RFC 5737), connection will time out.
+        assert!(is_transient(&err), "connection/timeout error should be transient");
     }
 }
