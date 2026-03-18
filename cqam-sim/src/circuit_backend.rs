@@ -426,7 +426,16 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
 
         // Push the observe op
         {
-            let nw = self.wire_allocator.next_wire;
+            // num_wires must cover both the wire_allocator high-water mark (for
+            // any PREP/gate ops already in the buffer) AND the maximum wire index
+            // used by this observe.  The two can differ when a handle was prepped
+            // in a previous buffer section and its handle survived the flush
+            // (i.e. it was never observed in that section).  In that case
+            // wire_allocator has been reset to 0 but the handle's wires still
+            // carry their original indices.
+            let allocator_hwm = self.wire_allocator.next_wire;
+            let observe_hwm = wires.last().map(|w| w.0 + 1).unwrap_or(0);
+            let nw = allocator_hwm.max(observe_hwm);
             let buf = self.ensure_buffer();
             buf.push(Op::Measure(Observe { wires, mode, ctx0, ctx1 }));
             // Finalize num_wires

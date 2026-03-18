@@ -79,19 +79,26 @@ pub(super) fn decompose_multi_cx(controls: &[QWire], target: QWire) -> Vec<Op> {
         1 => vec![cx(controls[0], target)],
         2 => toffoli(controls[0], controls[1], target),
         _ => {
-            // Use the diagonal decomposition for MCZ on m qubits.
             // MCX = H(tgt) . MCZ(controls + [tgt]) . H(tgt)
-            // MCZ can be decomposed using the Gray-code Rz+CX staircase.
+            // MCZ is implemented via the Gray-code diagonal decomposition:
+            //   diagonal phases all-zero except phases[dim-1] = pi applies
+            //   e^{i*pi}|1...1> = -|1...1>, which is the multi-controlled-Z.
+            //
+            // BUG FIX: the H gate wrapping was previously missing, causing
+            // this to implement MCZ instead of MCX for n >= 3 controls.
             let mut ops = Vec::new();
             let all_wires: Vec<QWire> = controls.iter().copied().chain(std::iter::once(target)).collect();
             let m = all_wires.len();
             let dim = 1usize << m;
 
-            // Build phase vector: all zeros except -pi at index dim-1 (|1...1>)
+            // Build phase vector: all zeros except pi at index dim-1 (|1...1>)
             let mut phases = vec![0.0f64; dim];
-            phases[dim - 1] = PI; // exp(i*pi) = -1, so phase = pi
+            phases[dim - 1] = PI; // exp(i*pi) = -1, the MCZ phase kick
 
+            // H(target) . MCZ . H(target) = MCX
+            ops.push(h(target));
             ops.extend(diagonal_to_gates(&all_wires, &phases));
+            ops.push(h(target));
             ops
         }
     }

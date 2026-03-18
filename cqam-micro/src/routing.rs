@@ -173,7 +173,13 @@ pub fn route(
 }
 
 /// Check if the connectivity graph is fully connected (all-to-all).
+///
+/// For n == 0 or n == 1 there are no edges required; always return true.
+/// Guarding here prevents a `usize` underflow when n == 0.
 fn is_fully_connected(connectivity: &ConnectivityGraph, n: usize) -> bool {
+    if n <= 1 {
+        return true;
+    }
     let expected = n * (n - 1) / 2;
     connectivity.num_edges() >= expected
 }
