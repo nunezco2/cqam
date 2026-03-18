@@ -7,6 +7,28 @@
 use crate::ffi;
 
 // ---------------------------------------------------------------------------
+// CircuitInstructionView
+// ---------------------------------------------------------------------------
+
+/// A safe, owned view of a single circuit instruction extracted from a `QkCircuit`.
+///
+/// Not lifetime-tied to the circuit because the C API copies its data into the
+/// `QkCircuitInstruction` struct, and we copy it again into owned Rust types
+/// before calling `qk_circuit_instruction_clear`.
+pub struct CircuitInstructionView {
+    /// Operation name (e.g. `"h"`, `"cx"`, `"rz"`, `"measure"`, `"reset"`, `"barrier"`).
+    pub name: String,
+    /// Qubit indices this instruction acts on.
+    pub qubits: Vec<u32>,
+    /// Classical bit indices (non-empty for `measure` instructions).
+    pub clbits: Vec<u32>,
+    /// Parameter values (e.g. rotation angles for `rz`, `rx`, `u`, …).
+    pub params: Vec<f64>,
+    /// Operation kind discriminator (one of the `QK_OP_KIND_*` constants).
+    pub kind: ffi::QkOperationKind,
+}
+
+// ---------------------------------------------------------------------------
 // SafeQkCircuit
 // ---------------------------------------------------------------------------
 
@@ -68,6 +90,84 @@ impl SafeQkCircuit {
     pub unsafe fn from_raw(ptr: *mut ffi::QkCircuit) -> Self {
         debug_assert!(!ptr.is_null());
         Self { ptr }
+    }
+
+    /// Number of instructions in this circuit.
+    pub fn num_instructions(&self) -> usize {
+        unsafe { ffi::qk_circuit_num_instructions(self.ptr) }
+    }
+
+    /// Extract the instruction at `index` as a safe, owned Rust struct.
+    ///
+    /// All C-allocated buffers (name, qubits, clbits, params) are copied into
+    /// owned Rust types and the C allocations are freed via
+    /// `qk_circuit_instruction_clear` before returning.
+    ///
+    /// # Panics
+    /// Panics if `index >= self.num_instructions()`.
+    pub fn get_instruction(&self, index: usize) -> CircuitInstructionView {
+        assert!(
+            index < self.num_instructions(),
+            "instruction index {} out of bounds (circuit has {} instructions)",
+            index,
+            self.num_instructions(),
+        );
+
+        let kind = unsafe { ffi::qk_circuit_instruction_kind(self.ptr, index) };
+
+        let mut raw = std::mem::MaybeUninit::<ffi::QkCircuitInstruction>::uninit();
+        unsafe {
+            ffi::qk_circuit_get_instruction(self.ptr, index, raw.as_mut_ptr());
+        }
+        let mut raw = unsafe { raw.assume_init() };
+
+        // Copy all data into owned Rust types before freeing C allocations.
+        let name = if raw.name.is_null() {
+            String::new()
+        } else {
+            unsafe { std::ffi::CStr::from_ptr(raw.name) }
+                .to_string_lossy()
+                .into_owned()
+        };
+
+        let qubits = if raw.qubits.is_null() || raw.num_qubits == 0 {
+            Vec::new()
+        } else {
+            unsafe { std::slice::from_raw_parts(raw.qubits, raw.num_qubits as usize) }.to_vec()
+        };
+
+        let clbits = if raw.clbits.is_null() || raw.num_clbits == 0 {
+            Vec::new()
+        } else {
+            unsafe { std::slice::from_raw_parts(raw.clbits, raw.num_clbits as usize) }.to_vec()
+        };
+
+        let params = if raw.params.is_null() || raw.num_params == 0 {
+            Vec::new()
+        } else {
+            unsafe { std::slice::from_raw_parts(raw.params, raw.num_params as usize) }.to_vec()
+        };
+
+        // Free C-allocated internals now that everything has been copied.
+        unsafe { ffi::qk_circuit_instruction_clear(&mut raw) };
+
+        CircuitInstructionView {
+            name,
+            qubits,
+            clbits,
+            params,
+            kind,
+        }
+    }
+
+    /// Return all instructions as a `Vec` of safe, owned views.
+    ///
+    /// Equivalent to calling `get_instruction(i)` for each `i` in
+    /// `0..self.num_instructions()`.
+    pub fn instructions(&self) -> Vec<CircuitInstructionView> {
+        (0..self.num_instructions())
+            .map(|i| self.get_instruction(i))
+            .collect()
     }
 }
 

@@ -50,7 +50,14 @@ pub const QK_EXIT_ARITHMETIC_ERROR: QkExitCode = 200;
 pub const QK_EXIT_MISMATCHED_QUBITS: QkExitCode = 201;
 pub const QK_EXIT_EXPECTED_UNITARY: QkExitCode = 202;
 pub const QK_EXIT_TARGET_ERROR: QkExitCode = 300;
+pub const QK_EXIT_TARGET_INST_ALREADY_EXISTS: QkExitCode = 301;
+pub const QK_EXIT_TARGET_QARG_MISMATCH: QkExitCode = 302;
+pub const QK_EXIT_TARGET_INVALID_QARGS_KEY: QkExitCode = 303;
+pub const QK_EXIT_TARGET_INVALID_INST_KEY: QkExitCode = 304;
 pub const QK_EXIT_TRANSPILER_ERROR: QkExitCode = 400;
+pub const QK_EXIT_DAG_ERROR: QkExitCode = 500;
+pub const QK_EXIT_DAG_COMPOSE_MISMATCH: QkExitCode = 501;
+pub const QK_EXIT_DAG_COMPOSE_MISSING_BIT: QkExitCode = 502;
 
 // ---------------------------------------------------------------------------
 // QkGate  (u8)
@@ -80,6 +87,79 @@ pub const QK_GATE_U1: QkGate = 18;
 pub const QK_GATE_U2: QkGate = 19;
 pub const QK_GATE_U3: QkGate = 20;
 pub const QK_GATE_CX: QkGate = 22;
+
+// ---------------------------------------------------------------------------
+// QkOperationKind  (u8)
+// ---------------------------------------------------------------------------
+
+/// Operation kind discriminator returned by `qk_circuit_instruction_kind`.
+///
+/// Matches upstream `COperationKind` (`#[repr(u8)]`), renamed to
+/// `QkOperationKind` by bindgen.
+pub type QkOperationKind = u8;
+
+pub const QK_OP_KIND_GATE: QkOperationKind = 0;
+pub const QK_OP_KIND_BARRIER: QkOperationKind = 1;
+pub const QK_OP_KIND_DELAY: QkOperationKind = 2;
+pub const QK_OP_KIND_MEASURE: QkOperationKind = 3;
+pub const QK_OP_KIND_RESET: QkOperationKind = 4;
+pub const QK_OP_KIND_UNITARY: QkOperationKind = 5;
+pub const QK_OP_KIND_PAULI_PRODUCT_MEASUREMENT: QkOperationKind = 6;
+pub const QK_OP_KIND_CONTROL_FLOW: QkOperationKind = 7;
+pub const QK_OP_KIND_UNKNOWN: QkOperationKind = 8;
+pub const QK_OP_KIND_PAULI_PRODUCT_ROTATION: QkOperationKind = 9;
+
+// ---------------------------------------------------------------------------
+// QkCircuitInstruction
+// ---------------------------------------------------------------------------
+
+/// Instruction extracted from a `QkCircuit`.
+///
+/// Populated by `qk_circuit_get_instruction`.  The caller must call
+/// `qk_circuit_instruction_clear` to free internal allocations before
+/// reusing or dropping the struct.
+///
+/// Matches upstream `CInstruction` (renamed to `QkCircuitInstruction` by bindgen).
+#[repr(C)]
+pub struct QkCircuitInstruction {
+    /// Gate/operation name (heap-allocated C string).
+    pub name: *mut c_char,
+    /// Pointer to array of qubit indices (length = `num_qubits`).
+    pub qubits: *mut u32,
+    /// Pointer to array of clbit indices (length = `num_clbits`).
+    pub clbits: *mut u32,
+    /// Pointer to array of parameter values (length = `num_params`).
+    pub params: *mut f64,
+    /// Number of qubits.
+    pub num_qubits: u32,
+    /// Number of clbits.
+    pub num_clbits: u32,
+    /// Number of parameters.
+    pub num_params: u32,
+}
+
+// ---------------------------------------------------------------------------
+// QkOpCount / QkOpCounts  (optional — for validation via qk_circuit_count_ops)
+// ---------------------------------------------------------------------------
+
+/// A single (name, count) pair from `qk_circuit_count_ops`.
+#[repr(C)]
+pub struct QkOpCount {
+    /// Operation name (C string, owned by the `QkOpCounts` container).
+    pub name: *const c_char,
+    /// Number of occurrences of this operation in the circuit.
+    pub count: usize,
+}
+
+/// Operation counts returned by `qk_circuit_count_ops`.
+/// Must be freed with `qk_opcounts_clear`.
+#[repr(C)]
+pub struct QkOpCounts {
+    /// Pointer to array of `QkOpCount` (length = `len`).
+    pub data: *mut QkOpCount,
+    /// Number of distinct operation types.
+    pub len: usize,
+}
 
 // ---------------------------------------------------------------------------
 // QkTranspileOptions
@@ -189,4 +269,35 @@ extern "C" {
     /// Free a string allocated by the Qiskit C API (e.g. transpiler error messages).
     /// Must be used instead of libc `free` for Qiskit-allocated strings.
     pub fn qk_str_free(string: *mut c_char);
+
+    // -- Circuit instruction extraction --
+
+    /// Return the number of instructions in the circuit.
+    pub fn qk_circuit_num_instructions(circuit: *const QkCircuit) -> usize;
+
+    /// Return the operation kind of the instruction at `index`.
+    pub fn qk_circuit_instruction_kind(
+        circuit: *const QkCircuit,
+        index: usize,
+    ) -> QkOperationKind;
+
+    /// Populate `instruction` with the details of the instruction at `index`.
+    ///
+    /// The caller must call `qk_circuit_instruction_clear` to free internal
+    /// allocations before reusing or dropping the struct.
+    pub fn qk_circuit_get_instruction(
+        circuit: *const QkCircuit,
+        index: usize,
+        instruction: *mut QkCircuitInstruction,
+    );
+
+    /// Free internal allocations within a `QkCircuitInstruction`.
+    pub fn qk_circuit_instruction_clear(inst: *mut QkCircuitInstruction);
+
+    /// Return operation counts for the circuit.
+    /// Must be freed with `qk_opcounts_clear`.
+    pub fn qk_circuit_count_ops(circuit: *const QkCircuit) -> QkOpCounts;
+
+    /// Free operation counts returned by `qk_circuit_count_ops`.
+    pub fn qk_opcounts_clear(op_counts: *mut QkOpCounts);
 }
