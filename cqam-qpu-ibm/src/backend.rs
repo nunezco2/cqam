@@ -76,6 +76,47 @@ impl IbmQpuBackend {
         }
     }
 
+    /// Construct a backend by querying the IBM REST API for device topology.
+    ///
+    /// Fetches the backend configuration (coupling map, qubit count) and
+    /// builds the `ConnectivityGraph` automatically.  Calibration is
+    /// initialized with synthetic data; call `with_calibration` or wait
+    /// for Task 6.11's live-calibration integration to replace it.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IbmError::RestError` if the API request fails or the
+    /// backend name is not found.  Returns `IbmError::HttpError` if the
+    /// response cannot be deserialized.
+    pub fn from_device(
+        token: impl Into<String>,
+        backend_name: impl Into<String>,
+    ) -> Result<Self, IbmError> {
+        let token = token.into();
+        let backend_name = backend_name.into();
+        let rest = IbmRestClient::new(&token, &backend_name);
+
+        let config = rest.get_backend_config(&backend_name)?;
+
+        let edges: Vec<(u32, u32)> = config
+            .coupling_map
+            .iter()
+            .map(|pair| (pair[0], pair[1]))
+            .collect();
+        let connectivity = ConnectivityGraph::from_edges(config.num_qubits, &edges);
+        let calibration = IbmCalibrationData::synthetic(config.num_qubits);
+
+        Ok(Self {
+            backend_name,
+            num_qubits: config.num_qubits,
+            connectivity,
+            rest,
+            calibration,
+            optimization_level: 1,
+            use_transpiler: true,
+        })
+    }
+
     /// Set the Qiskit transpiler optimization level (0–3).
     pub fn with_optimization_level(mut self, level: u8) -> Self {
         self.optimization_level = level.min(3);
@@ -305,5 +346,25 @@ mod tests {
             .without_transpiler()
             .with_optimization_level(3);
         assert_eq!(b.max_qubits(), 5);
+    }
+
+    #[test]
+    fn test_coupling_map_to_connectivity() {
+        // Simulates what from_device does internally.
+        let coupling_map: Vec<[u32; 2]> = vec![
+            [0, 1], [1, 0], [1, 2], [2, 1], [2, 3], [3, 2],
+        ];
+        let edges: Vec<(u32, u32)> = coupling_map
+            .iter()
+            .map(|pair| (pair[0], pair[1]))
+            .collect();
+        let graph = ConnectivityGraph::from_edges(4, &edges);
+
+        assert_eq!(graph.num_qubits, 4);
+        assert_eq!(graph.num_edges(), 3); // 6 directed -> 3 undirected
+        assert!(graph.are_connected(0, 1));
+        assert!(graph.are_connected(1, 2));
+        assert!(graph.are_connected(2, 3));
+        assert!(!graph.are_connected(0, 3));
     }
 }

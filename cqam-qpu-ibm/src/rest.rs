@@ -23,6 +23,11 @@ const IBM_API_BASE: &str = "https://api.quantum.ibm.com";
 ///   GET   /api/v1/jobs/{id}/results -> results
 const IBM_JOBS_PATH: &str = "/api/v1/jobs";
 
+/// Backend discovery and configuration path.
+///   GET  /api/v1/backends                        -> list
+///   GET  /api/v1/backends/{name}/configuration   -> config
+const IBM_BACKENDS_PATH: &str = "/api/v1/backends";
+
 const DEFAULT_POLL_INTERVAL_MS: u64 = 2_000;
 const DEFAULT_TIMEOUT_SECS: u64 = 600;
 
@@ -89,6 +94,43 @@ pub struct ExperimentResult {
 #[derive(Debug, Deserialize)]
 pub struct ExperimentData {
     pub counts: BTreeMap<String, u32>,
+}
+
+/// Summary metadata for an IBM backend device.
+///
+/// Returned by `GET /api/v1/backends`.  We deserialize only the fields
+/// needed for device selection; the response may contain additional
+/// provider-specific fields that are silently ignored.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BackendInfo {
+    /// Device name (e.g. `"ibm_brisbane"`, `"ibm_sherbrooke"`).
+    pub name: String,
+    /// Number of physical qubits.
+    pub num_qubits: u32,
+    /// Device status string (e.g. `"online"`, `"offline"`, `"maintenance"`).
+    pub status: String,
+    /// Whether the backend is a simulator rather than real hardware.
+    #[serde(default)]
+    pub simulator: bool,
+}
+
+/// Full backend configuration from the IBM REST API.
+///
+/// Returned by `GET /api/v1/backends/{name}/configuration`.
+#[derive(Debug, Clone, Deserialize)]
+pub struct BackendConfig {
+    /// Device name.
+    pub name: String,
+    /// Number of physical qubits.
+    pub num_qubits: u32,
+    /// Coupling map: list of `[control, target]` qubit pairs.
+    ///
+    /// IBM returns directed edges.  `ConnectivityGraph::from_edges` normalizes
+    /// these to undirected pairs with dedup.
+    pub coupling_map: Vec<[u32; 2]>,
+    /// Basis gate names (e.g. `["id", "rz", "sx", "x", "cx"]`).
+    #[serde(default)]
+    pub basis_gates: Vec<String>,
 }
 
 // ---------------------------------------------------------------------------
@@ -279,6 +321,60 @@ impl IbmRestClient {
             let body = resp.text().unwrap_or_default();
             return Err(IbmError::RestError {
                 detail: format!("job result HTTP {}: {}", status, body),
+            });
+        }
+
+        resp.json().map_err(IbmError::HttpError)
+    }
+
+    /// List available IBM Quantum backends.
+    ///
+    /// Returns metadata for all backends accessible with the configured
+    /// API token.  Use the `name` field of a returned `BackendInfo` as
+    /// the argument to `get_backend_config`.
+    pub fn list_backends(&self) -> Result<Vec<BackendInfo>, IbmError> {
+        let url = format!("{}{}", self.base_url, IBM_BACKENDS_PATH);
+        let resp = self.request_with_retry(|| {
+            self.http.get(&url).bearer_auth(&self.token)
+        })?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().unwrap_or_default();
+            return Err(IbmError::RestError {
+                detail: format!("list backends HTTP {}: {}", status, body),
+            });
+        }
+
+        resp.json().map_err(IbmError::HttpError)
+    }
+
+    /// Fetch the configuration (coupling map, basis gates) for a named backend.
+    ///
+    /// The `backend_name` parameter is the device identifier (e.g.
+    /// `"ibm_brisbane"`), not necessarily the same as `self.backend_name`.
+    /// This allows querying configurations for devices other than the one
+    /// the client was constructed for, which is useful for discovery workflows.
+    pub fn get_backend_config(
+        &self,
+        backend_name: &str,
+    ) -> Result<BackendConfig, IbmError> {
+        let url = format!(
+            "{}{}/{}/configuration",
+            self.base_url, IBM_BACKENDS_PATH, backend_name
+        );
+        let resp = self.request_with_retry(|| {
+            self.http.get(&url).bearer_auth(&self.token)
+        })?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().unwrap_or_default();
+            return Err(IbmError::RestError {
+                detail: format!(
+                    "backend config for '{}' HTTP {}: {}",
+                    backend_name, status, body
+                ),
             });
         }
 
@@ -627,5 +723,91 @@ mod tests {
         let err = client.get("http://192.0.2.1:1").send().unwrap_err();
         // 192.0.2.1 is TEST-NET-1 (RFC 5737), connection will time out.
         assert!(is_transient(&err), "connection/timeout error should be transient");
+    }
+
+    // --- BackendInfo deserialization tests -----------------------------------
+
+    #[test]
+    fn test_backend_info_deserialization() {
+        let json = r#"{
+            "name": "ibm_brisbane",
+            "num_qubits": 127,
+            "status": "online",
+            "simulator": false
+        }"#;
+        let info: BackendInfo = serde_json::from_str(json).unwrap();
+        assert_eq!(info.name, "ibm_brisbane");
+        assert_eq!(info.num_qubits, 127);
+        assert_eq!(info.status, "online");
+        assert!(!info.simulator);
+    }
+
+    #[test]
+    fn test_backend_info_simulator_default() {
+        let json = r#"{"name": "test_dev", "num_qubits": 5, "status": "online"}"#;
+        let info: BackendInfo = serde_json::from_str(json).unwrap();
+        assert!(!info.simulator, "simulator should default to false");
+    }
+
+    // --- BackendConfig deserialization tests ---------------------------------
+
+    #[test]
+    fn test_backend_config_deserialization() {
+        let json = r#"{
+            "name": "ibm_brisbane",
+            "num_qubits": 7,
+            "coupling_map": [[0,1],[1,0],[1,2],[2,1],[2,3],[3,2],[3,4],[4,3],[4,5],[5,4],[5,6],[6,5]],
+            "basis_gates": ["id", "rz", "sx", "x", "cx"]
+        }"#;
+        let config: BackendConfig = serde_json::from_str(json).unwrap();
+        assert_eq!(config.name, "ibm_brisbane");
+        assert_eq!(config.num_qubits, 7);
+        assert_eq!(config.coupling_map.len(), 12); // 6 edges x 2 directions
+        assert_eq!(config.basis_gates.len(), 5);
+    }
+
+    #[test]
+    fn test_backend_config_empty_coupling_map() {
+        let json = r#"{
+            "name": "ibm_qasm_simulator",
+            "num_qubits": 32,
+            "coupling_map": []
+        }"#;
+        let config: BackendConfig = serde_json::from_str(json).unwrap();
+        assert!(config.coupling_map.is_empty());
+        assert!(config.basis_gates.is_empty()); // default
+    }
+
+    // --- Backends list deserialization ---------------------------------------
+
+    #[test]
+    fn test_backends_list_deserialization() {
+        let json = r#"[
+            {"name": "ibm_brisbane", "num_qubits": 127, "status": "online", "simulator": false},
+            {"name": "ibm_qasm_simulator", "num_qubits": 32, "status": "online", "simulator": true}
+        ]"#;
+        let backends: Vec<BackendInfo> = serde_json::from_str(json).unwrap();
+        assert_eq!(backends.len(), 2);
+        assert!(!backends[0].simulator);
+        assert!(backends[1].simulator);
+    }
+
+    // --- URL construction tests for backend paths ----------------------------
+
+    #[test]
+    fn test_backends_list_url_format() {
+        let base = "http://mock:9999";
+        let expected = "http://mock:9999/api/v1/backends";
+        let constructed = format!("{}{}", base, IBM_BACKENDS_PATH);
+        assert_eq!(constructed, expected);
+    }
+
+    #[test]
+    fn test_backend_config_url_format() {
+        let base = "http://mock:9999";
+        let name = "ibm_brisbane";
+        let expected = "http://mock:9999/api/v1/backends/ibm_brisbane/configuration";
+        let constructed = format!("{}{}/{}/configuration", base, IBM_BACKENDS_PATH, name);
+        assert_eq!(constructed, expected);
     }
 }
