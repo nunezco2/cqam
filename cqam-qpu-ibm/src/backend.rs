@@ -32,7 +32,6 @@ use crate::rest::{parse_counts, IbmRestClient};
 #[derive(Clone)]
 pub struct IbmQpuBackend {
     /// IBM backend device name (e.g. `"ibm_nairobi"`).
-    #[allow(dead_code)]
     backend_name: String,
     /// Physical qubit count of the target device.
     num_qubits: u32,
@@ -133,6 +132,27 @@ impl IbmQpuBackend {
     pub fn with_calibration(mut self, cal: IbmCalibrationData) -> Self {
         self.calibration = cal;
         self
+    }
+
+    /// Fetch fresh calibration data from the IBM REST API and update the
+    /// internal calibration snapshot.
+    ///
+    /// Replaces the current calibration (whether synthetic or from a prior
+    /// refresh) with data parsed from the live `/properties` endpoint.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IbmError::CalibrationError` if the REST request fails or
+    /// the response cannot be parsed.  The existing calibration is NOT
+    /// modified on error (the method is failure-atomic).
+    pub fn refresh_calibration(&mut self) -> Result<(), IbmError> {
+        let props = self.rest.get_backend_properties(&self.backend_name)?;
+        let new_cal = IbmCalibrationData::from_ibm_properties(
+            &props,
+            self.num_qubits,
+        )?;
+        self.calibration = new_cal;
+        Ok(())
     }
 
     /// Convert + optionally transpile a native IR circuit, then emit OpenQASM 3.

@@ -133,6 +133,63 @@ pub struct BackendConfig {
     pub basis_gates: Vec<String>,
 }
 
+/// Raw calibration properties returned by
+/// `GET /api/v1/backends/{name}/properties`.
+///
+/// IBM's response shape:
+/// ```json
+/// {
+///   "qubits": [ [ {"name": "T1", "value": 0.000123, "unit": "s"}, ... ], ... ],
+///   "gates":  [ {"gate": "sx", "qubits": [0], "parameters": [...]}, ... ],
+///   "last_update_date": "2026-03-19T12:00:00Z"
+/// }
+/// ```
+#[derive(Debug, Clone, Deserialize)]
+pub struct BackendProperties {
+    /// Per-qubit calibration properties.  Outer index = qubit index.
+    pub qubits: Vec<Vec<QubitProperty>>,
+    /// Per-gate calibration properties.
+    pub gates: Vec<GateProperty>,
+    /// ISO 8601 timestamp of the last calibration run (optional).
+    #[serde(default)]
+    pub last_update_date: Option<String>,
+}
+
+/// A single named property for one qubit (e.g., T1, T2, readout_error).
+#[derive(Debug, Clone, Deserialize)]
+pub struct QubitProperty {
+    /// Property name (e.g., `"T1"`, `"T2"`, `"readout_error"`).
+    pub name: String,
+    /// Property value.
+    pub value: f64,
+    /// Physical unit (e.g., `"s"`, `"us"`).  Absent for dimensionless values.
+    #[serde(default)]
+    pub unit: Option<String>,
+}
+
+/// Calibration data for one gate applied to specific qubit(s).
+#[derive(Debug, Clone, Deserialize)]
+pub struct GateProperty {
+    /// Gate name (e.g., `"sx"`, `"cx"`, `"ecr"`).
+    pub gate: String,
+    /// Qubit indices this gate operates on.
+    pub qubits: Vec<u32>,
+    /// Calibration parameters for this gate instance.
+    pub parameters: Vec<GateParameter>,
+}
+
+/// A single named parameter for a gate (e.g., gate_error, gate_length).
+#[derive(Debug, Clone, Deserialize)]
+pub struct GateParameter {
+    /// Parameter name (e.g., `"gate_error"`, `"gate_length"`).
+    pub name: String,
+    /// Parameter value.
+    pub value: f64,
+    /// Physical unit (e.g., `"s"`).
+    #[serde(default)]
+    pub unit: Option<String>,
+}
+
 // ---------------------------------------------------------------------------
 // RetryPolicy
 // ---------------------------------------------------------------------------
@@ -379,6 +436,46 @@ impl IbmRestClient {
         }
 
         resp.json().map_err(IbmError::HttpError)
+    }
+
+    /// Fetch device calibration properties.
+    ///
+    /// Calls `GET /api/v1/backends/{name}/properties` and deserializes the
+    /// response into `BackendProperties`.
+    ///
+    /// # Errors
+    ///
+    /// Returns `IbmError::CalibrationError` if the request fails or the
+    /// response cannot be parsed.
+    pub fn get_backend_properties(
+        &self,
+        backend_name: &str,
+    ) -> Result<BackendProperties, IbmError> {
+        let url = format!(
+            "{}{}/{}/properties",
+            self.base_url, IBM_BACKENDS_PATH, backend_name
+        );
+        let resp = self.request_with_retry(|| {
+            self.http.get(&url).bearer_auth(&self.token)
+        })?;
+
+        if !resp.status().is_success() {
+            let status = resp.status();
+            let body = resp.text().unwrap_or_default();
+            return Err(IbmError::CalibrationError {
+                detail: format!(
+                    "properties for '{}' HTTP {}: {}",
+                    backend_name, status, body
+                ),
+            });
+        }
+
+        resp.json().map_err(|e| IbmError::CalibrationError {
+            detail: format!(
+                "properties parse error for '{}': {}",
+                backend_name, e
+            ),
+        })
     }
 
     /// Execute an HTTP request with retry on transient errors.
@@ -808,6 +905,111 @@ mod tests {
         let name = "ibm_brisbane";
         let expected = "http://mock:9999/api/v1/backends/ibm_brisbane/configuration";
         let constructed = format!("{}{}/{}/configuration", base, IBM_BACKENDS_PATH, name);
+        assert_eq!(constructed, expected);
+    }
+
+    // --- BackendProperties deserialization tests -----------------------------
+
+    const IBM_PROPERTIES_JSON: &str = r#"{
+        "qubits": [
+            [
+                {"name": "T1", "value": 0.000123, "unit": "s"},
+                {"name": "T2", "value": 0.000098, "unit": "s"},
+                {"name": "readout_error", "value": 0.012},
+                {"name": "frequency", "value": 5.1e9, "unit": "GHz"}
+            ],
+            [
+                {"name": "T1", "value": 0.000110, "unit": "s"},
+                {"name": "T2", "value": 0.000085, "unit": "s"},
+                {"name": "readout_error", "value": 0.015}
+            ],
+            [
+                {"name": "T1", "value": 0.000095, "unit": "s"},
+                {"name": "T2", "value": 0.000075, "unit": "s"},
+                {"name": "readout_error", "value": 0.018}
+            ]
+        ],
+        "gates": [
+            {
+                "gate": "sx",
+                "qubits": [0],
+                "parameters": [
+                    {"name": "gate_error", "value": 0.00035},
+                    {"name": "gate_length", "value": 3.5556e-8, "unit": "s"}
+                ]
+            },
+            {
+                "gate": "sx",
+                "qubits": [1],
+                "parameters": [
+                    {"name": "gate_error", "value": 0.00042}
+                ]
+            },
+            {
+                "gate": "sx",
+                "qubits": [2],
+                "parameters": [
+                    {"name": "gate_error", "value": 0.00028}
+                ]
+            },
+            {
+                "gate": "cx",
+                "qubits": [0, 1],
+                "parameters": [
+                    {"name": "gate_error", "value": 0.0078},
+                    {"name": "gate_length", "value": 6.6e-7, "unit": "s"}
+                ]
+            },
+            {
+                "gate": "cx",
+                "qubits": [1, 2],
+                "parameters": [
+                    {"name": "gate_error", "value": 0.0092},
+                    {"name": "gate_length", "value": 7.1e-7, "unit": "s"}
+                ]
+            }
+        ],
+        "last_update_date": "2026-03-19T12:00:00Z"
+    }"#;
+
+    #[test]
+    fn test_backend_properties_deserialization() {
+        let props: BackendProperties =
+            serde_json::from_str(IBM_PROPERTIES_JSON).unwrap();
+        assert_eq!(props.qubits.len(), 3);
+        assert_eq!(props.gates.len(), 5);
+        assert_eq!(
+            props.last_update_date.as_deref(),
+            Some("2026-03-19T12:00:00Z")
+        );
+
+        // Spot-check qubit 0 T1
+        let t1 = props.qubits[0]
+            .iter()
+            .find(|p| p.name == "T1")
+            .unwrap();
+        assert!((t1.value - 0.000123).abs() < 1e-12);
+        assert_eq!(t1.unit.as_deref(), Some("s"));
+
+        // Spot-check CX gate on [0,1]
+        let cx01 = props.gates.iter()
+            .find(|g| g.gate == "cx" && g.qubits == vec![0, 1])
+            .unwrap();
+        let err = cx01.parameters.iter()
+            .find(|p| p.name == "gate_error")
+            .unwrap();
+        assert!((err.value - 0.0078).abs() < 1e-12);
+    }
+
+    #[test]
+    fn test_backend_properties_url_format() {
+        let base = "http://mock:9999";
+        let name = "ibm_brisbane";
+        let expected = "http://mock:9999/api/v1/backends/ibm_brisbane/properties";
+        let constructed = format!(
+            "{}{}/{}/properties",
+            base, IBM_BACKENDS_PATH, name
+        );
         assert_eq!(constructed, expected);
     }
 }
