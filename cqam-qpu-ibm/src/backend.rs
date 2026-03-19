@@ -51,21 +51,21 @@ pub struct IbmQpuBackend {
 impl IbmQpuBackend {
     /// Construct a new backend with sensible defaults.
     ///
-    /// `token` is an IBM Quantum API token.
-    /// `backend_name` identifies the device (e.g. `"ibm_nairobi"`).
+    /// `api_key` is an IBM Quantum API key (exchanged for an IAM access token).
+    /// `backend_name` identifies the device (e.g. `"ibm_brisbane"`).
     /// `num_qubits` and `edges` describe the device topology.
     pub fn new(
-        token: impl Into<String>,
+        api_key: impl Into<String>,
         backend_name: impl Into<String>,
         num_qubits: u32,
         edges: &[(u32, u32)],
-    ) -> Self {
+    ) -> Result<Self, IbmError> {
         let backend_name = backend_name.into();
-        let rest = IbmRestClient::new(token, &backend_name);
+        let rest = IbmRestClient::new(api_key, &backend_name)?;
         let connectivity = ConnectivityGraph::from_edges(num_qubits, edges);
         let calibration = IbmCalibrationData::synthetic(num_qubits);
 
-        Self {
+        Ok(Self {
             backend_name,
             num_qubits,
             connectivity,
@@ -73,7 +73,7 @@ impl IbmQpuBackend {
             calibration,
             optimization_level: 1,
             use_transpiler: true,
-        }
+        })
     }
 
     /// Construct a backend by querying the IBM REST API for device topology.
@@ -94,7 +94,7 @@ impl IbmQpuBackend {
     ) -> Result<Self, IbmError> {
         let token = token.into();
         let backend_name = backend_name.into();
-        let rest = IbmRestClient::new(&token, &backend_name);
+        let rest = IbmRestClient::new(&token, &backend_name)?;
 
         let config = rest.get_backend_config(&backend_name)?;
 
@@ -327,13 +327,20 @@ mod tests {
     use cqam_core::native_ir::{ApplyGate1q, Circuit, NativeGate1, Op, PhysicalQubit};
 
     fn make_backend() -> IbmQpuBackend {
-        IbmQpuBackend::new(
-            "fake_token",
-            "ibm_nairobi",
-            7,
-            &[(0,1),(1,2),(2,3),(3,4),(4,5),(5,6)],
-        )
-        .without_transpiler() // avoid calling the C library in pure unit tests
+        // Use the test-only constructor that skips IAM token exchange.
+        let rest = IbmRestClient::with_access_token("fake_token", "ibm_nairobi");
+        let edges = &[(0u32,1),(1,2),(2,3),(3,4),(4,5),(5,6)];
+        let connectivity = ConnectivityGraph::from_edges(7, edges);
+        let calibration = IbmCalibrationData::synthetic(7);
+        IbmQpuBackend {
+            backend_name: "ibm_nairobi".to_string(),
+            num_qubits: 7,
+            connectivity,
+            rest,
+            calibration,
+            optimization_level: 1,
+            use_transpiler: false, // avoid calling the C library in pure unit tests
+        }
     }
 
     #[test]
@@ -385,9 +392,18 @@ mod tests {
 
     #[test]
     fn test_builder_without_transpiler() {
-        let b = IbmQpuBackend::new("t", "dev", 5, &[])
-            .without_transpiler()
-            .with_optimization_level(3);
+        let rest = IbmRestClient::with_access_token("t", "dev");
+        let b = IbmQpuBackend {
+            backend_name: "dev".to_string(),
+            num_qubits: 5,
+            connectivity: ConnectivityGraph::from_edges(5, &[]),
+            rest,
+            calibration: IbmCalibrationData::synthetic(5),
+            optimization_level: 1,
+            use_transpiler: true,
+        }
+        .without_transpiler()
+        .with_optimization_level(3);
         assert_eq!(b.max_qubits(), 5);
     }
 

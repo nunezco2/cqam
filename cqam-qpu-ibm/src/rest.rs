@@ -15,7 +15,10 @@ use crate::error::IbmError;
 // ---------------------------------------------------------------------------
 
 /// IBM Quantum Platform API base URL (v2).
-const IBM_API_BASE: &str = "https://api.quantum.ibm.com";
+const IBM_API_BASE: &str = "https://quantum.cloud.ibm.com";
+
+/// IBM Cloud IAM token endpoint for API key → access token exchange.
+const IBM_IAM_TOKEN_URL: &str = "https://iam.cloud.ibm.com/identity/token";
 
 /// Job submission / listing path.
 ///   POST  /api/v1/jobs         -> submit
@@ -191,6 +194,56 @@ pub struct GateParameter {
 }
 
 // ---------------------------------------------------------------------------
+// IAM token exchange
+// ---------------------------------------------------------------------------
+
+/// Response from IBM Cloud IAM token endpoint.
+#[derive(Debug, Deserialize)]
+struct IamTokenResponse {
+    access_token: String,
+    #[allow(dead_code)]
+    token_type: String,
+    #[allow(dead_code)]
+    expires_in: u64,
+}
+
+/// Exchange an IBM Quantum API key for an IAM access token.
+///
+/// IBM's Quantum Platform requires a two-step auth flow:
+/// 1. POST the API key to the IAM endpoint to get an access token.
+/// 2. Use the access token as a Bearer token in all API requests.
+///
+/// The access token is valid for `expires_in` seconds (typically 3600).
+fn exchange_api_key_for_token(
+    http: &reqwest::blocking::Client,
+    api_key: &str,
+) -> Result<String, IbmError> {
+    let resp = http
+        .post(IBM_IAM_TOKEN_URL)
+        .header("Content-Type", "application/x-www-form-urlencoded")
+        .body(format!(
+            "grant_type=urn:ibm:params:oauth:grant-type:apikey&apikey={}",
+            api_key
+        ))
+        .send()
+        .map_err(IbmError::HttpError)?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(IbmError::RestError {
+            detail: format!("IAM token exchange HTTP {}: {}", status, body),
+        });
+    }
+
+    let iam: IamTokenResponse = resp.json().map_err(|e| IbmError::RestError {
+        detail: format!("IAM token parse error: {}", e),
+    })?;
+
+    Ok(iam.access_token)
+}
+
+// ---------------------------------------------------------------------------
 // RetryPolicy
 // ---------------------------------------------------------------------------
 
@@ -225,8 +278,13 @@ impl Default for RetryPolicy {
 // ---------------------------------------------------------------------------
 
 /// REST client for interacting with the IBM Quantum Platform.
+///
+/// The `token` field stores an IAM access token (NOT the raw API key).
+/// Constructors automatically exchange the API key for an access token
+/// via IBM Cloud IAM.
 #[derive(Debug, Clone)]
 pub struct IbmRestClient {
+    /// IAM access token (Bearer token for all API requests).
     token: String,
     backend_name: String,
     base_url: String,
@@ -236,20 +294,50 @@ pub struct IbmRestClient {
 
 impl IbmRestClient {
     /// Construct a client targeting the production IBM Quantum Platform.
-    pub fn new(token: impl Into<String>, backend_name: impl Into<String>) -> Self {
-        Self::with_base_url(token, backend_name, IBM_API_BASE)
+    ///
+    /// `api_key` is the IBM Quantum API key (not an access token).
+    /// It is exchanged for an IAM access token during construction.
+    pub fn new(
+        api_key: impl Into<String>,
+        backend_name: impl Into<String>,
+    ) -> Result<Self, IbmError> {
+        Self::with_base_url(api_key, backend_name, IBM_API_BASE)
     }
 
     /// Construct a client with a custom base URL (for testing or staging).
+    ///
+    /// `api_key` is exchanged for an IAM access token during construction.
     pub fn with_base_url(
-        token: impl Into<String>,
+        api_key: impl Into<String>,
         backend_name: impl Into<String>,
         base_url: impl Into<String>,
-    ) -> Self {
-        Self {
-            token: token.into(),
+    ) -> Result<Self, IbmError> {
+        let http = reqwest::blocking::Client::new();
+        let api_key = api_key.into();
+        let token = exchange_api_key_for_token(&http, &api_key)?;
+
+        Ok(Self {
+            token,
             backend_name: backend_name.into(),
             base_url: base_url.into(),
+            http,
+            retry_policy: RetryPolicy::default(),
+        })
+    }
+
+    /// Construct a client with a pre-obtained access token (no IAM exchange).
+    ///
+    /// This is intended for testing or when the caller has already exchanged
+    /// the API key externally.
+    #[cfg(test)]
+    pub(crate) fn with_access_token(
+        access_token: impl Into<String>,
+        backend_name: impl Into<String>,
+    ) -> Self {
+        Self {
+            token: access_token.into(),
+            backend_name: backend_name.into(),
+            base_url: IBM_API_BASE.to_string(),
             http: reqwest::blocking::Client::new(),
             retry_policy: RetryPolicy::default(),
         }
@@ -644,14 +732,9 @@ mod tests {
 
     #[test]
     fn test_default_base_url() {
-        let client = IbmRestClient::new("tok", "dev");
-        assert_eq!(client.base_url(), "https://api.quantum.ibm.com");
-    }
-
-    #[test]
-    fn test_custom_base_url() {
-        let client = IbmRestClient::with_base_url("tok", "dev", "http://localhost:8080");
-        assert_eq!(client.base_url(), "http://localhost:8080");
+        // with_access_token uses the default base URL without IAM exchange.
+        let client = IbmRestClient::with_access_token("tok", "dev");
+        assert_eq!(client.base_url(), "https://quantum.cloud.ibm.com");
     }
 
     // --- URL construction tests ----------------------------------------------
@@ -782,7 +865,7 @@ mod tests {
             max_backoff: Duration::from_secs(10),
             backoff_multiplier: 3.0,
         };
-        let client = IbmRestClient::new("tok", "dev")
+        let client = IbmRestClient::with_access_token("tok", "dev")
             .with_retry_policy(policy.clone());
         assert_eq!(client.retry_policy().max_retries, 2);
         assert_eq!(client.retry_policy().initial_backoff, Duration::from_millis(500));

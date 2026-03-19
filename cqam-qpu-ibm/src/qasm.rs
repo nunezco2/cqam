@@ -192,7 +192,12 @@ mod tests {
         let circ = SafeQkCircuit::new(2, 0).unwrap();
         let qasm = circuit_to_qasm3(&circ).unwrap();
         assert!(qasm.contains("qubit[2] q;"));
-        assert!(!qasm.contains("bit["), "no bit declaration when clbits = 0");
+        // "qubit[" contains "bit[" as a substring, so check for the
+        // standalone declaration pattern instead.
+        assert!(
+            !qasm.contains("\nbit["),
+            "no bit declaration when clbits = 0: {qasm:?}"
+        );
     }
 
     // -----------------------------------------------------------------------
@@ -393,7 +398,7 @@ mod tests {
             qasm.contains("barrier q[0], q[1];\n"),
             "missing barrier: {qasm:?}"
         );
-        assert!(!qasm.contains("bit["), "barrier-only circuit has no clbits");
+        assert!(!qasm.contains("\nbit["), "barrier-only circuit has no clbits");
     }
 
     // -----------------------------------------------------------------------

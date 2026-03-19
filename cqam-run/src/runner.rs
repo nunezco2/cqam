@@ -285,7 +285,7 @@ fn build_ibm_qpu(
     device: Option<&str>,
     optimization_level: u8,
 ) -> Result<cqam_qpu_ibm::IbmQpuBackend, CqamError> {
-    let device_name = device.unwrap_or("ibm_brisbane");
+    let device_name = device.unwrap_or("ibm_torino");
 
     let mut backend = cqam_qpu_ibm::IbmQpuBackend::from_device(token, device_name)
         .map_err(|e| CqamError::ConfigError(
@@ -768,7 +768,7 @@ mod tests {
     fn test_ibm_backend_gate_set() {
         let token = std::env::var("IBM_QUANTUM_TOKEN")
             .expect("IBM_QUANTUM_TOKEN must be set for this test");
-        let qpu = build_ibm_qpu(&token, Some("ibm_brisbane"), 1).unwrap();
+        let qpu = build_ibm_qpu(&token, Some("ibm_torino"), 1).unwrap();
         use cqam_qpu::traits::QpuBackend;
         assert_eq!(qpu.gate_set(), &cqam_core::native_ir::NativeGateSet::Superconducting);
     }

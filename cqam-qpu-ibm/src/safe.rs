@@ -145,7 +145,15 @@ impl SafeQkCircuit {
         let params = if raw.params.is_null() || raw.num_params == 0 {
             Vec::new()
         } else {
-            unsafe { std::slice::from_raw_parts(raw.params, raw.num_params as usize) }.to_vec()
+            // params is a *mut *mut QkParam — an array of opaque parameter
+            // pointers.  Extract each concrete f64 via qk_param_as_real.
+            let param_ptrs = unsafe {
+                std::slice::from_raw_parts(raw.params, raw.num_params as usize)
+            };
+            param_ptrs
+                .iter()
+                .map(|&p| unsafe { ffi::qk_param_as_real(p as *const ffi::QkParam) })
+                .collect()
         };
 
         // Free C-allocated internals now that everything has been copied.

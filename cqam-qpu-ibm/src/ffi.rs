@@ -27,6 +27,12 @@ pub struct QkTarget {
     _opaque: [u8; 0],
 }
 
+/// Opaque parameter handle (may be a symbolic expression or a concrete double).
+#[repr(C)]
+pub struct QkParam {
+    _opaque: [u8; 0],
+}
+
 /// Opaque target entry handle.
 #[repr(C)]
 pub struct QkTargetEntry {
@@ -128,8 +134,10 @@ pub struct QkCircuitInstruction {
     pub qubits: *mut u32,
     /// Pointer to array of clbit indices (length = `num_clbits`).
     pub clbits: *mut u32,
-    /// Pointer to array of parameter values (length = `num_params`).
-    pub params: *mut f64,
+    /// Pointer to array of `QkParam*` pointers (length = `num_params`).
+    /// Each `QkParam*` is an opaque handle; use `qk_param_as_real` to
+    /// extract the concrete `f64` value.
+    pub params: *mut *mut QkParam,
     /// Number of qubits.
     pub num_qubits: u32,
     /// Number of clbits.
@@ -329,4 +337,16 @@ extern "C" {
 
     /// Free operation counts returned by `qk_circuit_count_ops`.
     pub fn qk_opcounts_clear(op_counts: *mut QkOpCounts);
+
+    // -------------------------------------------------------------------
+    // QkParam functions
+    // -------------------------------------------------------------------
+
+    /// Extract the real part of a `QkParam` as a `f64`.
+    ///
+    /// For concrete (non-symbolic) parameters this returns the exact value.
+    pub fn qk_param_as_real(param: *const QkParam) -> c_double;
+
+    /// Free a `QkParam` created by the C API.
+    pub fn qk_param_free(param: *mut QkParam);
 }
