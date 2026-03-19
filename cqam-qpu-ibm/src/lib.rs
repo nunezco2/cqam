@@ -15,3 +15,9 @@ pub mod transpile;
 
 pub use backend::IbmQpuBackend;
 pub use error::IbmError;
+pub use transpile::{
+    build_ibm_target,
+    build_ibm_target_with_calibration,
+    transpile_for_ibm,
+    transpile_for_ibm_calibrated,
+};

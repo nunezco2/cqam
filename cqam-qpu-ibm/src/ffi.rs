@@ -254,6 +254,35 @@ extern "C" {
         target_entry: *mut QkTargetEntry,
     ) -> QkExitCode;
 
+    /// Add per-qargs instruction properties (duration, error) to a target
+    /// entry before it is added to the target via `qk_target_add_instruction`.
+    ///
+    /// - `entry`: a `QkTargetEntry` created by `qk_target_entry_new` (or
+    ///    the measure/reset variants).
+    /// - `qargs`: pointer to an array of `num_qubits` physical qubit indices
+    ///    that this property set applies to.
+    /// - `num_qubits`: length of the `qargs` array (1 for single-qubit
+    ///    gates / measure / reset; 2 for CX).
+    /// - `duration`: gate duration in seconds.  Pass `f64::NAN` if unknown.
+    /// - `error`: average gate error rate (dimensionless, 0.0–1.0).
+    ///    Pass `f64::NAN` if unknown.
+    ///
+    /// Call this zero or more times per entry to register per-qubit
+    /// properties.  If called zero times, the entry has global (qubit-
+    /// independent) properties — equivalent to `None` in Qiskit Python's
+    /// `Target.add_instruction(gate, {None: None})`.
+    ///
+    /// Declared as returning `QkExitCode` defensively: if the actual ABI
+    /// returns void, the call convention places 0 in the return register and
+    /// `check_exit_code` treats 0 as success.
+    pub fn qk_target_entry_add_property(
+        entry: *mut QkTargetEntry,
+        qargs: *mut u32,
+        num_qubits: u32,
+        duration: c_double,
+        error: c_double,
+    ) -> QkExitCode;
+
     // -- Transpiler --
     pub fn qk_transpile(
         qc: *const QkCircuit,
