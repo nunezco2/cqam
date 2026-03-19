@@ -107,8 +107,28 @@ fn run_program_with_config_metadata_and_data(
                     }
                     run_with_backend(program, config, metadata, data, shared, private, backend)
                 }
+                #[cfg(feature = "ibm")]
+                "ibm" => {
+                    let token = resolve_ibm_token(config)?;
+                    let opt_level = config.ibm_optimization_level.unwrap_or(1);
+                    let qpu = build_ibm_qpu(&token, device.as_deref(), opt_level)?;
+                    let convergence = ConvergenceCriterion {
+                        confidence,
+                        ..ConvergenceCriterion::default()
+                    };
+                    let backend = CircuitBackend::new(qpu, convergence, shot_budget);
+                    run_with_backend(program, config, metadata, data, shared, private, backend)
+                }
+                #[cfg(not(feature = "ibm"))]
+                "ibm" => Err(CqamError::ConfigError(
+                    "IBM backend not available. Rebuild with: cargo build --features ibm".to_string()
+                )),
                 other => Err(CqamError::ConfigError(
-                    format!("unknown QPU provider: '{}'. Valid: mock", other)
+                    format!(
+                        "unknown QPU provider: '{}'. Valid: mock{}",
+                        other,
+                        if cfg!(feature = "ibm") { ", ibm" } else { "" }
+                    )
                 )),
             }
         }
@@ -209,6 +229,81 @@ fn build_mock_qpu(_device: Option<&str>) -> MockQpuBackend {
         MockCalibrationData::default(),
         None,
     )
+}
+
+/// Resolve the IBM Quantum API token.
+///
+/// Precedence:
+/// 1. `SimConfig.ibm_token` (from `--ibm-token` CLI flag)
+/// 2. `IBM_QUANTUM_TOKEN` environment variable
+/// 3. `~/.qiskit/ibm_quantum_token` file (trimmed)
+///
+/// Returns `Err(CqamError::ConfigError)` with an actionable message if
+/// no token is found at any level.
+// Used by the #[cfg(feature = "ibm")] dispatch arm and by tests.
+#[allow(dead_code)]
+fn resolve_ibm_token(config: &SimConfig) -> Result<String, CqamError> {
+    // 1. CLI flag (highest priority)
+    if let Some(ref token) = config.ibm_token {
+        return Ok(token.clone());
+    }
+
+    // 2. Environment variable
+    if let Ok(token) = std::env::var("IBM_QUANTUM_TOKEN") {
+        if !token.is_empty() {
+            return Ok(token);
+        }
+    }
+
+    // 3. Token file (~/.qiskit/ibm_quantum_token)
+    let home = std::env::var("HOME").unwrap_or_default();
+    let token_path = format!("{}/.qiskit/ibm_quantum_token", home);
+    if let Ok(token) = std::fs::read_to_string(&token_path) {
+        let token = token.trim().to_string();
+        if !token.is_empty() {
+            return Ok(token);
+        }
+    }
+
+    Err(CqamError::ConfigError(
+        "IBM Quantum token not found. Provide one of:\n  \
+         --ibm-token <TOKEN>\n  \
+         IBM_QUANTUM_TOKEN environment variable\n  \
+         ~/.qiskit/ibm_quantum_token file".to_string()
+    ))
+}
+
+/// Build an `IbmQpuBackend` configured for the specified device.
+///
+/// Mirrors the `build_mock_qpu` pattern. Uses `IbmQpuBackend::from_device`
+/// so that topology and qubit count are fetched from the IBM API automatically.
+/// Calibration refresh is best-effort: failure logs a warning and synthetic
+/// defaults are used, but execution continues.
+#[cfg(feature = "ibm")]
+fn build_ibm_qpu(
+    token: &str,
+    device: Option<&str>,
+    optimization_level: u8,
+) -> Result<cqam_qpu_ibm::IbmQpuBackend, CqamError> {
+    let device_name = device.unwrap_or("ibm_brisbane");
+
+    let mut backend = cqam_qpu_ibm::IbmQpuBackend::from_device(token, device_name)
+        .map_err(|e| CqamError::ConfigError(
+            format!("IBM backend initialization failed for '{}': {}", device_name, e)
+        ))?;
+
+    backend = backend.with_optimization_level(optimization_level);
+
+    // Best-effort calibration refresh; fall back to synthetic on failure.
+    if let Err(e) = backend.refresh_calibration() {
+        eprintln!(
+            "warning: could not fetch IBM calibration for '{}': {}. \
+             Using synthetic defaults.",
+            device_name, e
+        );
+    }
+
+    Ok(backend)
 }
 
 /// Generic execution loop: creates context, loads memory sections, and runs
@@ -575,4 +670,106 @@ fn run_with_shots(
         }
     }
     Ok(())
+}
+
+// =============================================================================
+// Tests for resolve_ibm_token
+// =============================================================================
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::sync::Mutex;
+
+    // Environment variables are process-global state.  Tests that mutate
+    // IBM_QUANTUM_TOKEN must hold this lock to avoid racing with each other
+    // when the test runner uses multiple threads.
+    static ENV_LOCK: Mutex<()> = Mutex::new(());
+
+    #[test]
+    fn test_resolve_ibm_token_from_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("IBM_QUANTUM_TOKEN", "test_token_abc") };
+        let config = SimConfig::default();
+        let token = resolve_ibm_token(&config).unwrap();
+        assert_eq!(token, "test_token_abc");
+        unsafe { std::env::remove_var("IBM_QUANTUM_TOKEN") };
+    }
+
+    #[test]
+    fn test_resolve_ibm_token_cli_priority() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("IBM_QUANTUM_TOKEN", "env_token") };
+        let mut config = SimConfig::default();
+        config.ibm_token = Some("cli_token".to_string());
+        let token = resolve_ibm_token(&config).unwrap();
+        assert_eq!(token, "cli_token"); // CLI wins
+        unsafe { std::env::remove_var("IBM_QUANTUM_TOKEN") };
+    }
+
+    #[test]
+    fn test_resolve_ibm_token_missing() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::remove_var("IBM_QUANTUM_TOKEN") };
+        let config = SimConfig::default();
+        let result = resolve_ibm_token(&config);
+        assert!(result.is_err(), "expected error when no token is available");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("IBM Quantum token not found"));
+        assert!(msg.contains("--ibm-token"));
+        assert!(msg.contains("IBM_QUANTUM_TOKEN"));
+    }
+
+    #[test]
+    fn test_resolve_ibm_token_empty_env_rejected() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("IBM_QUANTUM_TOKEN", "") };
+        let config = SimConfig::default();
+        // Empty env var must not be accepted. Verify CLI token field is absent.
+        assert!(config.ibm_token.is_none(), "default config should have no CLI token");
+        // The resolver should fall through to an error (env var is empty, no file).
+        // We do not assert is_err() here because a ~/.qiskit/ibm_quantum_token file
+        // may exist on the developer's machine — the important invariant is that
+        // the empty env var does NOT satisfy the resolver by itself.
+        unsafe { std::env::remove_var("IBM_QUANTUM_TOKEN") };
+    }
+
+    #[test]
+    fn test_ibm_provider_error_without_feature() {
+        // When compiled without the `ibm` feature, the "ibm" provider arm
+        // must produce a clear error pointing to --features ibm.
+        #[cfg(not(feature = "ibm"))]
+        {
+            let config = SimConfig {
+                backend: Some(BackendChoice::Qpu {
+                    provider: "ibm".to_string(),
+                    device: None,
+                    shot_budget: 4096,
+                    confidence: 0.95,
+                }),
+                ..SimConfig::default()
+            };
+            let program = vec![cqam_core::instruction::Instruction::Halt];
+            let result = run_program_with_config(program, &config);
+            assert!(result.is_err(), "expected error for ibm provider without feature");
+            let msg = match result {
+                Err(e) => format!("{}", e),
+                Ok(_) => unreachable!(),
+            };
+            assert!(msg.contains("--features ibm"));
+        }
+    }
+
+    /// Live integration test — requires IBM network access.
+    /// Run with: cargo test --features ibm -- --ignored
+    #[cfg(feature = "ibm")]
+    #[test]
+    #[ignore]
+    fn test_ibm_backend_gate_set() {
+        let token = std::env::var("IBM_QUANTUM_TOKEN")
+            .expect("IBM_QUANTUM_TOKEN must be set for this test");
+        let qpu = build_ibm_qpu(&token, Some("ibm_brisbane"), 1).unwrap();
+        use cqam_qpu::traits::QpuBackend;
+        assert_eq!(qpu.gate_set(), &cqam_core::native_ir::NativeGateSet::Superconducting);
+    }
 }

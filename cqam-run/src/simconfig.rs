@@ -121,6 +121,16 @@ pub struct SimConfig {
     /// Default: Simulation.
     #[serde(skip)]
     pub backend: Option<BackendChoice>,
+
+    /// IBM Quantum API token (from --ibm-token CLI flag).
+    /// Not persisted in TOML -- tokens should not be written to config files.
+    #[serde(skip)]
+    pub ibm_token: Option<String>,
+
+    /// IBM transpiler optimization level (0-3, from --ibm-optimization-level).
+    /// Forwarded to `qk_transpile` during circuit compilation.
+    #[serde(skip)]
+    pub ibm_optimization_level: Option<u8>,
 }
 
 impl Default for SimConfig {
@@ -138,6 +148,8 @@ impl Default for SimConfig {
             noise_method: None,
             bell_pair_budget: None,
             backend: None,
+            ibm_token: None,
+            ibm_optimization_level: None,
         }
     }
 }

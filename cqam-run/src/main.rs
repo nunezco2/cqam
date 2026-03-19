@@ -51,10 +51,12 @@ fn print_help() {
     eprintln!("  --noise <model|path>  Noise model name (superconducting, trapped-ion, neutral-atom,");
     eprintln!("                        photonic, spin) or path to .toml file with custom parameters");
     eprintln!("  --noise-method <m>    Noise method: density-matrix, trajectory (auto if omitted)");
-    eprintln!("  --backend <choice>    Backend: simulation (default), mock");
+    eprintln!("  --backend <choice>    Backend: simulation (default), mock, ibm");
     eprintln!("  --qpu-shots <n>       Shot budget for QPU backends (default: 8192)");
     eprintln!("  --qpu-confidence <f>  Bayesian confidence level 0.0-1.0 (default: 0.95)");
     eprintln!("  --qpu-device <name>   QPU device name (provider-specific)");
+    eprintln!("  --ibm-token <TOKEN>               IBM Quantum API token");
+    eprintln!("  --ibm-optimization-level <N>      Qiskit transpiler optimization level (0-3) [default: 1]");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -78,6 +80,8 @@ struct CliArgs {
     qpu_shots: Option<u32>,
     qpu_confidence: Option<f64>,
     qpu_device: Option<String>,
+    ibm_token: Option<String>,
+    ibm_optimization_level: Option<u8>,
 }
 
 fn parse_args() -> Result<CliArgs, String> {
@@ -110,6 +114,8 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut qpu_shots: Option<u32> = None;
     let mut qpu_confidence: Option<f64> = None;
     let mut qpu_device: Option<String> = None;
+    let mut ibm_token: Option<String> = None;
+    let mut ibm_optimization_level: Option<u8> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -178,9 +184,9 @@ fn parse_args() -> Result<CliArgs, String> {
                 i += 1;
                 let val = args.get(i).ok_or("--backend requires a value")?;
                 match val.as_str() {
-                    "simulation" | "mock" => backend = Some(val.clone()),
+                    "simulation" | "mock" | "ibm" => backend = Some(val.clone()),
                     other => return Err(format!(
-                        "unknown backend: '{}'. Valid: simulation, mock", other
+                        "unknown backend: '{}'. Valid: simulation, mock, ibm", other
                     )),
                 }
             }
@@ -207,6 +213,21 @@ fn parse_args() -> Result<CliArgs, String> {
             "--qpu-device" => {
                 i += 1;
                 qpu_device = Some(args.get(i).ok_or("--qpu-device requires a name")?.clone());
+            }
+            "--ibm-token" => {
+                i += 1;
+                ibm_token = Some(args.get(i).ok_or("--ibm-token requires a value")?.clone());
+            }
+            "--ibm-optimization-level" => {
+                i += 1;
+                let n: u8 = args.get(i)
+                    .ok_or("--ibm-optimization-level requires a number 0-3")?
+                    .parse()
+                    .map_err(|_| "--ibm-optimization-level must be 0-3")?;
+                if n > 3 {
+                    eprintln!("warning: --ibm-optimization-level {} clamped to 3", n);
+                }
+                ibm_optimization_level = Some(n.min(3));
             }
             // Backward compatibility
             "--psw-report" => print_psw = true,
@@ -244,6 +265,8 @@ fn parse_args() -> Result<CliArgs, String> {
         qpu_shots,
         qpu_confidence,
         qpu_device,
+        ibm_token,
+        ibm_optimization_level,
     })
 }
 
@@ -303,12 +326,26 @@ fn main() {
             shot_budget: cli.qpu_shots.unwrap_or(8192),
             confidence: cli.qpu_confidence.unwrap_or(0.95),
         },
+        Some("ibm") => BackendChoice::Qpu {
+            provider: "ibm".to_string(),
+            device: cli.qpu_device.clone(),
+            shot_budget: cli.qpu_shots.unwrap_or(4096),
+            confidence: cli.qpu_confidence.unwrap_or(0.95),
+        },
         Some(other) => {
             eprintln!("Error: unknown backend '{}'", other);
             process::exit(1);
         }
     };
     config.backend = Some(backend_choice);
+
+    // Wire IBM-specific CLI args into SimConfig
+    if let Some(ref token) = cli.ibm_token {
+        config.ibm_token = Some(token.clone());
+    }
+    if let Some(level) = cli.ibm_optimization_level {
+        config.ibm_optimization_level = Some(level);
+    }
 
     // Incompatible-flag validation for QPU backends
     if !matches!(config.backend_choice(), BackendChoice::Simulation) {
@@ -342,7 +379,13 @@ fn main() {
     }
 
     if cli.verbose {
+        // Redact ibm_token to prevent accidental token leakage in logs.
+        let saved_token = config.ibm_token.take();
+        if saved_token.is_some() {
+            config.ibm_token = Some("***".to_string());
+        }
         eprintln!("Config: {:?}", config);
+        config.ibm_token = saved_token;
     }
 
     let parsed = match load_program(&cli.input) {

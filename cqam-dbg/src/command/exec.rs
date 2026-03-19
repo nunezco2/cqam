@@ -587,6 +587,8 @@ fn copy_sim_config(c: &cqam_run::simconfig::SimConfig) -> cqam_run::simconfig::S
         noise_method: c.noise_method.clone(),
         bell_pair_budget: c.bell_pair_budget,
         backend: c.backend.clone(),
+        ibm_token: c.ibm_token.clone(),
+        ibm_optimization_level: c.ibm_optimization_level,
     }
 }
 

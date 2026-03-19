@@ -150,6 +150,8 @@ fn test_max_cycles_enforcement() {
         noise_method: None,
         bell_pair_budget: None,
         backend: None,
+        ibm_token: None,
+        ibm_optimization_level: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -184,6 +186,8 @@ fn test_max_cycles_allows_short_programs() {
         noise_method: None,
         bell_pair_budget: None,
         backend: None,
+        ibm_token: None,
+        ibm_optimization_level: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -276,6 +280,8 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         noise_method: None,
         bell_pair_budget: None,
         backend: None,
+        ibm_token: None,
+        ibm_optimization_level: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -328,6 +334,8 @@ fn test_fidelity_threshold_wiring() {
         noise_method: None,
         bell_pair_budget: None,
         backend: None,
+        ibm_token: None,
+        ibm_optimization_level: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -432,6 +440,8 @@ fn test_pragma_qubits_applied() {
         noise_method: None,
         bell_pair_budget: None,
         backend: None,
+        ibm_token: None,
+        ibm_optimization_level: None,
     };
 
     let result = run_program_with_config_and_metadata(
@@ -465,6 +475,8 @@ fn test_cli_overrides_pragma() {
         noise_method: None,
         bell_pair_budget: None,
         backend: None,
+        ibm_token: None,
+        ibm_optimization_level: None,
     };
 
     let result = run_program_with_config_and_metadata(
