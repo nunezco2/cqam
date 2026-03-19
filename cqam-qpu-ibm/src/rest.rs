@@ -20,6 +20,9 @@ const IBM_API_BASE: &str = "https://quantum.cloud.ibm.com";
 /// IBM Cloud IAM token endpoint for API key → access token exchange.
 const IBM_IAM_TOKEN_URL: &str = "https://iam.cloud.ibm.com/identity/token";
 
+/// IBM Cloud resource controller endpoint (for CRN auto-discovery).
+const IBM_RESOURCE_CONTROLLER_URL: &str = "https://resource-controller.cloud.ibm.com/v2/resource_instances";
+
 /// Job submission / listing path.
 ///   POST  /api/v1/jobs         -> submit
 ///   GET   /api/v1/jobs/{id}    -> status
@@ -120,11 +123,14 @@ pub struct BackendInfo {
 /// Full backend configuration from the IBM REST API.
 ///
 /// Returned by `GET /api/v1/backends/{name}/configuration`.
+/// IBM uses `backend_name` and `n_qubits` as field names.
 #[derive(Debug, Clone, Deserialize)]
 pub struct BackendConfig {
-    /// Device name.
+    /// Device name (IBM field: `backend_name`).
+    #[serde(alias = "backend_name")]
     pub name: String,
-    /// Number of physical qubits.
+    /// Number of physical qubits (IBM field: `n_qubits`).
+    #[serde(alias = "n_qubits")]
     pub num_qubits: u32,
     /// Coupling map: list of `[control, target]` qubit pairs.
     ///
@@ -244,6 +250,65 @@ fn exchange_api_key_for_token(
 }
 
 // ---------------------------------------------------------------------------
+// CRN auto-discovery
+// ---------------------------------------------------------------------------
+
+/// A single resource instance from the IBM Cloud resource controller.
+#[derive(Debug, Deserialize)]
+struct ResourceInstance {
+    crn: String,
+}
+
+/// Paginated response from the resource controller.
+#[derive(Debug, Deserialize)]
+struct ResourceListResponse {
+    resources: Vec<ResourceInstance>,
+}
+
+/// Discover the CRN of the first IBM Quantum service instance accessible
+/// with the given IAM access token.
+///
+/// Queries the IBM Cloud resource controller for all resource instances
+/// and returns the CRN of the first one whose CRN contains
+/// `"quantum-computing"`.
+fn discover_quantum_crn(
+    http: &reqwest::blocking::Client,
+    access_token: &str,
+) -> Result<String, IbmError> {
+    let resp = http
+        .get(IBM_RESOURCE_CONTROLLER_URL)
+        .bearer_auth(access_token)
+        .send()
+        .map_err(IbmError::HttpError)?;
+
+    if !resp.status().is_success() {
+        let status = resp.status();
+        let body = resp.text().unwrap_or_default();
+        return Err(IbmError::RestError {
+            detail: format!(
+                "CRN discovery HTTP {}: {}",
+                status,
+                &body[..body.len().min(200)]
+            ),
+        });
+    }
+
+    let list: ResourceListResponse = resp.json().map_err(|e| IbmError::RestError {
+        detail: format!("CRN discovery parse error: {}", e),
+    })?;
+
+    list.resources
+        .iter()
+        .find(|r| r.crn.contains("quantum-computing"))
+        .map(|r| r.crn.clone())
+        .ok_or_else(|| IbmError::RestError {
+            detail: "No IBM Quantum service instance found. \
+                     Create one at https://quantum.cloud.ibm.com"
+                .to_string(),
+        })
+}
+
+// ---------------------------------------------------------------------------
 // RetryPolicy
 // ---------------------------------------------------------------------------
 
@@ -281,11 +346,13 @@ impl Default for RetryPolicy {
 ///
 /// The `token` field stores an IAM access token (NOT the raw API key).
 /// Constructors automatically exchange the API key for an access token
-/// via IBM Cloud IAM.
+/// via IBM Cloud IAM and discover the service CRN.
 #[derive(Debug, Clone)]
 pub struct IbmRestClient {
     /// IAM access token (Bearer token for all API requests).
     token: String,
+    /// IBM Cloud service instance CRN (required header for all API calls).
+    service_crn: String,
     backend_name: String,
     base_url: String,
     http: reqwest::blocking::Client,
@@ -307,6 +374,7 @@ impl IbmRestClient {
     /// Construct a client with a custom base URL (for testing or staging).
     ///
     /// `api_key` is exchanged for an IAM access token during construction.
+    /// The service CRN is auto-discovered from the IBM Cloud resource controller.
     pub fn with_base_url(
         api_key: impl Into<String>,
         backend_name: impl Into<String>,
@@ -315,9 +383,11 @@ impl IbmRestClient {
         let http = reqwest::blocking::Client::new();
         let api_key = api_key.into();
         let token = exchange_api_key_for_token(&http, &api_key)?;
+        let service_crn = discover_quantum_crn(&http, &token)?;
 
         Ok(Self {
             token,
+            service_crn,
             backend_name: backend_name.into(),
             base_url: base_url.into(),
             http,
@@ -336,11 +406,33 @@ impl IbmRestClient {
     ) -> Self {
         Self {
             token: access_token.into(),
+            service_crn: String::new(),
             backend_name: backend_name.into(),
             base_url: IBM_API_BASE.to_string(),
             http: reqwest::blocking::Client::new(),
             retry_policy: RetryPolicy::default(),
         }
+    }
+
+    /// Build a GET request with standard IBM headers (Bearer auth, CRN, accept).
+    fn authed_get(&self, url: &str) -> reqwest::blocking::RequestBuilder {
+        self.http
+            .get(url)
+            .bearer_auth(&self.token)
+            .header("Service-CRN", &self.service_crn)
+            .header("Accept", "application/json")
+            .header("User-Agent", "cqam-qpu-ibm/0.1")
+    }
+
+    /// Build a POST request with standard IBM headers (Bearer auth, CRN, accept).
+    fn authed_post(&self, url: &str) -> reqwest::blocking::RequestBuilder {
+        self.http
+            .post(url)
+            .bearer_auth(&self.token)
+            .header("Service-CRN", &self.service_crn)
+            .header("Accept", "application/json")
+            .header("Content-Type", "application/json")
+            .header("User-Agent", "cqam-qpu-ibm/0.1")
     }
 
     /// Override the retry policy for this client.
@@ -363,10 +455,7 @@ impl IbmRestClient {
 
         let url = format!("{}{}", self.base_url, IBM_JOBS_PATH);
         let resp = self.request_with_retry(|| {
-            self.http
-                .post(&url)
-                .bearer_auth(&self.token)
-                .json(&payload)
+            self.authed_post(&url).json(&payload)
         })?;
 
         if !resp.status().is_success() {
@@ -440,7 +529,7 @@ impl IbmRestClient {
     pub fn get_job_status(&self, job_id: &str) -> Result<JobStatusResponse, IbmError> {
         let url = format!("{}{}/{}", self.base_url, IBM_JOBS_PATH, job_id);
         let resp = self.request_with_retry(|| {
-            self.http.get(&url).bearer_auth(&self.token)
+            self.authed_get(&url)
         })?;
 
         if !resp.status().is_success() {
@@ -458,7 +547,7 @@ impl IbmRestClient {
     pub fn get_job_results(&self, job_id: &str) -> Result<JobResultResponse, IbmError> {
         let url = format!("{}{}/{}/results", self.base_url, IBM_JOBS_PATH, job_id);
         let resp = self.request_with_retry(|| {
-            self.http.get(&url).bearer_auth(&self.token)
+            self.authed_get(&url)
         })?;
 
         if !resp.status().is_success() {
@@ -480,7 +569,7 @@ impl IbmRestClient {
     pub fn list_backends(&self) -> Result<Vec<BackendInfo>, IbmError> {
         let url = format!("{}{}", self.base_url, IBM_BACKENDS_PATH);
         let resp = self.request_with_retry(|| {
-            self.http.get(&url).bearer_auth(&self.token)
+            self.authed_get(&url)
         })?;
 
         if !resp.status().is_success() {
@@ -509,7 +598,7 @@ impl IbmRestClient {
             self.base_url, IBM_BACKENDS_PATH, backend_name
         );
         let resp = self.request_with_retry(|| {
-            self.http.get(&url).bearer_auth(&self.token)
+            self.authed_get(&url)
         })?;
 
         if !resp.status().is_success() {
@@ -544,7 +633,7 @@ impl IbmRestClient {
             self.base_url, IBM_BACKENDS_PATH, backend_name
         );
         let resp = self.request_with_retry(|| {
-            self.http.get(&url).bearer_auth(&self.token)
+            self.authed_get(&url)
         })?;
 
         if !resp.status().is_success() {
