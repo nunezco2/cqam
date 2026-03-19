@@ -28,12 +28,12 @@ pub fn circuit_to_qasm3(circuit: &SafeQkCircuit) -> Result<String, IbmError> {
     // repeated reallocations for typical circuits.
     let mut out = String::with_capacity(128 + num_instr * 40);
 
-    // --- Header ---
-    out.push_str("OPENQASM 3;\n");
-    out.push_str("include \"stdgates.inc\";\n");
-    writeln!(out, "qubit[{num_q}] q;").unwrap();
+    // --- Header (OpenQASM 2.0 for IBM Sampler compatibility) ---
+    out.push_str("OPENQASM 2.0;\n");
+    out.push_str("include \"qelib1.inc\";\n");
+    writeln!(out, "qreg q[{num_q}];").unwrap();
     if num_c > 0 {
-        writeln!(out, "bit[{num_c}] c;").unwrap();
+        writeln!(out, "creg c[{num_c}];").unwrap();
     }
     out.push('\n');
 
@@ -107,11 +107,9 @@ fn emit_gate(out: &mut String, name: &str, qubits: &[u32], params: &[f64]) {
 }
 
 fn emit_measure(out: &mut String, qubits: &[u32], clbits: &[u32]) {
-    // OpenQASM 3 syntax: c[clbit] = measure q[qubit];
-    // The Qiskit C API emits one qubit and one clbit per measure instruction,
-    // but we handle the multi-qubit case defensively using zip.
+    // OpenQASM 2.0 syntax: measure q[qubit] -> c[clbit];
     for (q, c) in qubits.iter().zip(clbits.iter()) {
-        writeln!(out, "c[{c}] = measure q[{q}];").unwrap();
+        writeln!(out, "measure q[{q}] -> c[{c}];").unwrap();
     }
 }
 
@@ -172,13 +170,10 @@ mod tests {
     fn empty_circuit_header() {
         let circ = SafeQkCircuit::new(3, 2).unwrap();
         let qasm = circuit_to_qasm3(&circ).unwrap();
-        assert!(qasm.starts_with("OPENQASM 3;\n"));
-        assert!(qasm.contains("include \"stdgates.inc\";"));
-        assert!(qasm.contains("qubit[3] q;"));
-        assert!(qasm.contains("bit[2] c;"));
-        // Header lines: OPENQASM, include, qubit, bit, blank line = 5 lines
-        // The trailing '\n' from push('\n') means lines() sees an empty entry
-        // for that blank line, so we count it.
+        assert!(qasm.starts_with("OPENQASM 2.0;\n"));
+        assert!(qasm.contains("include \"qelib1.inc\";"));
+        assert!(qasm.contains("qreg q[3];"));
+        assert!(qasm.contains("creg c[2];"));
         let lines: Vec<&str> = qasm.lines().collect();
         assert_eq!(lines.len(), 5, "empty circuit should have header only: {qasm:?}");
     }
@@ -191,12 +186,10 @@ mod tests {
     fn empty_circuit_no_clbits() {
         let circ = SafeQkCircuit::new(2, 0).unwrap();
         let qasm = circuit_to_qasm3(&circ).unwrap();
-        assert!(qasm.contains("qubit[2] q;"));
-        // "qubit[" contains "bit[" as a substring, so check for the
-        // standalone declaration pattern instead.
+        assert!(qasm.contains("qreg q[2];"));
         assert!(
-            !qasm.contains("\nbit["),
-            "no bit declaration when clbits = 0: {qasm:?}"
+            !qasm.contains("\ncreg"),
+            "no creg declaration when clbits = 0: {qasm:?}"
         );
     }
 
@@ -275,11 +268,11 @@ mod tests {
         }
         let qasm = circuit_to_qasm3(&circ).unwrap();
         assert!(
-            qasm.contains("c[0] = measure q[0];\n"),
+            qasm.contains("measure q[0] -> c[0];\n"),
             "missing measure q[0]: {qasm:?}"
         );
         assert!(
-            qasm.contains("c[1] = measure q[1];\n"),
+            qasm.contains("measure q[1] -> c[1];\n"),
             "missing measure q[1]: {qasm:?}"
         );
     }
@@ -435,12 +428,12 @@ mod tests {
         let qasm = circuit_to_qasm3(&output.circuit).unwrap();
 
         // Structural validation
-        assert!(qasm.starts_with("OPENQASM 3;"), "wrong header: {qasm:?}");
+        assert!(qasm.starts_with("OPENQASM 2.0;"), "wrong header: {qasm:?}");
         assert!(
-            qasm.contains("include \"stdgates.inc\";"),
+            qasm.contains("include \"qelib1.inc\";"),
             "missing include: {qasm:?}"
         );
-        assert!(qasm.contains("qubit["), "missing qubit decl: {qasm:?}");
+        assert!(qasm.contains("qreg q["), "missing qreg decl: {qasm:?}");
         assert!(qasm.contains("measure"), "missing measure: {qasm:?}");
 
         // Every non-empty body line must end with a semicolon

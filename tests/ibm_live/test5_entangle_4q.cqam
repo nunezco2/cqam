@@ -1,0 +1,9 @@
+#! qubits 4
+# Test 5: 4-qubit GHZ via ENTANGLE kernel.
+# Expected: ~50% |0000>, ~50% |1111>.
+.code
+QPREP Q0, 0
+ILDI R2, 0
+QKERNEL ENTG, Q0, Q0, R2, R2
+QOBSERVE H0, Q0
+HALT

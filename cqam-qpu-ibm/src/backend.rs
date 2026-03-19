@@ -7,8 +7,6 @@
 //! 3. `poll_results`: GET the result endpoint and parse counts.
 //! 4. `calibration`: return a snapshot of `IbmCalibrationData`.
 
-use std::collections::BTreeMap;
-
 use cqam_core::error::CqamError;
 use cqam_core::native_ir::{self, NativeGateSet};
 use cqam_qpu::estimator::BayesianEstimator;
@@ -19,7 +17,7 @@ use cqam_qpu::traits::{
 use crate::calibration::IbmCalibrationData;
 use crate::convert::native_to_qk;
 use crate::error::IbmError;
-use crate::rest::{parse_counts, IbmRestClient};
+use crate::rest::{result_to_counts, IbmRestClient};
 
 // ---------------------------------------------------------------------------
 // IbmQpuBackend
@@ -32,12 +30,16 @@ use crate::rest::{parse_counts, IbmRestClient};
 /// lazily on `submit`.
 #[derive(Clone)]
 pub struct IbmQpuBackend {
-    /// IBM backend device name (e.g. `"ibm_nairobi"`).
+    /// IBM backend device name (e.g. `"ibm_torino"`).
     backend_name: String,
     /// Physical qubit count of the target device.
     num_qubits: u32,
-    /// Device connectivity topology.
+    /// Device connectivity edges (directed, from IBM coupling map).
+    edges: Vec<(u32, u32)>,
+    /// Device connectivity topology (undirected, normalized).
     connectivity: ConnectivityGraph,
+    /// Device basis gate names (e.g. `["cz", "id", "rz", "sx", "x"]`).
+    basis_gates: Vec<String>,
     /// REST client for job submission and polling.
     rest: IbmRestClient,
     /// Calibration snapshot.
@@ -68,7 +70,9 @@ impl IbmQpuBackend {
         Ok(Self {
             backend_name,
             num_qubits,
+            edges: edges.to_vec(),
             connectivity,
+            basis_gates: vec!["sx".into(), "x".into(), "rz".into(), "cx".into()],
             rest,
             calibration,
             optimization_level: 1,
@@ -109,7 +113,9 @@ impl IbmQpuBackend {
         Ok(Self {
             backend_name,
             num_qubits: config.num_qubits,
+            edges: edges.clone(),
             connectivity,
+            basis_gates: config.basis_gates.clone(),
             rest,
             calibration,
             optimization_level: 1,
@@ -156,17 +162,30 @@ impl IbmQpuBackend {
         Ok(())
     }
 
-    /// Convert + optionally transpile a native IR circuit, then emit OpenQASM 3.
+    /// Convert + optionally transpile a native IR circuit, then emit OpenQASM 2.
     fn to_qasm(&self, circuit: &native_ir::Circuit) -> Result<String, IbmError> {
         let mut qk_circ = native_to_qk(circuit)?;
 
         if self.use_transpiler {
-            let output = crate::transpile::transpile_for_ibm(
-                &qk_circ,
-                self.num_qubits,
-                self.optimization_level,
-                None,
-            )?;
+            let output = if self.basis_gates.is_empty() {
+                // Fallback: use hardcoded IBM {SX, X, Rz, CX} target
+                crate::transpile::transpile_for_ibm(
+                    &qk_circ,
+                    self.num_qubits,
+                    self.optimization_level,
+                    None,
+                )?
+            } else {
+                // Use the device's actual basis gates (supports CZ, RZZ, etc.)
+                crate::transpile::transpile_for_device(
+                    &qk_circ,
+                    self.num_qubits,
+                    &self.basis_gates,
+                    &self.edges,
+                    self.optimization_level,
+                    None,
+                )?
+            };
             qk_circ = output.circuit;
         }
 
@@ -235,12 +254,10 @@ impl QpuBackend for IbmQpuBackend {
                 .poll_until_done(&job_id, None, None)
                 .map_err(CqamError::from)?;
 
-            for exp in &result.results {
-                let batch_counts = parse_counts(&exp.data.counts);
-                total_shots += exp.shots;
-                remaining_budget = remaining_budget.saturating_sub(exp.shots);
-                estimator.update(&batch_counts);
-            }
+            let (batch_counts, batch_shots) = result_to_counts(&result);
+            total_shots += batch_shots;
+            remaining_budget = remaining_budget.saturating_sub(batch_shots);
+            estimator.update(&batch_counts);
 
             batches += 1;
 
@@ -275,12 +292,13 @@ impl QpuBackend for IbmQpuBackend {
             .get_job_status(job_id)
             .map_err(CqamError::from)?;
 
-        match status.status.to_uppercase().as_str() {
+        match status.state.status.to_uppercase().as_str() {
             "COMPLETED" | "DONE" => {}
             "FAILED" | "CANCELLED" | "ERROR" => {
+                let reason = status.state.reason.unwrap_or_default();
                 return Err(IbmError::UnexpectedStatus {
                     job_id: job_id.to_string(),
-                    status: status.status,
+                    status: format!("{}: {}", status.state.status, reason),
                 }
                 .into());
             }
@@ -293,14 +311,7 @@ impl QpuBackend for IbmQpuBackend {
             .get_job_results(job_id)
             .map_err(CqamError::from)?;
 
-        let mut counts: BTreeMap<u64, u32> = BTreeMap::new();
-        let mut total_shots = 0u32;
-        for exp in &result.results {
-            total_shots += exp.shots;
-            for (bits, &count) in &parse_counts(&exp.data.counts) {
-                *counts.entry(*bits).or_insert(0) += count;
-            }
-        }
+        let (counts, total_shots) = result_to_counts(&result);
 
         Ok(Some(RawResults {
             counts,
@@ -335,7 +346,9 @@ mod tests {
         IbmQpuBackend {
             backend_name: "ibm_nairobi".to_string(),
             num_qubits: 7,
+            edges: edges.to_vec(),
             connectivity,
+            basis_gates: vec!["sx".into(), "x".into(), "rz".into(), "cx".into()],
             rest,
             calibration,
             optimization_level: 1,
@@ -396,7 +409,9 @@ mod tests {
         let b = IbmQpuBackend {
             backend_name: "dev".to_string(),
             num_qubits: 5,
+            edges: vec![],
             connectivity: ConnectivityGraph::from_edges(5, &[]),
+            basis_gates: vec![],
             rest,
             calibration: IbmCalibrationData::synthetic(5),
             optimization_level: 1,

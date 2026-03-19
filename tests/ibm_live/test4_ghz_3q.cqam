@@ -1,0 +1,6 @@
+#! qubits 3
+# Test 4: 3-qubit GHZ state. Expected: ~50% |000>, ~50% |111>.
+.code
+QPREP Q0, 3
+QOBSERVE H0, Q0
+HALT

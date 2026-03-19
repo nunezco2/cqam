@@ -23,6 +23,120 @@ use cqam_qpu::traits::CalibrationData;
 // Target builders
 // ---------------------------------------------------------------------------
 
+/// Map a basis gate name to its `QkGate` constant.
+///
+/// Returns `None` for unrecognized gate names.
+fn gate_name_to_qk(name: &str) -> Option<ffi::QkGate> {
+    match name {
+        "id" => Some(ffi::QK_GATE_I),
+        "h" => Some(ffi::QK_GATE_H),
+        "x" => Some(ffi::QK_GATE_X),
+        "y" => Some(ffi::QK_GATE_Y),
+        "z" => Some(ffi::QK_GATE_Z),
+        "s" => Some(ffi::QK_GATE_S),
+        "sdg" => Some(ffi::QK_GATE_SDG),
+        "t" => Some(ffi::QK_GATE_T),
+        "tdg" => Some(ffi::QK_GATE_TDG),
+        "sx" => Some(ffi::QK_GATE_SX),
+        "sxdg" => Some(ffi::QK_GATE_SXDG),
+        "rx" => Some(ffi::QK_GATE_RX),
+        "ry" => Some(ffi::QK_GATE_RY),
+        "rz" => Some(ffi::QK_GATE_RZ),
+        "r" => Some(ffi::QK_GATE_R),
+        "p" | "phase" => Some(ffi::QK_GATE_PHASE),
+        "u" => Some(ffi::QK_GATE_U),
+        "u1" => Some(ffi::QK_GATE_U1),
+        "u2" => Some(ffi::QK_GATE_U2),
+        "u3" => Some(ffi::QK_GATE_U3),
+        "cx" | "cnot" => Some(ffi::QK_GATE_CX),
+        "cz" => Some(ffi::QK_GATE_CZ),
+        "rzz" => Some(ffi::QK_GATE_RZZ),
+        _ => None,
+    }
+}
+
+/// Build a `QkTarget` from an arbitrary set of basis gate names with
+/// per-edge connectivity for 2-qubit gates.
+///
+/// This supports modern IBM devices (Heron/Torino) that use CZ or RZZ
+/// as their native 2-qubit gate instead of CX.  The `edges` parameter
+/// provides the coupling map so the transpiler can perform routing.
+pub fn build_device_target(
+    num_qubits: u32,
+    basis_gates: &[String],
+    edges: &[(u32, u32)],
+) -> Result<SafeQkTarget, IbmError> {
+    let mut target = SafeQkTarget::new(num_qubits)
+        .ok_or(IbmError::NullPointer { context: "qk_target_new" })?;
+
+    // Classify gates: 1-qubit gates get per-qubit qargs, 2-qubit gates
+    // get per-edge qargs from the coupling map.
+    let two_qubit_gates: &[&str] = &["cx", "cnot", "cz", "rzz", "ecr", "iswap"];
+
+    for gate_name in basis_gates {
+        if let Some(qk_gate) = gate_name_to_qk(gate_name) {
+            let entry = unsafe { ffi::qk_target_entry_new(qk_gate) };
+            if entry.is_null() {
+                continue;
+            }
+
+            let is_2q = two_qubit_gates.iter().any(|&g| g == gate_name.as_str());
+
+            if is_2q && !edges.is_empty() {
+                // Add per-edge properties so the transpiler knows connectivity
+                for &(a, b) in edges {
+                    let mut qargs = [a, b];
+                    unsafe {
+                        ffi::qk_target_entry_add_property(
+                            entry,
+                            qargs.as_mut_ptr(),
+                            2,
+                            f64::NAN,
+                            f64::NAN,
+                        );
+                    }
+                }
+            } else if !is_2q {
+                // 1-qubit gates: add per-qubit properties
+                for q in 0..num_qubits {
+                    let mut qargs = [q];
+                    unsafe {
+                        ffi::qk_target_entry_add_property(
+                            entry,
+                            qargs.as_mut_ptr(),
+                            1,
+                            f64::NAN,
+                            f64::NAN,
+                        );
+                    }
+                }
+            }
+
+            let code = unsafe { ffi::qk_target_add_instruction(target.as_mut_ptr(), entry) };
+            if code != ffi::QK_EXIT_SUCCESS && code != ffi::QK_EXIT_TARGET_INST_ALREADY_EXISTS {
+                check_exit_code(code, "qk_target_add_instruction")?;
+            }
+        }
+    }
+
+    // Always add Measure and Reset
+    for new_fn in &[
+        ffi::qk_target_entry_new_measure
+            as unsafe extern "C" fn() -> *mut ffi::QkTargetEntry,
+        ffi::qk_target_entry_new_reset,
+    ] {
+        let entry = unsafe { new_fn() };
+        if !entry.is_null() {
+            let code = unsafe { ffi::qk_target_add_instruction(target.as_mut_ptr(), entry) };
+            if code != ffi::QK_EXIT_SUCCESS && code != ffi::QK_EXIT_TARGET_INST_ALREADY_EXISTS {
+                check_exit_code(code, "qk_target_add_instruction(meas/reset)")?;
+            }
+        }
+    }
+
+    Ok(target)
+}
+
 /// Build a global `QkTarget` for the IBM superconducting native gate set.
 ///
 /// The target has no per-qubit instruction properties — sufficient for basis
@@ -280,6 +394,71 @@ pub fn transpile_for_ibm_calibrated(
 ) -> Result<TranspileOutput, IbmError> {
     let target =
         build_ibm_target_with_calibration(num_qubits, edges, Some(calibration))?;
+
+    let options = QkTranspileOptions {
+        optimization_level,
+        seed: seed.unwrap_or(-1),
+        approximation_degree: 1.0,
+    };
+
+    let mut result = QkTranspileResult::default();
+    let mut error_ptr: *mut std::os::raw::c_char = std::ptr::null_mut();
+
+    let code = unsafe {
+        ffi::qk_transpile(
+            circuit.as_ptr(),
+            target.as_ptr(),
+            &options as *const QkTranspileOptions,
+            &mut result as *mut QkTranspileResult,
+            &mut error_ptr as *mut *mut std::os::raw::c_char,
+        )
+    };
+
+    if code != ffi::QK_EXIT_SUCCESS {
+        let detail = if !error_ptr.is_null() {
+            let msg = unsafe { std::ffi::CStr::from_ptr(error_ptr) }
+                .to_string_lossy()
+                .into_owned();
+            unsafe { ffi::qk_str_free(error_ptr) };
+            msg
+        } else {
+            format!("exit code {}", code)
+        };
+        return Err(IbmError::TranspileError { detail });
+    }
+
+    if result.circuit.is_null() {
+        return Err(IbmError::NullPointer {
+            context: "qk_transpile result.circuit",
+        });
+    }
+    let transpiled_circuit = unsafe { SafeQkCircuit::from_raw(result.circuit) };
+
+    let layout = if !result.layout.is_null() {
+        Some(unsafe { SafeQkTranspileLayout::from_raw(result.layout) })
+    } else {
+        None
+    };
+
+    Ok(TranspileOutput {
+        circuit: transpiled_circuit,
+        layout,
+    })
+}
+
+/// Transpile a circuit using the device's actual basis gates.
+///
+/// This is the preferred entry point for modern IBM devices (Heron/Torino)
+/// that may use CZ, RZZ, or other 2-qubit gates instead of CX.
+pub fn transpile_for_device(
+    circuit: &SafeQkCircuit,
+    num_qubits: u32,
+    basis_gates: &[String],
+    edges: &[(u32, u32)],
+    optimization_level: u8,
+    seed: Option<i64>,
+) -> Result<TranspileOutput, IbmError> {
+    let target = build_device_target(num_qubits, basis_gates, edges)?;
 
     let options = QkTranspileOptions {
         optimization_level,

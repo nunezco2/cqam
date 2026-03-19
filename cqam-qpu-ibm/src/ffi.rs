@@ -93,6 +93,8 @@ pub const QK_GATE_U1: QkGate = 18;
 pub const QK_GATE_U2: QkGate = 19;
 pub const QK_GATE_U3: QkGate = 20;
 pub const QK_GATE_CX: QkGate = 22;
+pub const QK_GATE_CZ: QkGate = 24;
+pub const QK_GATE_RZZ: QkGate = 41;
 
 // ---------------------------------------------------------------------------
 // QkOperationKind  (u8)

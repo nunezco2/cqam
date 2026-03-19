@@ -41,65 +41,102 @@ const DEFAULT_TIMEOUT_SECS: u64 = 600;
 // REST data types
 // ---------------------------------------------------------------------------
 
-/// Job submission payload for the IBM Quantum Platform v2 API.
+/// Job submission payload for the IBM Quantum Platform v2 API (Sampler primitive).
 ///
 /// Serializes to:
 /// ```json
 /// {
-///   "program": { "qasm": "...", "shots": 4096 },
-///   "backend": "ibm_brisbane"
+///   "program_id": "sampler",
+///   "backend": "ibm_torino",
+///   "params": {
+///     "pubs": [["OPENQASM 3; ...", 128]],
+///     "version": 2
+///   }
 /// }
 /// ```
 #[derive(Debug, Serialize)]
 pub struct JobSubmitPayload {
-    /// The program to execute.
-    pub program: ProgramPayload,
-    /// Backend device name (e.g. `"ibm_brisbane"`).
+    /// Primitive type: `"sampler"` for circuit sampling.
+    pub program_id: String,
+    /// Backend device name.
     pub backend: String,
+    /// Execution parameters.
+    pub params: SamplerParams,
 }
 
-/// Program specification within a job submission.
+/// Sampler primitive parameters.
 #[derive(Debug, Serialize)]
-pub struct ProgramPayload {
-    /// OpenQASM 3 source string.
-    pub qasm: String,
-    /// Number of measurement shots.
-    pub shots: u32,
+pub struct SamplerParams {
+    /// Primitive Unified Blocs: each element is `[qasm_string]`.
+    pub pubs: Vec<(String,)>,
+    /// API version (must be 2).
+    pub version: u32,
+    /// Execution options.
+    pub options: SamplerOptions,
 }
 
-/// Minimal shape of the IBM job creation response.
+/// Sampler execution options.
+#[derive(Debug, Serialize)]
+pub struct SamplerOptions {
+    /// Default number of shots per circuit.
+    pub default_shots: u32,
+}
+
+/// IBM job creation response (v2 API).
 #[derive(Debug, Deserialize)]
 pub struct JobSubmitResponse {
     pub id: String,
-    pub status: String,
+    #[serde(default)]
+    pub backend: Option<String>,
 }
 
-/// Minimal shape of the IBM job status response.
+/// IBM job status response (v2 API).
+///
+/// The status is nested under `state.status`.
 #[derive(Debug, Deserialize)]
 pub struct JobStatusResponse {
     pub id: String,
-    pub status: String,
+    pub state: JobState,
 }
 
-/// Minimal shape of the IBM job result response.
+/// Job state from IBM v2 API.
+#[derive(Debug, Deserialize)]
+pub struct JobState {
+    pub status: String,
+    #[serde(default)]
+    pub reason: Option<String>,
+}
+
+/// IBM job result response (v2 Sampler API).
+///
+/// Results contain per-pub data with classical register samples.
 #[derive(Debug, Deserialize)]
 pub struct JobResultResponse {
-    pub id: String,
-    pub results: Vec<ExperimentResult>,
+    pub results: Vec<PubResult>,
 }
 
-/// Result for a single experiment (circuit) in the job.
+/// Result for a single PUB (Primitive Unified Bloc).
 #[derive(Debug, Deserialize)]
-pub struct ExperimentResult {
-    pub success: bool,
-    pub shots: u32,
-    pub data: ExperimentData,
+pub struct PubResult {
+    pub data: PubData,
 }
 
-/// Measurement data (counts histogram).
+/// Measurement data from a PUB result.
+///
+/// Contains per-classical-register sample arrays.  The register name
+/// (typically `"c"`) maps to a `RegisterData` with hex bitstring samples.
 #[derive(Debug, Deserialize)]
-pub struct ExperimentData {
-    pub counts: BTreeMap<String, u32>,
+pub struct PubData {
+    /// Classical register data, keyed by register name (e.g. `"c"`).
+    #[serde(flatten)]
+    pub registers: BTreeMap<String, RegisterData>,
+}
+
+/// Samples from a single classical register.
+#[derive(Debug, Deserialize)]
+pub struct RegisterData {
+    /// Hex-encoded bitstring samples (one per shot), e.g. `["0x0", "0x1", "0x0"]`.
+    pub samples: Vec<String>,
 }
 
 /// Summary metadata for an IBM backend device.
@@ -444,18 +481,25 @@ impl IbmRestClient {
     /// Submit a job and return the assigned job ID.
     ///
     /// `qasm_str` is an OpenQASM 3 string produced from the transpiled circuit.
+    /// Uses the IBM Sampler primitive (program_id = "sampler").
     pub fn submit_job(&self, qasm_str: &str, shots: u32) -> Result<String, IbmError> {
         let payload = JobSubmitPayload {
-            program: ProgramPayload {
-                qasm: qasm_str.to_string(),
-                shots,
-            },
+            program_id: "sampler".to_string(),
             backend: self.backend_name.clone(),
+            params: SamplerParams {
+                pubs: vec![(qasm_str.to_string(),)],
+                version: 2,
+                options: SamplerOptions {
+                    default_shots: shots,
+                },
+            },
         };
 
         let url = format!("{}{}", self.base_url, IBM_JOBS_PATH);
         let resp = self.request_with_retry(|| {
-            self.authed_post(&url).json(&payload)
+            self.authed_post(&url)
+                .header("IBM-API-Version", "2026-02-15")
+                .json(&payload)
         })?;
 
         if !resp.status().is_success() {
@@ -493,13 +537,14 @@ impl IbmRestClient {
         let start = Instant::now();
 
         loop {
-            let status = self.get_job_status(job_id)?;
-            match status.status.to_uppercase().as_str() {
+            let job_status = self.get_job_status(job_id)?;
+            match job_status.state.status.to_uppercase().as_str() {
                 "COMPLETED" | "DONE" => break,
                 "FAILED" | "CANCELLED" | "ERROR" => {
+                    let reason = job_status.state.reason.unwrap_or_default();
                     return Err(IbmError::UnexpectedStatus {
                         job_id: job_id.to_string(),
-                        status: status.status,
+                        status: format!("{}: {}", job_status.state.status, reason),
                     });
                 }
                 // RUNNING, PENDING, QUEUED, VALIDATING, ...
@@ -757,18 +802,30 @@ fn parse_retry_after(resp: &reqwest::blocking::Response, default: Duration) -> D
 // Parsing helpers
 // ---------------------------------------------------------------------------
 
-/// Parse a hex bitstring count map (IBM format) into a `BTreeMap<u64, u32>`.
+/// Convert a `JobResultResponse` (v2 Sampler format) into a counts histogram.
 ///
-/// IBM encodes bitstrings as hex strings prefixed with `0x`, e.g. `"0x3"`.
-pub fn parse_counts(raw: &BTreeMap<String, u32>) -> BTreeMap<u64, u32> {
-    let mut out = BTreeMap::new();
-    for (k, &v) in raw {
-        let stripped = k.strip_prefix("0x").unwrap_or(k.as_str());
-        if let Ok(bits) = u64::from_str_radix(stripped, 16) {
-            *out.entry(bits).or_insert(0) += v;
+/// The v2 API returns per-shot hex samples (e.g. `["0x0", "0x1", "0x0"]`).
+/// This function aggregates all samples across all PUBs and registers
+/// into a single `BTreeMap<u64, u32>` counts histogram.
+///
+/// Returns `(counts, total_shots)`.
+pub fn result_to_counts(result: &JobResultResponse) -> (BTreeMap<u64, u32>, u32) {
+    let mut counts = BTreeMap::new();
+    let mut total_shots = 0u32;
+
+    for pub_result in &result.results {
+        for (_reg_name, reg_data) in &pub_result.data.registers {
+            for sample in &reg_data.samples {
+                let stripped = sample.strip_prefix("0x").unwrap_or(sample.as_str());
+                if let Ok(bits) = u64::from_str_radix(stripped, 16) {
+                    *counts.entry(bits).or_insert(0) += 1;
+                    total_shots += 1;
+                }
+            }
         }
     }
-    out
+
+    (counts, total_shots)
 }
 
 // ---------------------------------------------------------------------------
@@ -779,30 +836,41 @@ pub fn parse_counts(raw: &BTreeMap<String, u32>) -> BTreeMap<u64, u32> {
 mod tests {
     use super::*;
 
-    // --- parse_counts (unchanged) -------------------------------------------
+    // --- result_to_counts tests -----------------------------------------------
 
     #[test]
-    fn test_parse_counts_hex() {
-        let mut raw = BTreeMap::new();
-        raw.insert("0x0".to_string(), 512);
-        raw.insert("0x3".to_string(), 512);
-        let counts = parse_counts(&raw);
-        assert_eq!(counts.get(&0u64), Some(&512));
-        assert_eq!(counts.get(&3u64), Some(&512));
+    fn test_result_to_counts_samples() {
+        let result = JobResultResponse {
+            results: vec![PubResult {
+                data: PubData {
+                    registers: {
+                        let mut m = BTreeMap::new();
+                        m.insert("c".to_string(), RegisterData {
+                            samples: vec![
+                                "0x0".to_string(),
+                                "0x0".to_string(),
+                                "0x3".to_string(),
+                                "0x0".to_string(),
+                                "0x3".to_string(),
+                            ],
+                        });
+                        m
+                    },
+                },
+            }],
+        };
+        let (counts, total) = result_to_counts(&result);
+        assert_eq!(total, 5);
+        assert_eq!(counts.get(&0u64), Some(&3));
+        assert_eq!(counts.get(&3u64), Some(&2));
     }
 
     #[test]
-    fn test_parse_counts_no_prefix() {
-        let mut raw = BTreeMap::new();
-        raw.insert("ff".to_string(), 100);
-        let counts = parse_counts(&raw);
-        assert_eq!(counts.get(&255u64), Some(&100));
-    }
-
-    #[test]
-    fn test_parse_counts_empty() {
-        let raw = BTreeMap::new();
-        assert!(parse_counts(&raw).is_empty());
+    fn test_result_to_counts_empty() {
+        let result = JobResultResponse { results: vec![] };
+        let (counts, total) = result_to_counts(&result);
+        assert_eq!(total, 0);
+        assert!(counts.is_empty());
     }
 
     // --- base URL / constructor tests ----------------------------------------
@@ -859,34 +927,29 @@ mod tests {
     #[test]
     fn test_submit_payload_serialization() {
         let payload = JobSubmitPayload {
-            program: ProgramPayload {
-                qasm: "OPENQASM 3.0;\nqubit q;\nh q;\nmeasure q;".to_string(),
-                shots: 4096,
+            program_id: "sampler".to_string(),
+            backend: "ibm_torino".to_string(),
+            params: SamplerParams {
+                pubs: vec![("OPENQASM 2.0;\nqreg q[1];\nh q[0];".to_string(),)],
+                version: 2,
+                options: SamplerOptions { default_shots: 4096 },
             },
-            backend: "ibm_brisbane".to_string(),
         };
 
         let json: serde_json::Value = serde_json::to_value(&payload).unwrap();
 
         // Top-level keys
-        assert!(json.get("program").is_some(), "must have 'program' key");
-        assert!(json.get("backend").is_some(), "must have 'backend' key");
-        assert!(
-            json.get("backend_name").is_none(),
-            "must NOT have old 'backend_name' key"
-        );
-        assert!(
-            json.get("memory").is_none(),
-            "must NOT have old 'memory' key"
-        );
+        assert_eq!(json["program_id"], "sampler");
+        assert_eq!(json["backend"], "ibm_torino");
+        assert!(json.get("params").is_some(), "must have 'params' key");
 
-        // Nested program
-        let program = &json["program"];
-        assert_eq!(program["shots"], 4096);
-        assert!(program["qasm"].as_str().unwrap().contains("OPENQASM 3.0"));
-
-        // Backend
-        assert_eq!(json["backend"], "ibm_brisbane");
+        // Params
+        let params = &json["params"];
+        assert_eq!(params["version"], 2);
+        assert_eq!(params["options"]["default_shots"], 4096);
+        let pubs = params["pubs"].as_array().unwrap();
+        assert_eq!(pubs.len(), 1);
+        assert!(pubs[0][0].as_str().unwrap().contains("OPENQASM 2.0"));
     }
 
     // --- RetryPolicy tests ---------------------------------------------------

@@ -1,0 +1,8 @@
+#! qubits 3
+# Test 6: 3-qubit QFT on zero state → uniform distribution.
+.code
+QPREP Q0, 0
+ILDI R2, 0
+QKERNEL QFFT, Q0, Q0, R2, R2
+QOBSERVE H0, Q0
+HALT

@@ -1,0 +1,10 @@
+#! qubits 2
+# Test 7: 2-qubit Grover search, target=3.
+# Prep uniform, 1 Grover iteration → outcome 3 should dominate.
+.code
+QPREP Q0, 1
+ILDI R2, 0
+ILDI R3, 3
+QKERNEL GROV, Q0, Q0, R3, R2
+QOBSERVE H0, Q0
+HALT

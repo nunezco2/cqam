@@ -1,0 +1,7 @@
+#! qubits 2
+# Test 2: 2-qubit uniform superposition via QPREP UNIFORM.
+# Expected: ~25% each of 0,1,2,3.
+.code
+QPREP Q0, 1
+QOBSERVE H0, Q0
+HALT

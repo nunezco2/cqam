@@ -1,0 +1,6 @@
+#! qubits 1
+# Test 1: 1-qubit zero state. Expected: 100% outcome 0.
+.code
+QPREP Q0, 0
+QOBSERVE H0, Q0
+HALT
