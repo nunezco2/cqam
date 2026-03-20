@@ -252,6 +252,40 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
         Instruction::QReset { dst, src, qubit_reg } =>
             encode_qmk(op::QRESET, *dst, *src, *qubit_reg),
 
+        // -- QPREPS-format: [opcode:8][dst_q:3][z_start:3][count:3][pad:15]
+        Instruction::QPreps { dst, z_start, count } => {
+            validate_reg3(*dst, "dst")?;
+            if *z_start > MAX_REG3 {
+                return Err(CqamError::OperandOverflow {
+                    field: "z_start".to_string(),
+                    value: *z_start as u32,
+                    max: MAX_REG3 as u32,
+                });
+            }
+            if *count > MAX_REG3 {
+                return Err(CqamError::OperandOverflow {
+                    field: "count".to_string(),
+                    value: *count as u32,
+                    max: MAX_REG3 as u32,
+                });
+            }
+            Ok(((op::QPREPS as u32) << 24)
+                | ((*dst as u32) << 21)
+                | ((*z_start as u32) << 18)
+                | ((*count as u32) << 15))
+        }
+
+        // -- QPREPSM-format: [opcode:8][dst_q:3][r_base:4][r_count:4][pad:13]
+        Instruction::QPrepsm { dst, r_base, r_count } => {
+            validate_reg3(*dst, "dst")?;
+            validate_reg4(*r_base, "r_base")?;
+            validate_reg4(*r_count, "r_count")?;
+            Ok(((op::QPREPSM as u32) << 24)
+                | ((*dst as u32) << 21)
+                | ((*r_base as u32) << 17)
+                | ((*r_count as u32) << 13))
+        }
+
         // -- QR-format (quantum prepare from register) ----------------------------
         Instruction::QPrepR { dst, dist_reg } =>
             encode_qr(op::QPREPR, *dst, *dist_reg),

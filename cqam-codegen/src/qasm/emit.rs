@@ -495,6 +495,21 @@ impl QasmFormat for Instruction {
             Instruction::HAtmE => {
                 vec!["// @cqam.hatme".to_string()]
             }
+
+            // -- Product state preparation -----------------------------------
+
+            Instruction::QPreps { dst, z_start, count } => {
+                vec![format!(
+                    "// @cqam.qpreps Q{} from Z{} count {}",
+                    dst, z_start, count
+                )]
+            }
+            Instruction::QPrepsm { dst, r_base, r_count } => {
+                vec![format!(
+                    "// @cqam.qprepsm Q{} base R{} count R{}",
+                    dst, r_base, r_count
+                )]
+            }
         }
     }
 }

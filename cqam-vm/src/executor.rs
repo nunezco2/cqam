@@ -663,7 +663,9 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
         | Instruction::QMixed { .. }
         | Instruction::QPrepN { .. }
         | Instruction::QPtrace { .. }
-        | Instruction::QReset { .. } => {
+        | Instruction::QReset { .. }
+        | Instruction::QPreps { .. }
+        | Instruction::QPrepsm { .. } => {
             execute_qop(ctx, instr, backend)?;
         }
 

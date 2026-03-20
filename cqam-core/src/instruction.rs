@@ -408,6 +408,23 @@ pub enum Instruction {
     /// Implemented via `measure_qubit` followed by a conditional X gate.
     QReset { dst: u8, src: u8, qubit_reg: u8 },
 
+    /// Prepare product state from Z-register pairs (register-direct).
+    ///
+    /// For each qubit i (0..count), reads alpha from Z[z_start + 2*i]
+    /// and beta from Z[z_start + 2*i + 1]. Each qubit is independently
+    /// prepared in state alpha_i|0> + beta_i|1> via a U3 gate.
+    /// Precondition: Qdst must hold a valid handle from QPREP Qdst, ZERO.
+    QPreps { dst: u8, z_start: u8, count: u8 },
+
+    /// Prepare product state from CMEM-indirect amplitudes.
+    ///
+    /// Reads R[r_count] as qubit count, R[r_base] as CMEM base address.
+    /// For each qubit i (0..count), reads 4 CMEM cells:
+    ///   CMEM[base + 4*i + 0..3] = re(alpha), im(alpha), re(beta), im(beta)
+    /// Each qubit is independently prepared via U3.
+    /// Precondition: Qdst must hold a valid handle from QPREP Qdst, ZERO.
+    QPrepsm { dst: u8, r_base: u8, r_count: u8 },
+
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
     /// Fork hybrid execution into parallel threads. Sets PSW fork flags.

@@ -82,6 +82,11 @@ fn map_superconducting(program: &circuit_ir::MicroProgram) -> Result<Circuit, Mi
                     gate: "CustomUnitary".to_string(),
                 });
             }
+            circuit_ir::Op::PrepProduct(_) => {
+                return Err(MicroError::UnsupportedGate {
+                    gate: "PrepProduct op should have been decomposed before native mapping".to_string(),
+                });
+            }
         }
     }
 

@@ -120,6 +120,10 @@ pub mod op {
     pub const QPTRACE: u8 = 0x56;
     pub const QRESET: u8 = 0x57;
 
+    // -- Product state preparation (0x5D-0x5E) --------------------------------
+    pub const QPREPS: u8 = 0x5D;
+    pub const QPREPSM: u8 = 0x5E;
+
     // -- Configuration query (0x58) -------------------------------------------
     pub const IQCFG: u8 = 0x58;
 

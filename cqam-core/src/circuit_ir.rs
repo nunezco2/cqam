@@ -155,6 +155,15 @@ pub struct Reset {
     pub wire: QWire,
 }
 
+/// Product-state preparation: each qubit is independently rotated from |0>.
+#[derive(Debug, Clone)]
+pub struct PrepProduct {
+    /// Wires to prepare (one per qubit).
+    pub wires: Vec<QWire>,
+    /// Per-qubit (alpha, beta) pairs. Already normalized by caller.
+    pub amplitudes: Vec<(C64, C64)>,
+}
+
 // =============================================================================
 // Op enum
 // =============================================================================
@@ -175,6 +184,7 @@ pub enum Op {
     Barrier(Barrier),
     MeasQubit { wire: QWire },
     Reset(Reset),
+    PrepProduct(PrepProduct),
 }
 
 // =============================================================================
@@ -273,6 +283,17 @@ fn structural_hash_op<H: Hasher>(op: &Op, state: &mut H) {
         }
         Op::Reset(r) => {
             r.wire.hash(state);
+        }
+        Op::PrepProduct(pp) => {
+            pp.wires.hash(state);
+            pp.amplitudes.len().hash(state);
+            // Amplitude values are "parameter-like" -- hash them for uniqueness
+            for (a, b) in &pp.amplitudes {
+                a.0.to_bits().hash(state);
+                a.1.to_bits().hash(state);
+                b.0.to_bits().hash(state);
+                b.1.to_bits().hash(state);
+            }
         }
     }
 }

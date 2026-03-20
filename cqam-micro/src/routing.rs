@@ -162,6 +162,17 @@ pub fn route(
                     gate: "CustomUnitary in routing".to_string(),
                 });
             }
+            Op::PrepProduct(pp) => {
+                // PrepProduct should have been decomposed to Gate1q::U3 before routing.
+                // If encountered here, route the wires and pass through.
+                let mapped_wires: Vec<circuit_ir::QWire> = pp.wires.iter()
+                    .map(|w| circuit_ir::QWire(v2p[w.0 as usize]))
+                    .collect();
+                out.push(Op::PrepProduct(circuit_ir::PrepProduct {
+                    wires: mapped_wires,
+                    amplitudes: pp.amplitudes.clone(),
+                }));
+            }
         }
     }
 

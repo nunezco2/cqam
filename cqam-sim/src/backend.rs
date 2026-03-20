@@ -800,6 +800,70 @@ impl QuantumBackend for SimulationBackend {
         Ok((new_handle, result))
     }
 
+    fn prep_product_state(
+        &mut self,
+        handle: QRegHandle,
+        amplitudes: &[(C64, C64)],
+    ) -> Result<(QRegHandle, QOpResult), CqamError> {
+        let mut qr = self.states.remove(&handle.0).ok_or_else(|| {
+            CqamError::UninitializedRegister {
+                file: "Q".to_string(),
+                index: 0,
+            }
+        })?;
+
+        let n = qr.num_qubits() as usize;
+        if amplitudes.len() > n {
+            return Err(CqamError::QuantumIndexOutOfRange {
+                instruction: "prep_product_state".to_string(),
+                index: amplitudes.len(),
+                limit: n,
+            });
+        }
+
+        // Apply U3 gate per qubit via single-qubit gate application.
+        // For each qubit, compute U3(theta, phi, lambda) from (alpha, beta)
+        // and apply the unitary [[cos(t/2), -e^{i*l}*sin(t/2)],
+        //                         [e^{i*p}*sin(t/2), e^{i*(p+l)}*cos(t/2)]]
+        for (i, &(alpha, beta)) in amplitudes.iter().enumerate() {
+            let alpha_abs = (alpha.0 * alpha.0 + alpha.1 * alpha.1).sqrt();
+            let eps = 1e-12;
+
+            let (theta, phi, lambda) = if alpha_abs < eps {
+                (std::f64::consts::PI, beta.1.atan2(beta.0), 0.0)
+            } else {
+                let theta = 2.0 * alpha_abs.acos();
+                let phi = beta.1.atan2(beta.0);
+                let lambda = -(alpha.1.atan2(alpha.0));
+                (theta, phi, lambda)
+            };
+
+            // Build U3 matrix:
+            // U3 = [[cos(t/2), -e^{i*l}*sin(t/2)],
+            //        [e^{i*p}*sin(t/2), e^{i*(p+l)}*cos(t/2)]]
+            let ct = (theta / 2.0).cos();
+            let st = (theta / 2.0).sin();
+            let (cos_l, sin_l) = (lambda.cos(), lambda.sin());
+            let (cos_p, sin_p) = (phi.cos(), phi.sin());
+            let pl = phi + lambda;
+            let (cos_pl, sin_pl) = (pl.cos(), pl.sin());
+
+            let gate: [C64; 4] = [
+                C64(ct, 0.0),
+                C64(-cos_l * st, -sin_l * st),
+                C64(cos_p * st, sin_p * st),
+                C64(cos_pl * ct, sin_pl * ct),
+            ];
+
+            qr.apply_single_qubit_gate(i as u8, &gate);
+            self.inject_single_gate_noise(&mut qr, i as u8);
+        }
+
+        let result = Self::op_result(&qr);
+        let new_handle = self.alloc(qr);
+        Ok((new_handle, result))
+    }
+
     fn apply_teleportation_noise(&mut self, handle: QRegHandle) -> Result<(), CqamError> {
         // Extract fidelity and method before borrowing states mutably
         let (fidelity, method) = match self.noise_model {

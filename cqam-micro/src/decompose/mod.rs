@@ -61,6 +61,31 @@ pub fn decompose_to_standard(
                     gate: "CustomUnitary".to_string(),
                 });
             }
+            Op::PrepProduct(pp) => {
+                // Decompose into one U3 gate per qubit
+                for (wire, (alpha, beta)) in pp.wires.iter().zip(&pp.amplitudes) {
+                    let eps = 1e-12;
+                    let alpha_abs = (alpha.0 * alpha.0 + alpha.1 * alpha.1).sqrt();
+
+                    let (theta, phi, lambda) = if alpha_abs < eps {
+                        (std::f64::consts::PI, beta.1.atan2(beta.0), 0.0)
+                    } else {
+                        let theta = 2.0 * alpha_abs.acos();
+                        let phi = beta.1.atan2(beta.0);
+                        let lambda = -(alpha.1.atan2(alpha.0));
+                        (theta, phi, lambda)
+                    };
+
+                    out.push(Op::Gate1q(ApplyGate1q {
+                        wire: *wire,
+                        gate: Gate1q::U3(
+                            circuit_ir::Param::Resolved(theta),
+                            circuit_ir::Param::Resolved(phi),
+                            circuit_ir::Param::Resolved(lambda),
+                        ),
+                    }));
+                }
+            }
             other => out.push(other.clone()),
         }
     }

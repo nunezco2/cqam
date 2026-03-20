@@ -695,6 +695,63 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             line_num,
         ),
 
+        "QPREPS" => {
+            // QPREPS Qdst, Z_start, count
+            if ops.len() != 3 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QPREPS requires 3 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPS: invalid destination register '{}'", ops[0]),
+            })?;
+            let z_start = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPS: invalid Z start register '{}'", ops[1]),
+            })?;
+            let count = parse_u8(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPS: invalid count '{}'", ops[2]),
+            })?;
+            // Assembler check: z_start + 2*count must not exceed Z-file size (8 regs = Z0-Z7)
+            if (z_start as u16) + 2 * (count as u16) > 8 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!(
+                        "QPREPS: z_start({}) + 2*count({}) = {} exceeds Z-file size (8)",
+                        z_start, count,
+                        z_start as u16 + 2 * count as u16
+                    ),
+                });
+            }
+            Ok(Instruction::QPreps { dst, z_start, count })
+        }
+
+        "QPREPSM" => {
+            // QPREPSM Qdst, Rbase, Rcount
+            if ops.len() != 3 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QPREPSM requires 3 operands, got {}", ops.len()),
+                });
+            }
+            let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPSM: invalid destination register '{}'", ops[0]),
+            })?;
+            let r_base = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPSM: invalid base register '{}'", ops[1]),
+            })?;
+            let r_count = parse_reg(ops[2]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QPREPSM: invalid count register '{}'", ops[2]),
+            })?;
+            Ok(Instruction::QPrepsm { dst, r_base, r_count })
+        }
+
         // -- Hybrid -----------------------------------------------------------
         "HFORK" => Ok(Instruction::HFork),
         "HMERGE" => Ok(Instruction::HMerge),

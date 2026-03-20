@@ -65,6 +65,13 @@ pub struct ProgramStateWord {
     pub int_quantum_err: bool,
     /// Synchronization failure interrupt: set when HMERGE cannot join threads.
     pub int_sync_fail: bool,
+
+    // --- QPREPS/QPREPSM warning flags ---
+
+    /// Normalization warning: set when QPREPS/QPREPSM received unnormalized
+    /// amplitudes that were auto-corrected. Cleared at the start of each
+    /// QPREPS/QPREPSM execution.
+    pub norm_warn: bool,
 }
 
 impl ProgramStateWord {

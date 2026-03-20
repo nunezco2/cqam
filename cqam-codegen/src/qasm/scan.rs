@@ -394,5 +394,16 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
         }
         Instruction::HAtmS => {}
         Instruction::HAtmE => {}
+
+        // -- Product state preparation --
+        Instruction::QPreps { dst, .. } => {
+            used.quantum_regs.insert(*dst);
+        }
+        Instruction::QPrepsm { dst, r_base, r_count } => {
+            used.quantum_regs.insert(*dst);
+            used.int_regs.insert(*r_base);
+            used.int_regs.insert(*r_count);
+            used.uses_cmem = true;
+        }
     }
 }

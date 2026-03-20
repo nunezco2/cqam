@@ -184,6 +184,12 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::QReset { dst, src, qubit_reg } => {
             format!("QRESET Q{}, Q{}, R{}", dst, src, qubit_reg)
         }
+        Instruction::QPreps { dst, z_start, count } => {
+            format!("QPREPS Q{}, Z{}, {}", dst, z_start, count)
+        }
+        Instruction::QPrepsm { dst, r_base, r_count } => {
+            format!("QPREPSM Q{}, R{}, R{}", dst, r_base, r_count)
+        }
 
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
@@ -231,7 +237,9 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         | Instruction::QCustom { .. }
         | Instruction::QMixed { .. }
         | Instruction::QPtrace { .. }
-        | Instruction::QReset { .. } => Some("quantum"),
+        | Instruction::QReset { .. }
+        | Instruction::QPreps { .. }
+        | Instruction::QPrepsm { .. } => Some("quantum"),
 
         // Hybrid class
         Instruction::HFork

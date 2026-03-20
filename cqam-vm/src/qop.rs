@@ -775,6 +775,165 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
             }
         }
 
+        Instruction::QPreps { dst, z_start, count } => {
+            let count_val = *count as usize;
+
+            // Validate Qdst holds a valid handle
+            let handle = ctx.qregs[*dst as usize].ok_or_else(|| {
+                CqamError::UninitializedRegister {
+                    file: "Q".to_string(),
+                    index: *dst,
+                }
+            })?;
+
+            // Validate count does not exceed register qubit count
+            let n = backend.num_qubits(handle)?;
+            if count_val > n as usize {
+                return Err(CqamError::QuantumIndexOutOfRange {
+                    instruction: "QPREPS".to_string(),
+                    index: count_val,
+                    limit: n as usize,
+                });
+            }
+
+            // Clear norm_warn before processing
+            ctx.psw.norm_warn = false;
+            let mut any_beta_nonzero = false;
+
+            // Extract and normalize amplitudes from Z-registers
+            let mut amplitudes: Vec<(C64, C64)> = Vec::with_capacity(count_val);
+            for i in 0..count_val {
+                let alpha_reg = *z_start + (2 * i) as u8;
+                let beta_reg = *z_start + (2 * i + 1) as u8;
+                let alpha_z = ctx.zregs.get(alpha_reg)?;
+                let beta_z = ctx.zregs.get(beta_reg)?;
+                let mut alpha = C64(alpha_z.0, alpha_z.1);
+                let mut beta = C64(beta_z.0, beta_z.1);
+
+                // Zero check
+                let norm_sq = alpha.0 * alpha.0 + alpha.1 * alpha.1
+                    + beta.0 * beta.0 + beta.1 * beta.1;
+                if norm_sq < 1e-30 {
+                    ctx.psw.trap_arith = true;
+                    return Err(CqamError::TypeMismatch {
+                        instruction: "QPREPS".to_string(),
+                        detail: format!("qubit {}: (alpha, beta) = (0, 0)", i),
+                    });
+                }
+
+                // Normalization check
+                if (norm_sq - 1.0).abs() > 1e-10 {
+                    let inv_norm = 1.0 / norm_sq.sqrt();
+                    alpha = C64(alpha.0 * inv_norm, alpha.1 * inv_norm);
+                    beta = C64(beta.0 * inv_norm, beta.1 * inv_norm);
+                    ctx.psw.norm_warn = true;
+                }
+
+                if beta.0 * beta.0 + beta.1 * beta.1 > 1e-30 {
+                    any_beta_nonzero = true;
+                }
+
+                amplitudes.push((alpha, beta));
+            }
+
+            // Call backend
+            let old_handle = ctx.take_qreg(*dst).unwrap();
+            let (new_handle, result) = backend.prep_product_state(old_handle, &amplitudes)?;
+            ctx.set_qreg(*dst, new_handle, backend);
+
+            // PSW updates
+            ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
+            ctx.psw.sf = any_beta_nonzero;
+            ctx.psw.ef = false;
+            ctx.psw.inf = false;
+            Ok(())
+        }
+
+        Instruction::QPrepsm { dst, r_base, r_count } => {
+            let base = ctx.iregs.get(*r_base)? as u16;
+            let count_val = ctx.iregs.get(*r_count)? as usize;
+
+            // Validate Qdst holds a valid handle
+            let handle = ctx.qregs[*dst as usize].ok_or_else(|| {
+                CqamError::UninitializedRegister {
+                    file: "Q".to_string(),
+                    index: *dst,
+                }
+            })?;
+
+            // Validate count does not exceed register qubit count
+            let n = backend.num_qubits(handle)?;
+            if count_val > n as usize {
+                return Err(CqamError::QuantumIndexOutOfRange {
+                    instruction: "QPREPSM".to_string(),
+                    index: count_val,
+                    limit: n as usize,
+                });
+            }
+
+            // Validate CMEM bounds
+            let total_cells = 4 * count_val;
+            if (base as usize) + total_cells > 65536 {
+                return Err(CqamError::AddressOutOfRange {
+                    instruction: "QPREPSM".to_string(),
+                    address: (base as i64) + (total_cells as i64),
+                });
+            }
+
+            // Clear norm_warn before processing
+            ctx.psw.norm_warn = false;
+            let mut any_beta_nonzero = false;
+
+            // Extract and normalize amplitudes from CMEM
+            let mut amplitudes: Vec<(C64, C64)> = Vec::with_capacity(count_val);
+            for i in 0..count_val {
+                let cell_base = base.wrapping_add((4 * i) as u16);
+                let re_a = f64::from_bits(ctx.cmem.load(cell_base) as u64);
+                let im_a = f64::from_bits(ctx.cmem.load(cell_base.wrapping_add(1)) as u64);
+                let re_b = f64::from_bits(ctx.cmem.load(cell_base.wrapping_add(2)) as u64);
+                let im_b = f64::from_bits(ctx.cmem.load(cell_base.wrapping_add(3)) as u64);
+                let mut alpha = C64(re_a, im_a);
+                let mut beta = C64(re_b, im_b);
+
+                // Zero check
+                let norm_sq = alpha.0 * alpha.0 + alpha.1 * alpha.1
+                    + beta.0 * beta.0 + beta.1 * beta.1;
+                if norm_sq < 1e-30 {
+                    ctx.psw.trap_arith = true;
+                    return Err(CqamError::TypeMismatch {
+                        instruction: "QPREPSM".to_string(),
+                        detail: format!("qubit {}: (alpha, beta) = (0, 0)", i),
+                    });
+                }
+
+                // Normalization check
+                if (norm_sq - 1.0).abs() > 1e-10 {
+                    let inv_norm = 1.0 / norm_sq.sqrt();
+                    alpha = C64(alpha.0 * inv_norm, alpha.1 * inv_norm);
+                    beta = C64(beta.0 * inv_norm, beta.1 * inv_norm);
+                    ctx.psw.norm_warn = true;
+                }
+
+                if beta.0 * beta.0 + beta.1 * beta.1 > 1e-30 {
+                    any_beta_nonzero = true;
+                }
+
+                amplitudes.push((alpha, beta));
+            }
+
+            // Call backend
+            let old_handle = ctx.take_qreg(*dst).unwrap();
+            let (new_handle, result) = backend.prep_product_state(old_handle, &amplitudes)?;
+            ctx.set_qreg(*dst, new_handle, backend);
+
+            // PSW updates
+            ctx.psw.update_from_qmeta(result.purity, ctx.config.min_purity);
+            ctx.psw.sf = any_beta_nonzero;
+            ctx.psw.ef = false;
+            ctx.psw.inf = false;
+            Ok(())
+        }
+
         _ => {
             Err(CqamError::TypeMismatch {
                 instruction: format!("{:?}", instr),

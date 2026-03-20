@@ -439,6 +439,22 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Product state preparation: O(n) U3 gates, 1 cycle per qubit (min 1)
+        Instruction::QPreps { count, .. } => ResourceDelta {
+            time: (*count as usize).max(1),
+            space: 1,
+            superposition: 0.5,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+        Instruction::QPrepsm { .. } => ResourceDelta {
+            time: 4, // conservative estimate
+            space: 1,
+            superposition: 0.5,
+            entanglement: 0.0,
+            interference: 0.0,
+        },
+
         // No-op / labels: zero cost
         Instruction::Nop
         | Instruction::Label(_) => ResourceDelta::default(),

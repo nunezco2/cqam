@@ -96,6 +96,37 @@ pub(crate) fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection,
             }
             let n = parse_c64_directive(&combined, line_num, &mut ds.cells)?;
             logical_count = Some(n as u16);
+        } else if let Some(rest) = line.strip_prefix(".qstate") {
+            // .qstate re_alpha, im_alpha, re_beta, im_beta
+            // Produces exactly 4 CMEM cells. Validates normalization at assembly time.
+            let tokens: Vec<&str> = rest.split(',').map(|s| s.trim()).filter(|s| !s.is_empty()).collect();
+            if tokens.len() != 4 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!(".qstate requires exactly 4 values (re_a, im_a, re_b, im_b), got {}", tokens.len()),
+                });
+            }
+            let vals: Vec<f64> = tokens.iter().enumerate().map(|(j, t)| {
+                t.parse::<f64>().map_err(|_| CqamError::ParseError {
+                    line: line_num,
+                    message: format!(".qstate: invalid float '{}' at position {}", t, j),
+                })
+            }).collect::<Result<Vec<_>, _>>()?;
+            let (re_a, im_a, re_b, im_b) = (vals[0], vals[1], vals[2], vals[3]);
+            let norm_sq = re_a * re_a + im_a * im_a + re_b * re_b + im_b * im_b;
+            if (norm_sq - 1.0).abs() > 1e-10 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!(
+                        ".qstate: amplitudes not normalized (|alpha|^2 + |beta|^2 = {:.12}, expected 1.0)",
+                        norm_sq
+                    ),
+                });
+            }
+            ds.cells.push(re_a.to_bits() as i64);
+            ds.cells.push(im_a.to_bits() as i64);
+            ds.cells.push(re_b.to_bits() as i64);
+            ds.cells.push(im_b.to_bits() as i64);
         } else {
             return Err(CqamError::ParseError {
                 line: line_num,

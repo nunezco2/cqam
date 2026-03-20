@@ -461,6 +461,22 @@ pub fn decode_with_debug(
             Ok(Instruction::QReset { dst, src, qubit_reg })
         }
 
+        // -- QPREPS: register-direct product state prep --
+        op::QPREPS => {
+            let dst = extract_reg3(word, 21);
+            let z_start = extract_reg3(word, 18);
+            let count = extract_reg3(word, 15);
+            Ok(Instruction::QPreps { dst, z_start, count })
+        }
+
+        // -- QPREPSM: CMEM-indirect product state prep --
+        op::QPREPSM => {
+            let dst = extract_reg3(word, 21);
+            let r_base = extract_reg4(word, 17);
+            let r_count = extract_reg4(word, 13);
+            Ok(Instruction::QPrepsm { dst, r_base, r_count })
+        }
+
         // -- QO-format (quantum observe, extended) --------------------------------
         op::QOBSERVE => {
             let dst_h = extract_reg3(word, 21);
@@ -597,6 +613,8 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::FSQRT => Some("FSQRT"),
         op::QPTRACE => Some("QPTRACE"),
         op::QRESET => Some("QRESET"),
+        op::QPREPS => Some("QPREPS"),
+        op::QPREPSM => Some("QPREPSM"),
         op::ILDX => Some("ILDX"),
         op::ISTRX => Some("ISTRX"),
         op::FLDX => Some("FLDX"),

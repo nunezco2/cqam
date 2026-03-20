@@ -19,7 +19,7 @@ use rand_chacha::ChaCha8Rng;
 
 use cqam_core::circuit_ir::{
     ApplyGate1q, ApplyGate2q, ApplyKernel, Gate1q, Gate2q, MicroProgram, Observe, Op,
-    Prepare, QWire, Reset,
+    Prepare, PrepProduct, QWire, Reset,
 };
 use cqam_core::complex::C64;
 use cqam_core::error::CqamError;
@@ -298,6 +298,36 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
             operation: "QMIXED".to_string(),
             detail: "mixed state preparation not supported in circuit mode".to_string(),
         })
+    }
+
+    fn prep_product_state(
+        &mut self,
+        handle: QRegHandle,
+        amplitudes: &[(C64, C64)],
+    ) -> Result<(QRegHandle, QOpResult), CqamError> {
+        let wires = self.validate_handle(handle)?.clone();
+        let num_qubits = self.handle_num_qubits[&handle.0];
+
+        if amplitudes.len() > wires.len() {
+            return Err(CqamError::QuantumIndexOutOfRange {
+                instruction: "prep_product_state".to_string(),
+                index: amplitudes.len(),
+                limit: wires.len(),
+            });
+        }
+
+        // Emit Op::PrepProduct into the circuit buffer
+        let prep_wires: Vec<QWire> = wires[..amplitudes.len()].to_vec();
+        self.ensure_buffer().push(Op::PrepProduct(PrepProduct {
+            wires: prep_wires,
+            amplitudes: amplitudes.to_vec(),
+        }));
+
+        self.mark_evolved(handle);
+        let new_id = self.next_handle;
+        self.next_handle += 1;
+        self.clone_handle_mapping(handle, new_id);
+        Ok((QRegHandle(new_id), QOpResult { purity: 1.0, num_qubits }))
     }
 
     // =========================================================================

@@ -276,6 +276,26 @@ pub trait QuantumBackend: Send {
         target_qubit: u8,
     ) -> Result<(QRegHandle, QOpResult), CqamError>;
 
+    /// Prepare a product state on an existing zero-state register.
+    ///
+    /// Maps to: QPREPS, QPREPSM
+    /// Each qubit i is independently rotated from |0> to alpha_i|0> + beta_i|1>.
+    /// The amplitudes MUST be pre-normalized by the caller (the VM handles
+    /// normalization and zero-checks before calling this method).
+    ///
+    /// Returns a NEW handle; the source handle is consumed.
+    fn prep_product_state(
+        &mut self,
+        handle: QRegHandle,
+        amplitudes: &[(C64, C64)],
+    ) -> Result<(QRegHandle, QOpResult), CqamError> {
+        let _ = (handle, amplitudes);
+        Err(CqamError::QpuUnsupportedOperation {
+            operation: "QPREPS/QPREPSM".to_string(),
+            detail: "prep_product_state not implemented for this backend".to_string(),
+        })
+    }
+
     // =========================================================================
     // Handle lifecycle
     // =========================================================================

@@ -245,6 +245,12 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::QReset { dst, src, qubit_reg } => {
             format!("QRESET Q{}, Q{}, R{}", dst, src, qubit_reg)
         }
+        Instruction::QPreps { dst, z_start, count } => {
+            format!("QPREPS Q{}, Z{}, {}", dst, z_start, count)
+        }
+        Instruction::QPrepsm { dst, r_base, r_count } => {
+            format!("QPREPSM Q{}, R{}, R{}", dst, r_base, r_count)
+        }
 
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
