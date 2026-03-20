@@ -139,35 +139,30 @@ fn test_amp_mode_via_runner_returns_unsupported() {
 // Test 2: PROB observe mode rejected by CircuitBackend
 // =============================================================================
 
-/// `CircuitBackend::observe` with `ObserveMode::Prob` returns
-/// `CqamError::QpuUnsupportedOperation { operation: "QOBSERVE/PROB", .. }`.
+/// `CircuitBackend::observe` with `ObserveMode::Prob` approximates
+/// P(|ctx0⟩) from shot counts. On a |00⟩ state, P(|0⟩) should be high.
 #[test]
-fn test_prob_mode_returns_unsupported() {
+fn test_prob_mode_approximated_from_shots() {
     let mut cb = make_test_backend(8);
     let (h, _) = cb.prep(DistId::Zero, 2, false).unwrap();
-    let err = cb.observe(h, ObserveMode::Prob, 0, 0);
-    assert!(
-        matches!(err, Err(CqamError::QpuUnsupportedOperation { ref operation, .. })
-            if operation == "QOBSERVE/PROB"),
-        "Expected QpuUnsupportedOperation(QOBSERVE/PROB), got: {:?}", err
-    );
+    let result = cb.observe(h, ObserveMode::Prob, 0, 0).unwrap();
+    match result {
+        ObserveResult::Prob(p) => assert!(p > 0.5, "P(|0⟩) on zero state should be high: {p}"),
+        other => panic!("expected Prob, got {:?}", other),
+    }
 }
 
-/// Runner-level: QPREP followed by QOBSERVE(PROB) returns
-/// `CqamError::QpuUnsupportedOperation`.
+/// Runner-level: QPREP followed by QOBSERVE(PROB) now succeeds
+/// by approximating probability from shot statistics.
 #[test]
-fn test_prob_mode_via_runner_returns_unsupported() {
+fn test_prob_mode_via_runner_succeeds() {
     let program = vec![
         Instruction::QPrep { dst: 0, dist: DistId::Zero },
         Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
-    let err = run_program_with_config(program, &mock_qpu_config());
-    assert!(
-        matches!(err, Err(CqamError::QpuUnsupportedOperation { .. })),
-        "Runner: expected QpuUnsupportedOperation for PROB mode, got: {:?}",
-        err.err()
-    );
+    let result = run_program_with_config(program, &mock_qpu_config());
+    assert!(result.is_ok(), "PROB mode should succeed: {:?}", result.err());
 }
 
 // =============================================================================

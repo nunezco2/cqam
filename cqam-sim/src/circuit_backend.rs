@@ -6,7 +6,8 @@
 //! - Mid-circuit measurement (`measure_qubit`) returns a dummy outcome (0) and
 //!   does not support classical feedback. Programs that branch on QMEAS results
 //!   will behave incorrectly. This is deferred to Phase 5 (dynamic circuits).
-//! - `ObserveMode::Prob` and `ObserveMode::Amp` are unsupported.
+//! - `ObserveMode::Prob` is approximated from shot counts.
+//! - `ObserveMode::Amp` is unsupported (requires statevector access).
 //! - Partial trace is unsupported.
 //! - State inspection methods (purity, diagonal_probs, etc.) are unsupported.
 
@@ -407,19 +408,13 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
         ctx1: usize,
     ) -> Result<ObserveResult, CqamError> {
         match mode {
-            ObserveMode::Prob => {
-                return Err(CqamError::QpuUnsupportedOperation {
-                    operation: "QOBSERVE/PROB".to_string(),
-                    detail: "direct probability access not available in circuit mode; use DIST or SAMPLE".to_string(),
-                });
-            }
             ObserveMode::Amp => {
                 return Err(CqamError::QpuUnsupportedOperation {
                     operation: "QOBSERVE/AMP".to_string(),
-                    detail: "amplitude access not available in circuit mode; use DIST or SAMPLE".to_string(),
+                    detail: "amplitude access not available in circuit mode; use DIST, PROB, or SAMPLE".to_string(),
                 });
             }
-            ObserveMode::Dist | ObserveMode::Sample => {}
+            ObserveMode::Dist | ObserveMode::Sample | ObserveMode::Prob => {}
         }
 
         let wires = self.validate_handle(handle)?.clone();
@@ -477,6 +472,13 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
                     .collect();
                 ObserveResult::Dist(dist)
             }
+            ObserveMode::Prob => {
+                // Approximate P(|ctx0⟩) from shot counts.
+                let total = raw.total_shots as f64;
+                let target = ctx0 as u64;
+                let count = raw.counts.get(&target).copied().unwrap_or(0) as f64;
+                ObserveResult::Prob(count / total.max(1.0))
+            }
             ObserveMode::Sample => {
                 // Pick one bitstring proportional to counts using an RNG
                 let total = raw.total_shots;
@@ -492,7 +494,7 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
                 };
                 ObserveResult::Sample(chosen as i64)
             }
-            _ => unreachable!(),
+            ObserveMode::Amp => unreachable!(), // rejected above
         };
 
         // Clean up handle
@@ -880,13 +882,15 @@ mod tests {
     }
 
     #[test]
-    fn test_observe_prob_returns_error() {
+    fn test_observe_prob_from_shots() {
         let mut cb = make_backend();
         let (h, _) = cb.prep(DistId::Zero, 1, false).unwrap();
-        let err = cb.observe(h, ObserveMode::Prob, 0, 0);
-        assert!(err.is_err());
-        let msg = format!("{:?}", err.unwrap_err());
-        assert!(msg.contains("PROB") || msg.contains("circuit mode"));
+        // PROB mode on a |0⟩ state: P(|0⟩) should be close to 1.0
+        let result = cb.observe(h, ObserveMode::Prob, 0, 0).unwrap();
+        match result {
+            ObserveResult::Prob(p) => assert!(p > 0.5, "P(|0⟩) should be high: {p}"),
+            other => panic!("expected Prob, got {:?}", other),
+        }
     }
 
     #[test]
