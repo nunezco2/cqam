@@ -7,6 +7,7 @@
 //! Qubit ordering follows the cqam-sim big-endian convention: qubit 0 is the
 //! most significant bit.
 
+mod controlled;
 mod fourier;
 mod grover;
 mod rotation;
@@ -203,7 +204,7 @@ fn decompose_prep_dist(wires: &[QWire], dist: DistId) -> Vec<Op> {
 }
 
 /// Dispatch to the appropriate kernel decomposer.
-fn decompose_kernel(
+pub(super) fn decompose_kernel(
     wires: &[QWire],
     kernel: &KernelId,
     params: &KernelParams,

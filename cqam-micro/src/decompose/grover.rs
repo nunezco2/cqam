@@ -6,33 +6,7 @@ use cqam_core::quantum_backend::KernelParams;
 use crate::error::MicroError;
 use super::helpers::{h, x, rz, cx, cz};
 use super::diagonal::diagonal_to_gates;
-
-// =============================================================================
-// Kernel: Diffuse
-// =============================================================================
-
-/// Decompose a Toffoli (CCX) gate into the standard 6-CNOT form.
-/// CCX(c0, c1, target) = 15 gates.
-fn toffoli(c0: QWire, c1: QWire, target: QWire) -> Vec<Op> {
-    use super::helpers::{t_gate, tdg};
-    vec![
-        h(target),
-        cx(c1, target),
-        tdg(target),
-        cx(c0, target),
-        t_gate(target),
-        cx(c1, target),
-        tdg(target),
-        cx(c0, target),
-        t_gate(c1),
-        t_gate(target),
-        h(target),
-        cx(c0, c1),
-        t_gate(c0),
-        tdg(c1),
-        cx(c0, c1),
-    ]
-}
+use super::controlled::toffoli;
 
 /// Decompose a multi-controlled-Z gate on the given wires.
 /// MCZ flips the phase of |1...1>.
