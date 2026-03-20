@@ -52,14 +52,24 @@ pub fn decompose_controlled_u(wires: &[QWire], params: &KernelParams) -> Result<
         });
     }
 
-    let (param0, param1, _cmem_data) = extract_int_params(params, "ControlledU")?;
+    let (param0, _param1, cmem_data) = extract_int_params(params, "ControlledU")?;
 
-    // Decode packed parameters from param0:
-    // param0 = (control_qubit << 24) | (sub_kernel_id << 16) | (target_qubits << 8) | power
-    let control_qubit = ((param0 >> 24) & 0xFF) as u8;
-    let sub_kernel_id_raw = ((param0 >> 16) & 0xFF) as u8;
-    let target_qubits_field = ((param0 >> 8) & 0xFF) as u8;
-    let power = (param0 & 0xFF) as u32;
+    // The VM passes ControlledU parameters as:
+    //   param0 = control qubit index (from ctx0 register)
+    //   param1 = CMEM base address (from ctx1 register)
+    //   cmem_data = [sub_kernel_id, power, param_re_bits, param_im_bits, target_qubits, ...]
+    let control_qubit = param0 as u8;
+
+    if cmem_data.len() < 5 {
+        return Err(MicroError::DecompositionFailed {
+            kernel: "ControlledU".to_string(),
+            detail: format!("cmem_data too short: {} < 5", cmem_data.len()),
+        });
+    }
+
+    let sub_kernel_id_raw = cmem_data[0] as u8;
+    let power = cmem_data[1] as u32;
+    let target_qubits_field = cmem_data[4] as u8;
 
     let sub_kernel_id = KernelId::try_from(sub_kernel_id_raw).map_err(|_| {
         MicroError::DecompositionFailed {
@@ -100,7 +110,7 @@ pub fn decompose_controlled_u(wires: &[QWire], params: &KernelParams) -> Result<
 
     // Compute effective angle with power folding
     let scale = if power == 0 { 1.0 } else { (1u64 << power) as f64 };
-    let sub_param = f64::from_bits(param1 as u64);
+    let sub_param = f64::from_bits(cmem_data[2] as u64);
 
     match sub_kernel_id {
         KernelId::Rotate => {

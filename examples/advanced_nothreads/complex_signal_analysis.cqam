@@ -2,8 +2,8 @@
 #                                float math, QFT, HREDUCE complex functions
 #
 # Loads a 4-sample phasor from .c64, does complex arithmetic,
-# encodes into Q0 via QENCODE Z_FILE, applies QFT, and extracts
-# results via HREDUCE MAGNI/PHASE/REALP/IMAGP/CONJZ/NEGTZ.
+# encodes into Q0 via QPREPSM (product state, hardware-compatible), applies QFT,
+# and extracts results via HREDUCE MAGNI/PHASE/REALP/IMAGP/CONJZ/NEGTZ.
 #
 # Also exercises FSIN, FCOS, FATAN2, FSQRT, all type conversions,
 # and indirect complex/float memory ops.
@@ -18,6 +18,16 @@ signal:
     .org 200
 scratch_f:
     .f64 3.14159265358979
+
+    .org 600
+# QPREPSM amplitude data for the 2-qubit product state |-> ⊗ |+i>
+# State: (1/2) * [1, i, -1, -i] = |--> ⊗ (qubit1: |+i>)
+# Factored as: qubit0 = [1,-1]/sqrt(2) (|->), qubit1 = [1,i]/sqrt(2) (|+i>)
+# Verification: a00*a11 = (1/2)(−i/2)*4 = −i/4... product OK (rank-1 check passes).
+# .qstate format: alpha_re, alpha_im, beta_re, beta_im
+qprepsm_amps:
+    .qstate  0.7071067811865476, 0.0, -0.7071067811865476, 0.0  # qubit 0: |->
+    .qstate  0.7071067811865476, 0.0,  0.0, 0.7071067811865476  # qubit 1: |+i>
 
     .org 1000
 banner:
@@ -113,13 +123,17 @@ neg_fmt:
     FSTRX F8, R2                 # store at 400
 
 # ============================================
-# QENCODE Z_FILE → QFT → HREDUCE complex suite
+# QPREPSM → QFT → HREDUCE complex suite
 # ============================================
-    ZLDI Z0, 1, 0
-    ZLDI Z1, 0, 1
-    ZLDI Z2, -1, 0
-    ZLDI Z3, 0, -1
-    QENCODE Q0, Z0, 4, 2        # normalized statevector from Z-file
+# Previously: QENCODE Q0, Z0, 4, 2 (simulation-only, Z-file amplitudes [1,i,-1,-i]/2)
+# The 2-qubit state [1, i, -1, -i]/2 is a product state (rank-1 check: a00*a11 = a01*a10 = -i/4).
+# Factored as: qubit0 = |-> = [1,-1]/sqrt(2), qubit1 = |+i> = [1,i]/sqrt(2).
+# Amplitude data stored at .org 600 (qprepsm_amps label).
+# Note: ZLDI Z0-Z3 loads no longer needed; amplitude data is in .qstate static table.
+    QPREP Q0, 1                  # allocate 2-qubit zero state (precondition for QPREPSM)
+    ILDI R4, @qprepsm_amps       # CMEM base address of amplitude data
+    ILDI R5, 2                   # qubit count
+    QPREPSM Q0, R4, R5           # Q0 = |--> ⊗ |+i> = [1,i,-1,-i]/2
 
     ILDI R2, 0
     QKERNEL QFFT, Q0, Q0, R2, R2

@@ -13,10 +13,68 @@ mod rotation;
 mod diagonal;
 mod permutation;
 
-use cqam_core::circuit_ir::{self, ApplyGate1q, ApplyGate2q, Gate1q, Gate2q, Op, QWire};
+use cqam_core::circuit_ir::{self, ApplyGate1q, ApplyGate2q, Gate1q, Gate2q, Op, Param, QWire};
+use cqam_core::complex::C64;
 use cqam_core::instruction::{DistId, KernelId};
 use cqam_core::quantum_backend::KernelParams;
 use crate::error::MicroError;
+
+// =============================================================================
+// ZYZ Euler decomposition (shared utility for CustomUnitary handling)
+// =============================================================================
+
+/// ZYZ Euler decomposition of a 2x2 unitary matrix.
+///
+/// Returns `Some((theta, phi, lambda))` such that
+///   U = e^{ig} * U3(theta, phi, lambda)
+/// where U3(θ, φ, λ) = Rz(φ) * Ry(θ) * Rz(λ)
+///                    = | cos(θ/2)           -e^{iλ}*sin(θ/2) |
+///                      | e^{iφ}*sin(θ/2)     e^{i(φ+λ)}*cos(θ/2) |
+///
+/// Matrix layout (row-major): [a, b, c, d] where U = |a b|
+///                                                     |c d|
+///   phi    = arg(c) - arg(a)
+///   lambda = arg(b) - arg(a) - π
+fn decompose_zyz_2x2(mat: &[C64]) -> Option<(f64, f64, f64)> {
+    if mat.len() < 4 {
+        return None;
+    }
+    let a = mat[0]; // U[0,0]
+    let b = mat[1]; // U[0,1]
+    let c = mat[2]; // U[1,0]
+    let d = mat[3]; // U[1,1]
+
+    let a_norm = a.norm();
+    let theta = 2.0 * a_norm.clamp(0.0, 1.0).acos();
+
+    if theta.abs() < 1e-9 {
+        // theta ≈ 0: identity-like (U ≈ e^{ig} * diag(1, e^{i(φ+λ)}))
+        // Only φ+λ is observable; fix φ=arg(d)-arg(a), λ=0.
+        let arg_a = if a_norm < 1e-12 { 0.0 } else { a.1.atan2(a.0) };
+        let d_norm = d.norm();
+        let arg_d = if d_norm < 1e-12 { 0.0 } else { d.1.atan2(d.0) };
+        return Some((0.0, arg_d - arg_a, 0.0));
+    }
+
+    if (theta - std::f64::consts::PI).abs() < 1e-9 {
+        // theta ≈ pi: bit-flip-like; derive from b and c, fix lambda=0.
+        let b_norm = b.norm();
+        let c_norm = c.norm();
+        let arg_b = if b_norm < 1e-12 { 0.0 } else { b.1.atan2(b.0) };
+        let arg_c = if c_norm < 1e-12 { 0.0 } else { c.1.atan2(c.0) };
+        let phi = arg_c - arg_b - std::f64::consts::PI;
+        return Some((std::f64::consts::PI, phi, 0.0));
+    }
+
+    // General case: phi = arg(c) - arg(a), lambda = arg(b) - arg(a) - pi
+    let arg_a = if a_norm < 1e-12 { 0.0 } else { a.1.atan2(a.0) };
+    let b_norm = b.norm();
+    let c_norm = c.norm();
+    let arg_b = if b_norm < 1e-12 { 0.0 } else { b.1.atan2(b.0) };
+    let arg_c = if c_norm < 1e-12 { 0.0 } else { c.1.atan2(c.0) };
+
+    Some((theta, arg_c - arg_a, arg_b - arg_a - std::f64::consts::PI))
+}
 
 // =============================================================================
 // Top-level decomposition
@@ -56,10 +114,27 @@ pub fn decompose_to_standard(
                     out.push(g);
                 }
             }
-            Op::CustomUnitary { .. } => {
-                return Err(MicroError::UnsupportedGate {
-                    gate: "CustomUnitary".to_string(),
-                });
+            Op::CustomUnitary { wires, matrix } => {
+                if wires.len() == 1 {
+                    // Single-qubit custom unitary: ZYZ decompose to U3
+                    let (theta, phi, lambda) = decompose_zyz_2x2(matrix)
+                        .ok_or_else(|| MicroError::UnsupportedGate {
+                            gate: "CustomUnitary: degenerate 1q matrix".to_string(),
+                        })?;
+                    out.push(Op::Gate1q(ApplyGate1q {
+                        wire: wires[0],
+                        gate: Gate1q::U3(
+                            Param::Resolved(theta),
+                            Param::Resolved(phi),
+                            Param::Resolved(lambda),
+                        ),
+                    }));
+                } else {
+                    // Multi-qubit custom unitaries require KAK decomposition (future work)
+                    return Err(MicroError::UnsupportedGate {
+                        gate: format!("CustomUnitary ({}-qubit KAK decomposition not implemented)", wires.len()),
+                    });
+                }
             }
             Op::PrepProduct(pp) => {
                 // Decompose into one U3 gate per qubit
@@ -921,13 +996,102 @@ mod tests {
     }
 
     #[test]
-    fn test_decompose_custom_unitary_error() {
-        let mut mp = circuit_ir::MicroProgram::new(2);
+    fn test_decompose_custom_unitary_1q_succeeds() {
+        // A 1-qubit CustomUnitary is now ZYZ-decomposed to a U3 gate.
+        let mut mp = circuit_ir::MicroProgram::new(1);
         mp.push(Op::CustomUnitary {
             wires: vec![QWire(0)],
-            matrix: vec![C64::ONE; 4],
+            matrix: vec![C64::ONE, C64::ZERO, C64::ZERO, C64::ONE],
+        });
+        let result = decompose_to_standard(&mp).unwrap();
+        assert_eq!(result.ops.len(), 1);
+        assert!(matches!(&result.ops[0], Op::Gate1q(g) if matches!(g.gate, Gate1q::U3(_, _, _))));
+    }
+
+    #[test]
+    fn test_decompose_custom_unitary_2q_error() {
+        // Multi-qubit CustomUnitary is still unsupported (no KAK decomposition yet).
+        let mut mp = circuit_ir::MicroProgram::new(2);
+        mp.push(Op::CustomUnitary {
+            wires: vec![QWire(0), QWire(1)],
+            matrix: vec![C64::ONE; 16],
         });
         assert!(decompose_to_standard(&mp).is_err());
+    }
+
+    #[test]
+    fn test_decompose_custom_unitary_1q_rx_roundtrip() {
+        use std::f64::consts::PI;
+        // Rx(1.0) as a CustomUnitary should decompose to U3 with correct parameters.
+        let angle = 1.0_f64;
+        let c = (angle / 2.0).cos();
+        let s = (angle / 2.0).sin();
+        let rx_mat = vec![C64(c, 0.0), C64(0.0, -s), C64(0.0, -s), C64(c, 0.0)];
+
+        let mut mp = circuit_ir::MicroProgram::new(1);
+        mp.push(Op::CustomUnitary {
+            wires: vec![QWire(0)],
+            matrix: rx_mat.clone(),
+        });
+        let result = decompose_to_standard(&mp).unwrap();
+        assert_eq!(result.ops.len(), 1);
+
+        // Extract U3 parameters and verify the reconstructed matrix matches Rx(1.0)
+        if let Op::Gate1q(g) = &result.ops[0] {
+            if let Gate1q::U3(theta_p, phi_p, lambda_p) = &g.gate {
+                let t = theta_p.value().unwrap();
+                let p = phi_p.value().unwrap();
+                let l = lambda_p.value().unwrap();
+                // Reconstruct U3 matrix
+                let ct = (t / 2.0).cos();
+                let st = (t / 2.0).sin();
+                let el = C64::exp_i(l);
+                let ep = C64::exp_i(p);
+                let epl = C64::exp_i(p + l);
+                let u3 = vec![
+                    C64(ct, 0.0),
+                    C64(-el.0 * st, -el.1 * st),
+                    C64(ep.0 * st, ep.1 * st),
+                    C64(epl.0 * ct, epl.1 * ct),
+                ];
+                // Compare up to global phase: find phase from first nonzero pair
+                let mut phase = C64::ONE;
+                let mut found = false;
+                for i in 0..4 {
+                    let rx_norm = (rx_mat[i].0 * rx_mat[i].0 + rx_mat[i].1 * rx_mat[i].1).sqrt();
+                    let u3_norm = (u3[i].0 * u3[i].0 + u3[i].1 * u3[i].1).sqrt();
+                    if rx_norm > 1e-10 && u3_norm > 1e-10 {
+                        let conj = C64(rx_mat[i].0, -rx_mat[i].1);
+                        let num = C64(
+                            u3[i].0 * conj.0 - u3[i].1 * conj.1,
+                            u3[i].0 * conj.1 + u3[i].1 * conj.0,
+                        );
+                        let d = rx_mat[i].0 * rx_mat[i].0 + rx_mat[i].1 * rx_mat[i].1;
+                        phase = C64(num.0 / d, num.1 / d);
+                        found = true;
+                        break;
+                    }
+                }
+                assert!(found);
+                let mut frob_sq = 0.0;
+                for i in 0..4 {
+                    let pa = C64(phase.0 * rx_mat[i].0 - phase.1 * rx_mat[i].1,
+                                  phase.0 * rx_mat[i].1 + phase.1 * rx_mat[i].0);
+                    let d = C64(pa.0 - u3[i].0, pa.1 - u3[i].1);
+                    frob_sq += d.0 * d.0 + d.1 * d.1;
+                }
+                assert!(
+                    frob_sq.sqrt() < 1e-9,
+                    "Rx(1.0) CustomUnitary -> U3 reconstruction error too large: {}",
+                    frob_sq.sqrt()
+                );
+            } else {
+                panic!("Expected U3 gate, got {:?}", g.gate);
+            }
+        } else {
+            panic!("Expected Gate1q op");
+        }
+        let _ = PI; // suppress unused warning
     }
 
     // =========================================================================

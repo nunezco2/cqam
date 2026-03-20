@@ -102,6 +102,77 @@ static TDG_MAT: [C64; 4] = [
     C64(0.0, 0.0), C64(FRAC_1_SQRT_2, -FRAC_1_SQRT_2), // e^{-i*pi/4}
 ];
 
+/// ZYZ Euler decomposition of a 2x2 unitary matrix.
+///
+/// Decomposes U = e^{ig} * U3(theta, phi, lambda) where
+///   U3(θ, φ, λ) = Rz(φ) * Ry(θ) * Rz(λ)
+///               = | cos(θ/2)           -e^{iλ}*sin(θ/2) |
+///                 | e^{iφ}*sin(θ/2)     e^{i(φ+λ)}*cos(θ/2) |
+///
+/// Matrix layout (row-major): [a, b, c, d] where U = |a b|
+///                                                     |c d|
+///
+/// Derivation (with g = global phase):
+///   a = e^{ig} * cos(θ/2)           →  |a| = cos(θ/2),  arg(a) = g
+///   b = -e^{ig} * e^{iλ} * sin(θ/2) →  arg(b) = g + λ + π
+///   c = e^{ig} * e^{iφ} * sin(θ/2)  →  arg(c) = g + φ
+///   d = e^{ig} * e^{i(φ+λ)} * cos(θ/2)
+///
+/// Therefore:
+///   phi    = arg(c) - arg(a)
+///   lambda = arg(b) - arg(a) - π
+///
+/// Returns `Some((theta, phi, lambda))` for valid unitaries, `None` for degenerate matrices.
+fn decompose_zyz(mat: &[C64; 4]) -> Option<(f64, f64, f64)> {
+    let a = mat[0]; // U[0,0]
+    let b = mat[1]; // U[0,1]
+    let c = mat[2]; // U[1,0]
+    let d = mat[3]; // U[1,1]
+
+    let a_norm = a.norm();
+
+    // theta = 2 * acos(|a|), clamped for numerical safety
+    let theta = 2.0 * a_norm.clamp(0.0, 1.0).acos();
+
+    // Handle special cases based on theta
+    if theta.abs() < 1e-9 {
+        // theta ≈ 0: identity-like (U ≈ e^{ig} * diag(1, e^{i(φ+λ)}))
+        // Only the sum φ+λ is meaningful; fix φ=φ+λ and λ=0.
+        // phi+lambda = arg(d) - arg(a)
+        let arg_a = if a_norm < 1e-12 { 0.0 } else { a.1.atan2(a.0) };
+        let d_norm = d.norm();
+        let arg_d = if d_norm < 1e-12 { 0.0 } else { d.1.atan2(d.0) };
+        let phi = arg_d - arg_a;
+        return Some((0.0, phi, 0.0));
+    }
+
+    if (theta - std::f64::consts::PI).abs() < 1e-9 {
+        // theta ≈ pi: bit-flip-like (U ≈ e^{ig} * [[0, -e^{iλ}], [e^{iφ}, 0]])
+        // In this case |a| ≈ 0; derive phi and lambda from b and c.
+        // arg(c) = g + phi,  arg(b) = g + lambda + pi
+        // Fix lambda=0: phi = arg(c) - arg(b) - pi
+        let b_norm = b.norm();
+        let c_norm = c.norm();
+        let arg_b = if b_norm < 1e-12 { 0.0 } else { b.1.atan2(b.0) };
+        let arg_c = if c_norm < 1e-12 { 0.0 } else { c.1.atan2(c.0) };
+        let phi = arg_c - arg_b - std::f64::consts::PI;
+        return Some((std::f64::consts::PI, phi, 0.0));
+    }
+
+    // General case: all entries are non-negligible
+    // phi = arg(c) - arg(a),  lambda = arg(b) - arg(a) - pi
+    let arg_a = if a_norm < 1e-12 { 0.0 } else { a.1.atan2(a.0) };
+    let b_norm = b.norm();
+    let c_norm = c.norm();
+    let arg_b = if b_norm < 1e-12 { 0.0 } else { b.1.atan2(b.0) };
+    let arg_c = if c_norm < 1e-12 { 0.0 } else { c.1.atan2(c.0) };
+
+    let phi = arg_c - arg_a;
+    let lambda = arg_b - arg_a - std::f64::consts::PI;
+
+    Some((theta, phi, lambda))
+}
+
 fn recognize_gate1q(mat: &[C64; 4]) -> Gate1q {
     if mat4_close(mat, &H_MAT) { return Gate1q::H; }
     if mat4_close(mat, &X_MAT) { return Gate1q::X; }
@@ -111,6 +182,16 @@ fn recognize_gate1q(mat: &[C64; 4]) -> Gate1q {
     if mat4_close(mat, &SDG_MAT) { return Gate1q::Sdg; }
     if mat4_close(mat, &T_MAT) { return Gate1q::T; }
     if mat4_close(mat, &TDG_MAT) { return Gate1q::Tdg; }
+    // ZYZ Euler decomposition: any valid unitary becomes U3(theta, phi, lambda)
+    if let Some((theta, phi, lambda)) = decompose_zyz(mat) {
+        use cqam_core::circuit_ir::Param;
+        return Gate1q::U3(
+            Param::Resolved(theta),
+            Param::Resolved(phi),
+            Param::Resolved(lambda),
+        );
+    }
+    // Safety net: only reached for degenerate (non-unitary) matrices
     Gate1q::Custom(Box::new(*mat))
 }
 
@@ -575,8 +656,20 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
         merged_wires.extend(wires_b);
         let num_qubits = nq_a + nq_b;
 
-        // No op is pushed -- tensor product is wire-level bookkeeping only
+        // Invalidate consumed source handles
+        self.handle_wires.remove(&handle_a.0);
+        self.handle_wires.remove(&handle_b.0);
+        self.handle_num_qubits.remove(&handle_a.0);
+        self.handle_num_qubits.remove(&handle_b.0);
+        self.handle_dist.remove(&handle_a.0);
+        self.handle_dist.remove(&handle_b.0);
+        self.evolved_handles.remove(&handle_a.0);
+        self.evolved_handles.remove(&handle_b.0);
+
+        // No circuit op is pushed -- tensor product is wire-level bookkeeping.
         let handle = self.alloc_handle(merged_wires, num_qubits);
+        // Mark as evolved since the composite register should not be cloned
+        self.evolved_handles.insert(handle.0);
         Ok((handle, QOpResult { purity: 1.0, num_qubits }))
     }
 
@@ -813,11 +906,11 @@ mod tests {
         [C64(s, 0.0), C64(s, 0.0), C64(s, 0.0), C64(-s, 0.0)]
     }
 
-    // Helper: make unknown/custom gate matrix (identity-like but different)
-    fn custom_gate() -> [C64; 4] {
-        // This is the phase gate S, not an exact match for any named gate
-        // Actually let's use a clearly non-standard matrix
-        [C64(0.0, 1.0), C64(1.0, 0.0), C64(1.0, 0.0), C64(0.0, 1.0)]
+    // Helper: Rx(1.0) — an arbitrary rotation not matched by any named gate
+    fn rx_1_gate() -> [C64; 4] {
+        let c = (0.5_f64).cos();
+        let s = (0.5_f64).sin();
+        [C64(c, 0.0), C64(0.0, -s), C64(0.0, -s), C64(c, 0.0)]
     }
 
     fn cx_gate() -> [C64; 16] {
@@ -873,14 +966,19 @@ mod tests {
     }
 
     #[test]
-    fn test_apply_single_gate_custom_fallback() {
+    fn test_apply_single_gate_arbitrary_unitary_becomes_u3() {
+        // Arbitrary unitary (Rx(1.0)) that is not one of the 8 named gates should
+        // now be decomposed to Gate1q::U3 via ZYZ Euler decomposition.
         let mut cb = make_backend();
         let (h, _) = cb.prep(DistId::Zero, 1, false).unwrap();
-        let gate = custom_gate();
+        let gate = rx_1_gate();
         let _ = cb.apply_single_gate(h, 0, &gate).unwrap();
         let buf = cb.buffer.as_ref().unwrap();
         if let Op::Gate1q(g) = &buf.ops[1] {
-            assert!(matches!(g.gate, Gate1q::Custom(_)), "Unknown matrix should fall back to Custom");
+            assert!(
+                matches!(g.gate, Gate1q::U3(_, _, _)),
+                "Arbitrary unitary should be decomposed to U3, got {:?}", g.gate
+            );
         } else {
             panic!("Expected Gate1q op");
         }
@@ -1072,5 +1170,158 @@ mod tests {
         assert!(cloned.buffer.is_some());
         let _ = cloned.observe(h, ObserveMode::Dist, 0, 0).unwrap();
         assert!(cloned.buffer.is_none());
+    }
+
+    // =========================================================================
+    // ZYZ decomposition unit tests
+    // =========================================================================
+
+    /// Reconstruct the U3 matrix from (theta, phi, lambda) and compare with the
+    /// original matrix up to a global phase. Returns the max element-wise error.
+    fn u3_matrix(theta: f64, phi: f64, lambda: f64) -> [C64; 4] {
+        let c = (theta / 2.0).cos();
+        let s = (theta / 2.0).sin();
+        // U3 = |  cos(t/2)              -e^{il}*sin(t/2) |
+        //      |  e^{ip}*sin(t/2)        e^{i(p+l)}*cos(t/2) |
+        let el = C64::exp_i(lambda);
+        let ep = C64::exp_i(phi);
+        let epl = C64::exp_i(phi + lambda);
+        [
+            C64(c, 0.0),
+            C64(-el.0 * s, -el.1 * s),
+            C64(ep.0 * s, ep.1 * s),
+            C64(epl.0 * c, epl.1 * c),
+        ]
+    }
+
+    fn matrices_equal_up_to_phase(a: &[C64; 4], b: &[C64; 4], tol: f64) -> bool {
+        // Find first non-tiny entry in a to determine global phase
+        let mut phase = C64::ONE;
+        let mut found = false;
+        for i in 0..4 {
+            if a[i].norm() > 1e-10 && b[i].norm() > 1e-10 {
+                let a_conj = a[i].conj();
+                let num = C64(
+                    b[i].0 * a_conj.0 - b[i].1 * a_conj.1,
+                    b[i].0 * a_conj.1 + b[i].1 * a_conj.0,
+                );
+                let denom = a[i].norm_sq();
+                phase = C64(num.0 / denom, num.1 / denom);
+                found = true;
+                break;
+            }
+        }
+        if !found { return true; }
+
+        let mut frob_sq = 0.0;
+        for i in 0..4 {
+            let pa = C64(phase.0 * a[i].0 - phase.1 * a[i].1, phase.0 * a[i].1 + phase.1 * a[i].0);
+            let diff = C64(pa.0 - b[i].0, pa.1 - b[i].1);
+            frob_sq += diff.norm_sq();
+        }
+        frob_sq.sqrt() < tol
+    }
+
+    #[test]
+    fn test_decompose_zyz_identity() {
+        let id = [C64::ONE, C64::ZERO, C64::ZERO, C64::ONE];
+        let (theta, phi, lambda) = decompose_zyz(&id).unwrap();
+        // Identity: theta=0, any phi+lambda is OK (phi+lambda = 0 for real matrix)
+        assert!(theta.abs() < 1e-9, "identity: theta should be 0, got {}", theta);
+        let reconstructed = u3_matrix(theta, phi, lambda);
+        assert!(
+            matrices_equal_up_to_phase(&id, &reconstructed, 1e-9),
+            "identity: U3 reconstruction mismatch"
+        );
+    }
+
+    #[test]
+    fn test_decompose_zyz_hadamard() {
+        let (t, p, l) = decompose_zyz(&H_MAT).unwrap();
+        let reconstructed = u3_matrix(t, p, l);
+        assert!(
+            matrices_equal_up_to_phase(&H_MAT, &reconstructed, 1e-9),
+            "H: ZYZ U3 reconstruction mismatch (theta={t}, phi={p}, lambda={l})"
+        );
+    }
+
+    #[test]
+    fn test_decompose_zyz_x_gate() {
+        let (t, p, l) = decompose_zyz(&X_MAT).unwrap();
+        let reconstructed = u3_matrix(t, p, l);
+        assert!(
+            matrices_equal_up_to_phase(&X_MAT, &reconstructed, 1e-9),
+            "X: ZYZ U3 reconstruction mismatch"
+        );
+    }
+
+    #[test]
+    fn test_decompose_zyz_rx1() {
+        // Rx(1.0): theta_rx=1.0 => matrix = [[cos(0.5), -i*sin(0.5)], [-i*sin(0.5), cos(0.5)]]
+        let mat = rx_1_gate();
+        let (t, p, l) = decompose_zyz(&mat).unwrap();
+        let reconstructed = u3_matrix(t, p, l);
+        assert!(
+            matrices_equal_up_to_phase(&mat, &reconstructed, 1e-9),
+            "Rx(1.0): ZYZ reconstruction mismatch"
+        );
+    }
+
+    #[test]
+    fn test_decompose_zyz_ry_quarter_pi() {
+        use std::f64::consts::PI;
+        // Ry(pi/4)
+        let angle = PI / 4.0;
+        let c = (angle / 2.0).cos();
+        let s = (angle / 2.0).sin();
+        let mat = [C64(c, 0.0), C64(-s, 0.0), C64(s, 0.0), C64(c, 0.0)];
+        let (t, p, l) = decompose_zyz(&mat).unwrap();
+        let reconstructed = u3_matrix(t, p, l);
+        assert!(
+            matrices_equal_up_to_phase(&mat, &reconstructed, 1e-9),
+            "Ry(pi/4): ZYZ reconstruction mismatch"
+        );
+    }
+
+    #[test]
+    fn test_recognize_gate1q_rx_becomes_u3() {
+        // Rx(1.0) should no longer fall through to Custom; it should be U3.
+        let mat = rx_1_gate();
+        let gate = recognize_gate1q(&mat);
+        assert!(
+            matches!(gate, Gate1q::U3(_, _, _)),
+            "Rx matrix should be recognized as U3, got {:?}", gate
+        );
+    }
+
+    #[test]
+    fn test_recognize_gate1q_rz_becomes_u3() {
+        use std::f64::consts::PI;
+        // Rz(pi/3): diagonal [e^{-i*pi/6}, e^{i*pi/6}]
+        let angle = PI / 3.0;
+        let mat = [
+            C64::exp_i(-angle / 2.0), C64::ZERO,
+            C64::ZERO, C64::exp_i(angle / 2.0),
+        ];
+        let gate = recognize_gate1q(&mat);
+        assert!(
+            matches!(gate, Gate1q::U3(_, _, _)),
+            "Rz matrix should be recognized as U3, got {:?}", gate
+        );
+    }
+
+    #[test]
+    fn test_recognize_gate1q_ry_becomes_u3() {
+        use std::f64::consts::PI;
+        // Ry(pi/5)
+        let angle = PI / 5.0;
+        let c = (angle / 2.0).cos();
+        let s = (angle / 2.0).sin();
+        let mat = [C64(c, 0.0), C64(-s, 0.0), C64(s, 0.0), C64(c, 0.0)];
+        let gate = recognize_gate1q(&mat);
+        assert!(
+            matches!(gate, Gate1q::U3(_, _, _)),
+            "Ry matrix should be recognized as U3, got {:?}", gate
+        );
     }
 }

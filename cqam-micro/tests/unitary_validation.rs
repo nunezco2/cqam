@@ -288,14 +288,18 @@ fn make_controlled_u_params(
     power: u8,
     sub_param: f64,
 ) -> KernelParams {
-    let packed: i64 = ((control_qubit as i64) << 24)
-        | ((u8::from(sub_kernel_id) as i64) << 16)
-        | ((target_qubits as i64) << 8)
-        | (power as i64);
+    // New encoding: param0 = control qubit index, param1 = CMEM base (unused in tests),
+    // cmem_data = [sub_kernel_id, power, param_re_bits, param_im_bits, target_qubits]
     KernelParams::Int {
-        param0: packed,
-        param1: sub_param.to_bits() as i64,
-        cmem_data: vec![],
+        param0: control_qubit as i64,
+        param1: 0, // CMEM base (not used by decomposer)
+        cmem_data: vec![
+            u8::from(sub_kernel_id) as i64,
+            power as i64,
+            sub_param.to_bits() as i64,
+            0i64, // param_im_bits = 0.0
+            target_qubits as i64,
+        ],
     }
 }
 

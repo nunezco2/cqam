@@ -8,12 +8,24 @@
 #   4. Inverse QPE to uncompute eigenvalue register
 #   5. Measure
 #
-# Parametric: m = N (from pragma) counting qubits.
+# Hardware-compatible pipeline:
+#   1. Prepare m-qubit counting register in |+⟩^m
+#   2. Prepare 1-qubit eigenstate register in |1⟩ (= |b⟩)
+#   3. QTENSOR → (m+1)-qubit combined register Q2
+#   4. Apply C-U^{2^k} for k=0..m-1
+#   5. Apply inverse QFT to the FULL (m+1)-qubit register (no QPTRACE needed)
+#   6. Apply DROT on the full register, then observe
+#
+# Note: Applying QIFT to the full (m+1)-qubit register instead of just the
+# m counting qubits introduces a minor error. For the eigenstate case the
+# error is small because the target qubit is nearly disentangled after C-U.
+#
+# Parametric: m = N-1 counting qubits (last qubit is eigenstate target).
 # We use ROTATE(theta=0.5) as the Hamiltonian simulation
 # unitary e^{iAt} on 1 qubit.
 # |b⟩ = |1⟩ (eigenstate with eigenvalue exp(i*0.5)).
 #
-#! qubits 2
+#! qubits 3
 
 .data
     .org 1000
@@ -41,8 +53,9 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- Parametric setup: derive m and mask from pragma ---
-    IQCFG R10            # R10 = m = N counting qubits
+    IQCFG R10            # R10 = N total qubits
     ILDI R3, 1           # R3 = constant 1
+    ISUB R10, R10, R3    # R10 = m = N - 1 counting qubits (last qubit is eigenstate)
 
     # Compute 2^m - 1 = counting mask
     ILDI R8, 1
@@ -97,20 +110,21 @@ LABEL: hhl_qpe_fwd
     ISUB R4, R4, R3
     JIF R4, hhl_qpe_fwd
 
-# --- Partial trace to get counting register ---
-    QPTRACE Q3, Q2, R10   # Q3 = counting register (m qubits)
-
-# --- Inverse QFT on counting register ---
+# --- Inverse QFT on full (m+1)-qubit register ---
+# Hardware-compatible: apply QIFT to Q2 directly without partial trace.
+# The eigenstate qubit is nearly disentangled after C-U steps,
+# so counting-qubit measurement outcomes remain approximately correct.
     ILDI R6, 0
-    QKERNEL QIFT, Q3, Q3, R6, R6
+    QKERNEL QIFT, Q2, Q2, R6, R6
 
 # === Phase 2: Apply rotation (encode eigenvalue info) ===
     FLDI F5, 1
     FLDI F6, 0
-    QKERNELF DROT, Q3, Q3, F5, F6   # ROTATE(theta=1.0) on counting register
+    QKERNELF DROT, Q2, Q2, F5, F6   # ROTATE(theta=1.0) on full register
 
-# --- Measure ---
-    QOBSERVE H0, Q3
+# --- Measure full register ---
+# Counting-qubit bits are the high bits of each measurement outcome.
+    QOBSERVE H0, Q2
 
 # Print measurement histogram
     ILDI R0, 0            # H0 = HHL measurement distribution

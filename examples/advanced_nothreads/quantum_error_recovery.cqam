@@ -5,6 +5,10 @@
 # state via partial trace (purity < 1), catching the interrupt,
 # recovering, then applying a custom unitary and checking flags.
 #
+# NOTE: This program is simulation-only. It uses QPTRACE to create
+# mixed states and QMIXED for mixed state preparation — operations
+# that require density matrix access and cannot run on real hardware.
+#
 #! qubits 2
 
 .data

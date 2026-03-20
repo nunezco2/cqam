@@ -11,7 +11,7 @@
 # Also demonstrates multiple preparation methods:
 #   - Direct via QPREP with GHZ dist_id
 #   - Via entangle kernel on zero state
-#   - Via QENCODE with explicit amplitudes
+#   - Via QPREPSM with explicit amplitudes (hardware-compatible)
 #
 # Parametric: scales to any qubit count via IQCFG.
 # |1...1> = 2^N - 1 is computed dynamically.
@@ -19,6 +19,12 @@
 #! qubits 16
 
 .data
+    .org 500
+# QPREPSM amplitude data for Method 3: 1-qubit |+> state
+# .qstate format: alpha_re, alpha_im, beta_re, beta_im (must be normalized)
+qprepsm_amps_m3:
+    .qstate 0.7071067811865476, 0.0, 0.7071067811865476, 0.0  # qubit 0: |+>
+
     .org 1000
 banner:
     .ascii "=== GHZ Verification ===\n"
@@ -93,16 +99,18 @@ LABEL: ghz_pow2_done
     HREDUCE VARNC, H4, F7           # F7 = variance
 
 # ===============================================
-# Method 3: Build GHZ via QENCODE
+# Method 3: Build |+> state via QPREPSM (hardware-compatible)
 # ===============================================
-# GHZ = (|0> + |N-1>) / sqrt(2) as a statevector
-# For a 1-qubit toy version: amplitudes [1/sqrt(2), 1/sqrt(2)]
-# (Full N-qubit QENCODE would need 2^N registers — not feasible)
-# So we demonstrate 2-amplitude encoding (1 qubit) as proof of concept
-    FLDI F8, 1           # amplitude for |0>
-    FLDI F9, 1           # amplitude for |1>
-    QENCODE Q2, F8, 2, 1 # Q2 = normalized [1,1]/sqrt(2) = |+> (1 qubit)
-    QOBSERVE H5, Q2             # H5 = distribution of encoded state
+# Previously used QENCODE (simulation-only). Replaced with QPREPSM because
+# the target state |+> = (|0>+|1>)/sqrt(2) is a 1-qubit product state.
+# .qstate alpha_re, alpha_im, beta_re, beta_im:
+#   qubit 0: alpha=(1/sqrt(2), 0), beta=(1/sqrt(2), 0) → |+>
+# QENCODE Q2, F8, 2, 1 was: normalized [1,1]/sqrt(2) = |+> (1 qubit)
+    QPREP Q2, 1                  # allocate 1-qubit zero state
+    ILDI R8, @qprepsm_amps_m3    # CMEM base address of amplitude data
+    ILDI R9, 1                   # qubit count
+    QPREPSM Q2, R8, R9           # Q2 = |+> = (|0>+|1>)/sqrt(2)
+    QOBSERVE H5, Q2              # H5 = distribution of encoded state
     HREDUCE MEANT, H5, F10  # F10 = mean of encoded state
 
 # ===============================================
