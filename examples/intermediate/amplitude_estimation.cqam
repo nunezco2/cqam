@@ -6,8 +6,9 @@
 #   1. Grover iterations of increasing depth (2^k iterations for k-th bit)
 #   2. QFT to extract the phase encoding the amplitude
 #
-# This is a key subroutine in quantum counting, Monte Carlo estimation,
-# and many quantum machine learning algorithms.
+# Hardware-compatible: uses DIST mode instead of AMP mode.
+# Characterizes phase via distribution statistics rather than
+# density matrix off-diagonal elements.
 #
 #! qubits 16
 
@@ -51,8 +52,6 @@ LABEL: ae_outer_loop
 
 # Compute 2^k iterations: R5 = 1 << R4
     ILDI R5, 1
-# Manual shift: use multiplication loop since ISHL needs immediate
-# For k=0: 1 iter, k=1: 2 iters, k=2: 4 iters, k=3: 8 iters
     ILDI R6, 0           # R6 = shift counter
 LABEL: shift_loop
     IEQ R7, R6, R4       # R7 = (R6 == R4)
@@ -71,22 +70,20 @@ LABEL: grover_inner
     ISUB R5, R5, R3              # iterations--
     JIF R5, grover_inner
 
-# Runs blind — no mid-step observation (physical realism)
-    ISTR R4, 100                 # CMEM[100+?] = k (limited addressing)
+    ISTR R4, 100                 # CMEM[100+?] = k
 
 # --- Apply QFT to extract phase information ---
     QKERNEL QFFT, Q1, Q0, R1, R1   # QFT of Grover-amplified state
 
-# Extract density matrix element for phase analysis
-    ILDI R9, 0
-    ILDI R10, 1
-    QOBSERVE H2, Q1, 2, R9, R10 # rho[0][1] = off-diagonal coherence
-    HREDUCE MAGNI, H2, F2            # F2 = magnitude of coherence
-    HREDUCE PHASE, H2, F3            # F3 = phase of coherence
-    HREDUCE CONJZ, H2, Z0           # Z0 = conjugate of coherence
+# --- Observe distribution (hardware-compatible) ---
+# Previously used AMP mode for rho[0][1] coherence. Replaced with
+# DIST mode: the phase is encoded in the distribution peak.
+    QOBSERVE H2, Q1
+    HREDUCE ARGMX, H2, R9       # R9 = peak frequency bin
+    HREDUCE MEANT, H2, F2       # F2 = mean frequency
 
 # Store phase information
-    FSTR F3, 120         # Phase at depth k
+    FSTR F2, 120         # Mean frequency at depth k
 
 # --- Advance outer loop ---
     IADD R4, R4, R3      # k++

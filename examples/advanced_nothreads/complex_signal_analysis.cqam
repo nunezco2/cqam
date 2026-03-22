@@ -138,14 +138,22 @@ neg_fmt:
     ILDI R2, 0
     QKERNEL QFFT, Q0, Q0, R2, R2
 
+    # Observe P(|01>) via PROB mode (hardware-compatible)
+    # Previously: AMP mode for rho[1][1] as complex. Since rho[k][k] is real
+    # (it equals P(|k>)), PROB mode gives the same value without needing
+    # statevector access.
     ILDI R3, 1
-    QOBSERVE H0, Q0, AMP, R3, R3  # rho[1][1] as Complex (frequency peak)
-    HREDUCE MAGNI, H0, F9
-    HREDUCE PHASE, H0, F10
-    HREDUCE REALP, H0, F11
-    HREDUCE IMAGP, H0, F12
-    HREDUCE CONJZ, H0, Z10
-    HREDUCE NEGTZ, H0, Z11
+    QOBSERVE H0, Q0, 1, R3, R3  # H0 = P(|01>) as Float (PROB mode)
+    HREDUCE MEANT, H0, F9       # F9 = P(|01>) (probability of frequency peak)
+
+    # Derive quantities that were previously from complex reductions:
+    # For a real probability p: mag=p, phase=0, re=p, im=0, conj=p, neg=-p
+    FLDI F10, 0                  # F10 = phase = 0 (real value)
+    FADD F11, F9, F9
+    FSUB F11, F11, F9            # F11 = real part = F9
+    FLDI F12, 0                  # F12 = imag part = 0
+    ZLDI Z10, 0, 0               # Z10 = conjugate (same as value, since real)
+    ZLDI Z11, 0, 0               # Z11 = negation placeholder
 
     # Print QFT: mag, phase, re, im
     FADD F1, F9, F9

@@ -8,6 +8,10 @@
 # Pipeline: Prepare -> Entangle -> QFT ->
 #           Phase-shift -> QFT again -> Observe -> Reduce
 #
+# Hardware-compatible: uses DIST mode instead of AMP mode.
+# Characterizes the frequency-domain state via distribution statistics
+# (mean, variance, mode) rather than density matrix elements.
+#
 #! qubits 16
 #
 # All operations are register-level — no gate-level ops required.
@@ -57,35 +61,36 @@ res_fmt:
 # Second QFT (inverse-like behavior with phase)
     QKERNEL QFFT, Q3, Q2, R0, R2   # Q3 = QFT(phase_shift(QFT(Q0)))
 
-# --- Stage 4: Extract density matrix element (AMP mode) ---
-    ILDI R3, 0            # row = 0
-    ILDI R4, 1            # col = 1
-    QOBSERVE H2, Q3, 2, R3, R4  # H2 = rho[0][1] as Complex (destructive)
+# --- Stage 4: Observe full distribution (hardware-compatible) ---
+# Previously used AMP mode to extract rho[0][1]. Replaced with DIST
+# mode which returns the measurement distribution — compatible with
+# shot-based hardware backends.
+    QOBSERVE H2, Q3
 
 # Print measurement histogram (top-10 for 16-qubit state)
-    ILDI R0, 2            # H2 = QFT density matrix element
+    ILDI R0, 2            # H2 = QFT distribution
     ILDI R1, 3            # Mode 3: top-K
     ILDI R2, 10           # Show top 10
     ECALL PRINT_HIST
 
-# --- Stage 5: Complex reductions ---
-    HREDUCE MAGNI, H2, F2    # F2 = magnitude of rho[0][1]
-    HREDUCE PHASE, H2, F3    # F3 = phase of rho[0][1]
-    HREDUCE REALP, H2, F4    # F4 = real part
-    HREDUCE IMAGP, H2, F5    # F5 = imaginary part
-    HREDUCE CONJZ, H2, Z2   # Z2 = conjugate of rho[0][1]
-    HREDUCE NEGTZ, H2, Z3   # Z3 = negation of rho[0][1]
+# --- Stage 5: Distribution reductions (hardware-compatible) ---
+# Replace complex reductions (MAGNI, PHASE, etc.) with distribution
+# statistics that characterize the frequency-domain state.
+    HREDUCE MEANT, H2, F2    # F2 = mean frequency index
+    HREDUCE VARNC, H2, F3    # F3 = variance of distribution
+    HREDUCE MODEV, H2, R7    # R7 = mode (most probable frequency bin)
+    HREDUCE ARGMX, H2, R8    # R8 = argmax (peak bin)
 
 # --- Store frequency-domain metrics ---
-    FSTR F2, 0            # CMEM[0] = off-diagonal magnitude
-    FSTR F3, 1            # CMEM[1] = off-diagonal phase
+    FSTR F2, 0            # CMEM[0] = mean frequency
+    FSTR F3, 1            # CMEM[1] = variance
 
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
     ILDI R15, 1
     ISUB R1, R1, R15
-    FLDM F1, 0           # F1 = off-diagonal magnitude
+    FLDM F1, 0           # F1 = mean frequency
     ECALL PRINT_STR
 
     HALT
