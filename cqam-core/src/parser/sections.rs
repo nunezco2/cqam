@@ -72,9 +72,31 @@ pub(crate) fn parse_data_section(lines: &[(usize, &str)]) -> Result<DataSection,
         } else if let Some(rest) = line.strip_prefix(".ascii") {
             parse_ascii_directive(rest.trim_start_matches('z'), line_num, &mut ds.cells)?;
         } else if let Some(rest) = line.strip_prefix(".i64") {
-            parse_i64_directive(rest, line_num, &mut ds.cells)?;
+            // .i64 supports continuation: trailing ',' continues on the next line.
+            let mut combined = rest.to_string();
+            while combined.trim_end().ends_with(',') && i < lines.len() {
+                let (_, next_raw) = lines[i];
+                let next = strip_comments(next_raw).trim();
+                if next.is_empty() { i += 1; continue; }
+                if next.starts_with('.') || next.ends_with(':') { break; }
+                i += 1;
+                combined.push_str(", ");
+                combined.push_str(next);
+            }
+            parse_i64_directive(&combined, line_num, &mut ds.cells)?;
         } else if let Some(rest) = line.strip_prefix(".f64") {
-            parse_f64_directive(rest, line_num, &mut ds.cells)?;
+            // .f64 supports continuation: trailing ',' continues on the next line.
+            let mut combined = rest.to_string();
+            while combined.trim_end().ends_with(',') && i < lines.len() {
+                let (_, next_raw) = lines[i];
+                let next = strip_comments(next_raw).trim();
+                if next.is_empty() { i += 1; continue; }
+                if next.starts_with('.') || next.ends_with(':') { break; }
+                i += 1;
+                combined.push_str(", ");
+                combined.push_str(next);
+            }
+            parse_f64_directive(&combined, line_num, &mut ds.cells)?;
         } else if let Some(rest) = line.strip_prefix(".c64") {
             // .c64 supports continuation: if a line ends with ',', the next
             // non-empty, non-comment line is a continuation of the same directive.
