@@ -1,0 +1,132 @@
+# Coined Quantum Walk — 10 qubits (1 coin + 9 position = 512-node cycle)
+#
+# Parametric version that computes the shift permutation table dynamically.
+# dim = 2^10 = 1024 entries stored at CMEM[200..1223].
+#
+# For state index k in 0..1023:
+#   coin = k >> 9   (MSB, qubit 0)
+#   pos  = k & 511  (lower 9 bits)
+#   if coin == 0: new_pos = (pos - 1) mod 512   (left shift)
+#   if coin == 1: new_pos = (pos + 1) mod 512   (right shift)
+#   sigma(k) = (coin << 9) | new_pos
+#
+#! qubits 10
+
+.data
+    .org 2000
+banner:
+    .ascii "=== Quantum Walk 10q (512-node cycle) ===\n"
+res_fmt:
+    .ascii "Results: mode=%d, variance=%f\n"
+
+.code
+    ILDI R15, 1
+
+# --- Banner ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+# ===========================================================================
+# Build the shift permutation table at CMEM[200..1223]
+# ===========================================================================
+# p = 9 (position qubits), dim = 2^10 = 1024, half = 512
+    ILDI R10, 512          # half = 2^p = number of positions
+    ILDI R11, 200          # base address for permutation table
+
+# --- Coin=0 sector (k=0..511): left shift ---
+# sigma(k) = (k - 1) mod 512
+# sigma(0) = 511, sigma(1) = 0, sigma(2) = 1, ...
+    ILDI R2, 0             # R2 = k (loop counter)
+LABEL: build_left
+    IEQ R14, R2, R10       # if k == 512, done with left sector
+    JIF R14, build_left_done
+
+    # new_pos = (k - 1) mod 512
+    IEQ R14, R2, R15       # special check: is k == 1? (no, check k==0)
+    ILDI R3, 0
+    IEQ R14, R2, R3        # is k == 0?
+    JIF R14, left_wrap      # yes -> wrap around
+
+    # General case: sigma(k) = k - 1
+    ISUB R5, R2, R15
+    JMP left_store
+
+LABEL: left_wrap
+    # sigma(0) = 511
+    ISUB R5, R10, R15      # R5 = 512 - 1 = 511
+
+LABEL: left_store
+    # CMEM[base + k] = sigma(k)
+    IADD R6, R11, R2       # R6 = address = base + k
+    ISTRX R5, R6           # CMEM[R6] = R5
+    IADD R2, R2, R15       # k++
+    JMP build_left
+
+LABEL: build_left_done
+
+# --- Coin=1 sector (k=512..1023): right shift ---
+# sigma(k) = 512 + (pos + 1) mod 512, where pos = k - 512
+    ILDI R2, 0             # R2 = pos (0..511)
+LABEL: build_right
+    IEQ R14, R2, R10       # if pos == 512, done
+    JIF R14, build_right_done
+
+    # new_pos = (pos + 1) mod 512
+    IADD R5, R2, R15       # R5 = pos + 1
+    IEQ R14, R5, R10       # is pos+1 == 512?
+    JIF R14, right_wrap
+
+    # General case: sigma = 512 + (pos + 1)
+    IADD R5, R5, R10       # R5 = 512 + (pos+1)
+    JMP right_store
+
+LABEL: right_wrap
+    # sigma(511) = 512 + 0 = 512
+    IADD R5, R10, R3       # R5 = 512 (R3 = 0 from earlier)
+
+LABEL: right_store
+    # CMEM[base + 512 + pos] = sigma
+    IADD R6, R11, R10      # R6 = base + 512
+    IADD R6, R6, R2        # R6 = base + 512 + pos
+    ISTRX R5, R6           # CMEM[R6] = R5
+    IADD R2, R2, R15       # pos++
+    JMP build_right
+
+LABEL: build_right_done
+
+# ===========================================================================
+# Walk: 5 steps (kept short for hardware feasibility)
+# ===========================================================================
+    ILDI R4, 1             # R4 = coin qubit mask (qubit 0 = MSB)
+    ILDI R8, 200           # R8 = base address of permutation
+    ILDI R9, 0             # R9 = unused context
+    ILDI R7, 5             # R7 = remaining steps
+
+# Initialize walker at position 0, coin |0>
+    QPREP Q0, 1            # Q0 = |0000000000>
+
+# Initial coin flip
+    QHADM Q0, Q0, R4
+
+# Walk loop
+LABEL: walk_loop
+    QHADM Q0, Q0, R4       # Coin flip
+    QKERNEL PERM, Q0, Q0, R8, R9  # Shift permutation
+    ISUB R7, R7, R15
+    JIF R7, walk_loop
+
+# ===========================================================================
+# Final measurement
+# ===========================================================================
+    QOBSERVE H0, Q0
+    HREDUCE MODEV, H0, R2
+    HREDUCE VARNC, H0, F1
+
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    ISUB R1, R1, R15
+    ECALL PRINT_STR
+
+    HALT

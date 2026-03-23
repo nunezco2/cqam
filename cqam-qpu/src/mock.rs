@@ -215,8 +215,51 @@ impl QpuBackend for MockQpuBackend {
             }
         }
 
-        // 4. Compute probabilities
-        let probs: Vec<f64> = sv.iter().map(|c| c.norm_sq()).collect();
+        // 4. Compute probabilities over the full statevector.
+        let full_probs: Vec<f64> = sv.iter().map(|c| c.norm_sq()).collect();
+
+        // 4b. Project probabilities onto measured qubits.
+        //
+        // Collect which physical qubits are measured (and their classical bit
+        // positions) from any Measure ops in the circuit.  If there are no
+        // Measure ops, fall back to measuring all n qubits (preserving prior
+        // behaviour).  When Measure ops are present, compute the marginal
+        // distribution over only those qubits so that ancilla qubits added by
+        // the decomposition pipeline do not corrupt the classical result.
+        let measured: Vec<(u32, u32)> = circuit.ops.iter()
+            .filter_map(|op| if let Op::Measure(obs) = op {
+                Some((obs.qubit.0, obs.clbit))
+            } else {
+                None
+            })
+            .collect();
+
+        let probs: Vec<f64> = if measured.is_empty() {
+            // No Measure ops: sample the full state (legacy behaviour).
+            full_probs
+        } else {
+            // Determine the number of classical bits = max clbit + 1.
+            let n_cbits = measured.iter().map(|&(_, c)| c + 1).max().unwrap_or(0) as usize;
+            let n_states = 1usize << n_cbits;
+            let mut marginal = vec![0.0f64; n_states];
+
+            for (state_idx, &p) in full_probs.iter().enumerate() {
+                // Compute the classical bitstring for this quantum state.
+                // clbit k gets the value of the physical qubit assigned to it.
+                let mut classical = 0u64;
+                for &(phys_q, clbit) in &measured {
+                    // In big-endian convention: qubit phys_q controls bit (n-1-phys_q).
+                    let qubit_bit = (state_idx >> (n - 1 - phys_q as u32) as usize) & 1;
+                    if qubit_bit != 0 {
+                        // clbit 0 = MSB of classical register (big-endian classical).
+                        classical |= 1u64 << (n_cbits - 1 - clbit as usize);
+                    }
+                }
+                marginal[classical as usize] += p;
+            }
+
+            marginal
+        };
 
         // 5. Adaptive shot sampling with BayesianEstimator
         let mut estimator = BayesianEstimator::new(convergence.clone());

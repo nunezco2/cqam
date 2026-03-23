@@ -95,6 +95,27 @@ pub fn decompose_to_standard(
 ) -> Result<circuit_ir::MicroProgram, MicroError> {
     let mut out = circuit_ir::MicroProgram::new(program.num_wires);
     out.wire_map = program.wire_map.clone();
+
+    // Pre-allocate one shared ancilla qubit if the program contains any
+    // Grover/Diffuse kernels on >= 4 qubits. The ancilla is shared across
+    // ALL such kernels in the buffer — it starts and ends in |0> after each
+    // MCZ call, so reuse is safe.
+    let needs_ancilla = program.ops.iter().any(|op| {
+        if let Op::Kernel(k) = op {
+            matches!(k.kernel, KernelId::Diffuse | KernelId::GroverIter)
+                && k.wires.len() >= 4
+        } else {
+            false
+        }
+    });
+    let shared_ancilla: Option<QWire> = if needs_ancilla {
+        let a = QWire(out.num_wires);
+        out.num_wires += 1;
+        Some(a)
+    } else {
+        None
+    };
+
     for op in &program.ops {
         match op {
             Op::Prep(p) => {
@@ -110,7 +131,9 @@ pub fn decompose_to_standard(
                 }
             }
             Op::Kernel(k) => {
-                let gates = decompose_kernel(&k.wires, &k.kernel, &k.params)?;
+                let gates = decompose_kernel_with_ancilla(
+                    &k.wires, &k.kernel, &k.params, shared_ancilla,
+                )?;
                 for g in gates {
                     out.push(g);
                 }
@@ -203,7 +226,34 @@ fn decompose_prep_dist(wires: &[QWire], dist: DistId) -> Vec<Op> {
     }
 }
 
-/// Dispatch to the appropriate kernel decomposer.
+/// Dispatch to the appropriate kernel decomposer, passing the pre-allocated
+/// shared ancilla for Grover/Diffuse kernels that need one (n >= 4 wires).
+///
+/// The ancilla is allocated once per buffer in `decompose_to_standard` and
+/// shared across all Grover/Diffuse kernels in that buffer. This prevents
+/// spurious ancilla accumulation when multiple Grover iterations appear
+/// in the same circuit buffer.
+fn decompose_kernel_with_ancilla(
+    wires: &[QWire],
+    kernel: &KernelId,
+    params: &KernelParams,
+    shared_ancilla: Option<QWire>,
+) -> Result<Vec<Op>, MicroError> {
+    match kernel {
+        KernelId::Diffuse | KernelId::GroverIter => {
+            // Use shared ancilla when n >= 4 (O(n) V-chain path needs it).
+            let ancilla = if wires.len() >= 4 { shared_ancilla } else { None };
+            match kernel {
+                KernelId::Diffuse    => grover::decompose_diffuse(wires, params, ancilla),
+                KernelId::GroverIter => grover::decompose_grover(wires, params, ancilla),
+                _ => unreachable!(),
+            }
+        }
+        _ => decompose_kernel(wires, kernel, params),
+    }
+}
+
+/// Dispatch to the appropriate kernel decomposer (no ancilla allocation).
 pub(super) fn decompose_kernel(
     wires: &[QWire],
     kernel: &KernelId,
@@ -214,8 +264,8 @@ pub(super) fn decompose_kernel(
         KernelId::Entangle    => decompose_entangle(wires, params),
         KernelId::Fourier     => fourier::decompose_fourier(wires, params),
         KernelId::FourierInv  => fourier::decompose_fourier_inv(wires, params),
-        KernelId::Diffuse     => grover::decompose_diffuse(wires, params),
-        KernelId::GroverIter  => grover::decompose_grover(wires, params),
+        KernelId::Diffuse     => grover::decompose_diffuse(wires, params, None),
+        KernelId::GroverIter  => grover::decompose_grover(wires, params, None),
         KernelId::Rotate      => rotation::decompose_rotate(wires, params),
         KernelId::PhaseShift  => rotation::decompose_phase_shift(wires, params),
         KernelId::ControlledU => rotation::decompose_controlled_u(wires, params),
@@ -783,7 +833,7 @@ mod tests {
     fn test_decompose_diffuse_2q() {
         let wires = make_wires(2);
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: vec![] };
-        let ops = grover::decompose_diffuse(&wires, &params).unwrap();
+        let ops = grover::decompose_diffuse(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 2);
         let ref_u = kernel_unitary(&Diffuse, 2);
@@ -795,7 +845,7 @@ mod tests {
     fn test_decompose_diffuse_3q() {
         let wires = make_wires(3);
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: vec![] };
-        let ops = grover::decompose_diffuse(&wires, &params).unwrap();
+        let ops = grover::decompose_diffuse(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 3);
         let ref_u = kernel_unitary(&Diffuse, 3);
@@ -811,7 +861,7 @@ mod tests {
     fn test_decompose_grover_2q_target0() {
         let wires = make_wires(2);
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: vec![] };
-        let ops = grover::decompose_grover(&wires, &params).unwrap();
+        let ops = grover::decompose_grover(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 2);
         let ref_u = kernel_unitary(&GroverIter::single(0), 2);
@@ -823,7 +873,7 @@ mod tests {
     fn test_decompose_grover_2q_target3() {
         let wires = make_wires(2);
         let params = KernelParams::Int { param0: 3, param1: 0, cmem_data: vec![] };
-        let ops = grover::decompose_grover(&wires, &params).unwrap();
+        let ops = grover::decompose_grover(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 2);
         let ref_u = kernel_unitary(&GroverIter::single(3), 2);
@@ -835,7 +885,7 @@ mod tests {
     fn test_decompose_grover_3q_multi() {
         let wires = make_wires(3);
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: vec![2, 5] };
-        let ops = grover::decompose_grover(&wires, &params).unwrap();
+        let ops = grover::decompose_grover(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 3);
         let ref_u = kernel_unitary(&GroverIter::multi(vec![2, 5]), 3);
@@ -1075,7 +1125,7 @@ mod tests {
         let controls = &wires[0..3]; // wires 0,1,2 as controls
         let target = wires[3];       // wire 3 as target
 
-        let ops = decompose_multi_cx(controls, target);
+        let ops = decompose_multi_cx(controls, target, None);
         // MCX should flip the target when all controls are |1>.
         // State |1111> (index 15) should map to |1110> (index 14) and vice versa.
         // All other states should be unchanged.
@@ -1208,7 +1258,7 @@ mod tests {
         let controls = vec![wires[2], wires[1], wires[0]];
         let target = wires[3];
 
-        let ops = decompose_multi_cx(&controls, target);
+        let ops = decompose_multi_cx(&controls, target, None);
         let n = 4u8;
         let dim = 16usize;
         for col in 0..dim {
@@ -1240,7 +1290,7 @@ mod tests {
         let mut ops = Vec::new();
         // pre-X for bits 1,2,3 (all are 0 in a=0):
         ops.push(x(w2)); ops.push(x(w1)); ops.push(x(w0));
-        ops.extend(decompose_multi_cx(&control_wires, target_wire));
+        ops.extend(decompose_multi_cx(&control_wires, target_wire, None));
         ops.push(x(w2)); ops.push(x(w1)); ops.push(x(w0));
 
         let n = 4u8;

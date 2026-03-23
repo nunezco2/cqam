@@ -156,7 +156,7 @@ fn decompose_single_bit_transposition(
 
     let mut ops = Vec::new();
     ops.extend(pre_x);
-    ops.extend(decompose_multi_cx(&control_wires, wires[target_wire]));
+    ops.extend(decompose_multi_cx(&control_wires, wires[target_wire], None));
     ops.extend(post_x);
     ops
 }
