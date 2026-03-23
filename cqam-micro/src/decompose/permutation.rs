@@ -16,14 +16,14 @@ use super::grover::decompose_multi_cx;
 
 /// Decompose a permutation kernel into gates.
 ///
-/// Limited to n <= 4 qubits in Phase 2. Uses cycle decomposition into
+/// Supports up to n <= 10 qubits. Uses cycle decomposition into
 /// transpositions, then decomposes each transposition.
 pub fn decompose_permutation(wires: &[QWire], params: &KernelParams) -> Result<Vec<Op>, MicroError> {
     let n = wires.len();
-    if n > 4 {
+    if n > 10 {
         return Err(MicroError::DecompositionFailed {
             kernel: "Permutation".to_string(),
-            detail: format!("Phase 2 supports n <= 4, got {}", n),
+            detail: format!("Permutation decomposition supports n <= 10, got {}", n),
         });
     }
     if n == 0 {

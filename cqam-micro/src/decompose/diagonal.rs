@@ -1,7 +1,6 @@
 //! DiagonalUnitary kernel decomposer.
 //!
-//! Implements the Walsh-Hadamard Rz+CNOT staircase decomposition for
-//! diagonal unitary matrices.
+//! Implements the Walsh-Hadamard Rz+CNOT synthesis for diagonal unitary matrices.
 
 use cqam_core::circuit_ir::{Op, QWire};
 use cqam_core::quantum_backend::KernelParams;
@@ -13,7 +12,7 @@ use super::params::extract_int_params;
 // Kernel: DiagonalUnitary
 // =============================================================================
 
-/// Decompose a diagonal unitary using the Walsh-Hadamard Rz+CNOT staircase.
+/// Decompose a diagonal unitary using the Walsh-Hadamard Rz+CNOT synthesis.
 ///
 /// Limited to n <= 4 qubits in Phase 2. Returns an error for larger sizes.
 pub fn decompose_diagonal_unitary(wires: &[QWire], params: &KernelParams) -> Result<Vec<Op>, MicroError> {
@@ -49,84 +48,113 @@ pub fn decompose_diagonal_unitary(wires: &[QWire], params: &KernelParams) -> Res
 /// Convert a phase vector into an Rz+CNOT gate sequence implementing
 /// the diagonal unitary diag(e^{i*phases[0]}, ..., e^{i*phases[2^n-1]}).
 ///
-/// Uses recursive demultiplexing. Returns (ops, global_phase) where
-/// global_phase is the common phase factor that was factored out.
+/// Uses the Walsh-Hadamard synthesis. This is exact up to a global phase.
 ///
-/// Big-endian convention: qubit 0 (wires[0]) is MSB.
+/// Convention: wires[0] is the MSB qubit. phases[k] is indexed where
+/// the MSB of k corresponds to wires[0] and LSB to wires[n-1].
+///
+/// The implementation may introduce an overall global phase (uniform
+/// phase on all basis states), which is physically unobservable.
 pub(super) fn diagonal_to_gates(wires: &[QWire], phases: &[f64]) -> Vec<Op> {
-    let (ops, _global_phase) = diagonal_to_gates_inner(wires, phases);
-    ops
+    let n = wires.len();
+    if n == 0 || phases.is_empty() {
+        return vec![];
+    }
+    let dim = 1usize << n;
+    assert_eq!(phases.len(), dim, "phases length must equal 2^n");
+
+    // Compute Walsh-Hadamard coefficients alpha[k] such that:
+    //   phases[j] = sum_k alpha[k] * (-1)^{popcount(j & k)}
+    //
+    // Each alpha[k] (for k >= 1) corresponds to the operator
+    //   exp(i * alpha[k] * Z_{b0} otimes ... otimes Z_{bm-1})
+    // where {b0,...,bm-1} are the bits set in k.
+    //
+    // Implementation: for each k with bits {b0,...,bm-1}, pick the
+    // lowest bit as "target" and the rest as "sources". Apply CX from
+    // each source to the target (this XORs the parity of all set bits
+    // onto the target), apply Rz(-2*alpha[k]) on the target, then undo
+    // the CX gates. This is self-inverse, so the undo is the same set
+    // of CX gates in the same order.
+    //
+    // Rz convention: Rz(t) = diag(e^{-it/2}, e^{+it/2}).
+    // For a target qubit holding parity p = parity(j & k) in {0,1}:
+    //   p=0 → phase e^{-i*(-alpha)} = e^{+i*alpha} = exp(i*alpha*(-1)^0). ✓
+    //   p=1 → phase e^{+i*(-alpha)} = e^{-i*alpha} = exp(i*alpha*(-1)^1). ✓
+    // So Rz(-2*alpha) correctly implements exp(i*alpha*(-1)^{parity}).
+    let alpha = wht_coefficients(phases);
+    direct_parity_synthesis(wires, &alpha)
 }
 
-/// Inner recursive function that returns (ops, global_phase).
-/// The global phase is the average of all input phases, which is factored
-/// out and must be applied by the caller (via Rz on the control qubit).
-fn diagonal_to_gates_inner(wires: &[QWire], phases: &[f64]) -> (Vec<Op>, f64) {
-    let n = wires.len();
-    if n == 0 {
-        return (vec![], 0.0);
-    }
-
-    let dim = 1usize << n;
-    let global_phase: f64 = phases.iter().sum::<f64>() / dim as f64;
-
-    // Base case: single qubit.
-    // Rz(theta) = diag(e^{-i*theta/2}, e^{i*theta/2}).
-    // theta = phases[1] - phases[0].
-    // Global phase = (phases[0] + phases[1]) / 2.
-    if n == 1 {
-        let theta = phases[1] - phases[0];
-        let mut ops = Vec::new();
-        if theta.abs() > 1e-15 {
-            ops.push(rz(wires[0], theta));
+/// Compute Walsh-Hadamard coefficients.
+/// alpha[k] = (1/dim) * sum_j phases[j] * (-1)^{popcount(j & k)}
+fn wht_coefficients(phases: &[f64]) -> Vec<f64> {
+    let dim = phases.len();
+    let mut alpha = phases.to_vec();
+    // In-place fast Walsh-Hadamard transform (butterfly).
+    let mut h = 1;
+    while h < dim {
+        for i in (0..dim).step_by(h * 2) {
+            for j in i..(i + h) {
+                let x = alpha[j];
+                let y = alpha[j + h];
+                alpha[j] = x + y;
+                alpha[j + h] = x - y;
+            }
         }
-        return (ops, global_phase);
+        h *= 2;
     }
+    // Normalize.
+    let inv_dim = 1.0 / dim as f64;
+    for a in alpha.iter_mut() {
+        *a *= inv_dim;
+    }
+    alpha
+}
 
-    // Recursive case: n qubits.
-    // Split phases into upper half (q0=0) and lower half (q0=1).
-    let half = 1 << (n - 1);
-    let phi_upper = &phases[..half];    // q0 = 0
-    let phi_lower = &phases[half..];    // q0 = 1
-
-    // Compute sum (common) and difference (conditional) phase vectors.
-    let sum_phases: Vec<f64> = (0..half).map(|k| (phi_upper[k] + phi_lower[k]) / 2.0).collect();
-    let diff_phases: Vec<f64> = (0..half).map(|k| (phi_lower[k] - phi_upper[k]) / 2.0).collect();
-
-    let sub_wires = &wires[1..]; // qubits 1..n-1
-
+/// Direct parity synthesis of diagonal unitary from WHT coefficients.
+///
+/// For each k from 1..dim with nonzero alpha[k]:
+///   1. Let target_bit = lowest set bit of k, sources = all other set bits of k.
+///      Big-endian mapping: bit b → wires[n-1-b].
+///   2. Apply CX(source → target) for each source bit (computes parity onto target).
+///   3. Apply Rz(-2*alpha[k]) on target_wire.
+///   4. Apply the same CX gates again to undo (CX is self-inverse).
+///
+/// This is O(n * 2^n) CX gates but is guaranteed correct: the target qubit
+/// always holds the exact parity of the bits in k, regardless of qubit state
+/// modifications from prior steps, because we explicitly compute it fresh.
+fn direct_parity_synthesis(wires: &[QWire], alpha: &[f64]) -> Vec<Op> {
+    let n = wires.len();
+    let dim = 1usize << n;
     let mut ops = Vec::new();
 
-    // 1. Recursively decompose the sum phases on sub-qubits.
-    let (sum_ops, _sum_global) = diagonal_to_gates_inner(sub_wires, &sum_phases);
-    ops.extend(sum_ops);
+    for k in 1..dim {
+        let angle = -2.0 * alpha[k];
+        if angle.abs() <= 1e-15 {
+            continue;
+        }
 
-    // 2. CX(q0, q_{n-1}) to entangle with the control qubit.
-    ops.push(cx(wires[0], wires[n - 1]));
+        // Collect all bit positions set in k (LSB=0).
+        let bits: Vec<usize> = (0..n).filter(|&b| (k >> b) & 1 == 1).collect();
 
-    // 3. Recursively decompose the diff phases on sub-qubits.
-    //    The CX flips the last sub-qubit when q0=1, so the diff circuit
-    //    sees state |k XOR 1> instead of |k>. To compensate, we reorder
-    //    the diff phases: diff_reordered[k] = diff[k XOR 1].
-    let reordered_diff: Vec<f64> = (0..half).map(|k| diff_phases[k ^ 1]).collect();
-    let (diff_ops, diff_global) = diagonal_to_gates_inner(sub_wires, &reordered_diff);
-    ops.extend(diff_ops);
+        // Target = lowest set bit of k; sources = the rest.
+        let target_bit = bits[0];
+        let source_bits = &bits[1..];
 
-    // 4. Apply the global phase of the diff decomposition on q0.
-    //    This global phase is not truly global -- it's the average of the
-    //    diff phases, which only applies when q0=1 (via the CX sandwich).
-    //    Rz(2*diff_global) on q0 adds +diff_global when q0=1 and
-    //    -diff_global when q0=0.
-    //    But we want: +diff_global when q0=1, 0 when q0=0.
-    //    So we use Rz(2*diff_global) on q0, which gives us the desired
-    //    conditional phase (the -diff_global on q0=0 becomes part of
-    //    *our* global phase that the parent handles).
-    if diff_global.abs() > 1e-15 {
-        ops.push(rz(wires[0], 2.0 * diff_global));
+        // Big-endian: bit b → wires[n-1-b]
+        let target_wire = wires[n - 1 - target_bit];
+
+        // Build CX(source → target) for each source bit.
+        let cx_ops: Vec<Op> = source_bits.iter()
+            .map(|&sb| cx(wires[n - 1 - sb], target_wire))
+            .collect();
+
+        // Apply CX gates to compute parity, then Rz, then CX again to undo.
+        ops.extend_from_slice(&cx_ops);
+        ops.push(rz(target_wire, angle));
+        ops.extend_from_slice(&cx_ops);
     }
 
-    // 5. CX(q0, q_{n-1}) to undo the entanglement.
-    ops.push(cx(wires[0], wires[n - 1]));
-
-    (ops, global_phase)
+    ops
 }

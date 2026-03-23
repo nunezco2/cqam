@@ -232,6 +232,20 @@ fn reconstruct_sub_params(
                 param1: cqam_core::complex::C64::ZERO,
             })
         }
+        KernelId::Permutation => {
+            // cmem_data[5..] contains the permutation table entries.
+            // The table has 2^target_qubits entries.
+            let table_data: Vec<i64> = if cmem_data.len() > 5 {
+                cmem_data[5..].to_vec()
+            } else {
+                vec![]
+            };
+            Ok(KernelParams::Int {
+                param0: 0,
+                param1: 0,
+                cmem_data: table_data,
+            })
+        }
         _ => Err(MicroError::DecompositionFailed {
             kernel: "ControlledU".to_string(),
             detail: format!(

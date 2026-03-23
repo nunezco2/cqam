@@ -969,6 +969,307 @@ mod tests {
             "Permutation 2q [0,2,1,3] unitary mismatch");
     }
 
+    #[test]
+    fn test_decompose_permutation_3q_cycle() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(3);
+        // Cyclic shift: |k> -> |(k+1) mod 8>
+        let table = vec![1i64, 2, 3, 4, 5, 6, 7, 0];
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let decomp_u = gate_sequence_unitary(&ops, 3);
+        let perm = Permutation::new(vec![1, 2, 3, 4, 5, 6, 7, 0]).unwrap();
+        let ref_u = kernel_unitary(&perm, 3);
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-10),
+            "Permutation 3q cyclic shift unitary mismatch");
+    }
+
+    #[test]
+    fn test_decompose_permutation_3q_disjoint_swaps() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(3);
+        // Swap (0,1) and (2,3), rest fixed: [1,0,3,2,4,5,6,7]
+        let table = vec![1i64, 0, 3, 2, 4, 5, 6, 7];
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let decomp_u = gate_sequence_unitary(&ops, 3);
+        let perm = Permutation::new(vec![1, 0, 3, 2, 4, 5, 6, 7]).unwrap();
+        let ref_u = kernel_unitary(&perm, 3);
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-10),
+            "Permutation 3q disjoint swaps unitary mismatch");
+    }
+
+    #[test]
+    fn test_decompose_permutation_4q_walk_shift() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(4);
+        // 4-qubit (1 coin + 3 position = 8-node cycle)
+        // Coin=0 (left shift): sigma(k) = (k-1) mod 8 for k=0..7
+        // Coin=1 (right shift): sigma(k) = 8 + (k-8+1) mod 8 for k=8..15
+        let table = vec![
+            7i64, 0, 1, 2, 3, 4, 5, 6,   // coin=0: left shift
+            9, 10, 11, 12, 13, 14, 15, 8, // coin=1: right shift
+        ];
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let decomp_u = gate_sequence_unitary(&ops, 4);
+        let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
+        let ref_u = kernel_unitary(&perm, 4);
+        // Tolerance 1e-6: accumulated floating-point error from hundreds of Rz gates
+        // in the multi-CX decomposition chains grows with gate count.
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-6),
+            "Permutation 4q walk shift unitary mismatch");
+    }
+
+    #[test]
+    fn test_decompose_permutation_5q_walk_shift() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(5);
+        // 5-qubit (1 coin + 4 position = 16-node cycle)
+        // Coin=0 (left shift): sigma(k) = (k-1) mod 16 for k=0..15
+        // Coin=1 (right shift): sigma(k) = 16 + (k-16+1) mod 16 for k=16..31
+        let table: Vec<i64> = vec![
+            15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 16,
+        ];
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let decomp_u = gate_sequence_unitary(&ops, 5);
+        let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
+        let ref_u = kernel_unitary(&perm, 5);
+        // Tolerance 1e-5: accumulated floating-point error from thousands of Rz gates
+        // in the multi-CX decomposition chains grows with gate count.
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-5),
+            "Permutation 5q walk shift unitary mismatch");
+    }
+
+    #[test]
+    fn test_decompose_permutation_5q_gate_count() {
+        let wires = make_wires(5);
+        let table: Vec<i64> = vec![
+            15, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14,
+            17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 16,
+        ];
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        assert!(!ops.is_empty(), "5q walk shift should not be empty");
+        assert!(ops.len() < 50_000, "gate count {} exceeds sanity bound", ops.len());
+    }
+
+    #[test]
+    fn test_decompose_permutation_too_large() {
+        let wires = make_wires(11);
+        let dim = 1usize << 11;
+        let table: Vec<i64> = (0..dim as i64).collect();
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
+        let result = permutation::decompose_permutation(&wires, &params);
+        assert!(result.is_err());
+    }
+
+    /// Diagnostic: verify MCX(3 controls) correctly swaps |1110> and |1111>.
+    /// This is the single-bit transposition (14, 15) in a 4-qubit system.
+    #[test]
+    fn test_mcx_3controls_correctness() {
+        use super::grover::decompose_multi_cx;
+        let wires = make_wires(4);
+        let controls = &wires[0..3]; // wires 0,1,2 as controls
+        let target = wires[3];       // wire 3 as target
+
+        let ops = decompose_multi_cx(controls, target);
+        // MCX should flip the target when all controls are |1>.
+        // State |1111> (index 15) should map to |1110> (index 14) and vice versa.
+        // All other states should be unchanged.
+        let n = 4u8;
+        let dim = 16usize;
+        for col in 0..dim {
+            let mut amps = vec![C64::ZERO; dim];
+            amps[col] = C64::ONE;
+            let result = apply_ops_to_sv(&amps, &ops, n);
+            let expected_col = if col == 15 { 14 } else if col == 14 { 15 } else { col };
+            let mut expected = vec![C64::ZERO; dim];
+            expected[expected_col] = C64::ONE;
+            // Allow global phase
+            let ok = unitaries_equal_up_to_phase(&result, &expected, 1e-9);
+            assert!(ok, "MCX(3ctrl) wrong on input |{:04b}>: got nonzero at unexpected position", col);
+        }
+    }
+
+    /// Diagnostic: test a simple 4-qubit single transposition (0,15) to isolate
+    /// whether decompose_transposition produces the correct circuit.
+    #[test]
+    fn test_4q_single_transposition_0_15() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(4);
+        // Permutation: swap states |0000>=0 and |1111>=15, rest fixed.
+        let mut table: Vec<i64> = (0..16).collect();
+        table[0] = 15;
+        table[15] = 0;
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let decomp_u = gate_sequence_unitary(&ops, 4);
+        let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
+        let ref_u = kernel_unitary(&perm, 4);
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-9),
+            "4q single transposition (0,15) unitary mismatch");
+    }
+
+    /// Diagnostic: test a 4-qubit permutation with a single 4-cycle to see
+    /// at what cycle length correctness breaks.
+    #[test]
+    fn test_4q_4cycle() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(4);
+        // 4-cycle: 0->1->2->3->0, rest fixed
+        let mut table: Vec<i64> = (0..16).collect();
+        table[0] = 1; table[1] = 2; table[2] = 3; table[3] = 0;
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let decomp_u = gate_sequence_unitary(&ops, 4);
+        let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
+        let ref_u = kernel_unitary(&perm, 4);
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-9),
+            "4q 4-cycle unitary mismatch");
+    }
+
+    /// Diagnostic: test a 4-qubit SWAP of adjacent states (0,1) - uses 3 control bits, all 0-controlled.
+    #[test]
+    fn test_4q_swap_0_1() {
+        use cqam_sim::kernels::permutation::Permutation;
+        let wires = make_wires(4);
+        let mut table: Vec<i64> = (0..16).collect();
+        table[0] = 1; table[1] = 0;
+        let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
+        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        println!("4q swap (0,1): {} gates", ops.len());
+        let decomp_u = gate_sequence_unitary(&ops, 4);
+        let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
+        let ref_u = kernel_unitary(&perm, 4);
+        // Debug: print the first few rows if there's a mismatch
+        if !unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-9) {
+            println!("MISMATCH in 4q swap (0,1):");
+            for row in 0..4 {
+                println!("  decomp row {}: {:?}", row,
+                    (0..4).map(|c| decomp_u[row*16+c]).collect::<Vec<_>>());
+                println!("  ref    row {}: {:?}", row,
+                    (0..4).map(|c| ref_u[row*16+c]).collect::<Vec<_>>());
+            }
+            // Print phase of each diagonal element
+            println!("Diagonal phases (decomp vs ref):");
+            for i in 0..16 {
+                let d = decomp_u[i*16+i];
+                let r = ref_u[i*16+i];
+                if d.norm() > 1e-9 || r.norm() > 1e-9 {
+                    println!("  [{},{}]: decomp={:?} phase={:.4}, ref={:?}",
+                        i, i, d, d.1.atan2(d.0), r);
+                }
+            }
+        }
+        assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-9),
+            "4q swap (0,1) unitary mismatch");
+    }
+
+    /// Diagnostic: verify diagonal_to_gates directly for MCZ phases (4 wires).
+    #[test]
+    fn test_diagonal_to_gates_mcz_4wire() {
+        use std::f64::consts::PI;
+        use super::diagonal::diagonal_to_gates;
+        // All-zero phases except last entry = π. Should implement MCZ (up to global phase).
+        let wires = make_wires(4);
+        let mut phases = vec![0.0f64; 16];
+        phases[15] = PI;
+        let ops = diagonal_to_gates(&wires, &phases);
+        let decomp_u = gate_sequence_unitary(&ops, 4);
+        // Check diagonal: should be all e^{ig} except entry 15 = e^{i(π+g)} for some global g
+        let phase_0 = decomp_u[0].1.atan2(decomp_u[0].0); // phase of [0,0]
+        println!("MCZ diagonal phases (should be uniform except entry 15 diff by π):");
+        let mut ok = true;
+        for i in 0..16 {
+            let d = decomp_u[i*16+i];
+            let phase_i = d.1.atan2(d.0);
+            let diff = (phase_i - phase_0).abs() % (2.0 * std::f64::consts::PI);
+            let diff = if diff > std::f64::consts::PI { 2.0*std::f64::consts::PI - diff } else { diff };
+            let expected_diff = if i == 15 { std::f64::consts::PI } else { 0.0 };
+            println!("  [{},{}]: phase={:.4} diff_from_0={:.4} expected={:.4}", i, i, phase_i, diff, expected_diff);
+            if (diff - expected_diff).abs() > 1e-9 {
+                ok = false;
+            }
+        }
+        assert!(ok, "diagonal_to_gates MCZ 4-wire has wrong phases");
+    }
+
+    /// Diagnostic: verify standalone MCX([w2,w1,w0], w3) works correctly.
+    /// This tests the SAME control order used by decompose_single_bit_transposition.
+    #[test]
+    fn test_mcx_reversed_controls() {
+        use super::grover::decompose_multi_cx;
+        let wires = make_wires(4);
+        // Controls in reverse order: [w2, w1, w0], target = w3
+        // Should still flip w3 when w0=w1=w2=1 (i.e., state |1110> <-> |1111>)
+        let controls = vec![wires[2], wires[1], wires[0]];
+        let target = wires[3];
+
+        let ops = decompose_multi_cx(&controls, target);
+        let n = 4u8;
+        let dim = 16usize;
+        for col in 0..dim {
+            let mut amps = vec![C64::ZERO; dim];
+            amps[col] = C64::ONE;
+            let result = apply_ops_to_sv(&amps, &ops, n);
+            let expected_col = if col == 15 { 14 } else if col == 14 { 15 } else { col };
+            let mut expected = vec![C64::ZERO; dim];
+            expected[expected_col] = C64::ONE;
+            let ok = unitaries_equal_up_to_phase(&result, &expected, 1e-9);
+            assert!(ok, "MCX(rev) wrong on input |{:04b}>: got {:?}", col, result);
+        }
+    }
+
+    /// Diagnostic: test the MCX with X-bracket (the transposition building block).
+    /// Directly tests what decompose_single_bit_transposition does for (0,1) swap.
+    #[test]
+    fn test_transposition_building_block_0_1() {
+        use super::helpers::x;
+        use super::grover::decompose_multi_cx;
+        // Manually build the circuit for transposing |0000>=0 and |0001>=1 in 4 qubits.
+        // target_bit = 0 (LSB), target_wire = 3, control bits = 1,2,3 (all must be 0 in a/b)
+        let wires = make_wires(4);
+        // a = 0, so all control bits (1,2,3) are 0 → we need X-bracket on control wires
+        let w0 = wires[0]; let w1 = wires[1]; let w2 = wires[2]; let w3 = wires[3];
+        let target_wire = w3;
+        let control_wires = vec![w2, w1, w0]; // matches decompose_single_bit_transposition order
+
+        let mut ops = Vec::new();
+        // pre-X for bits 1,2,3 (all are 0 in a=0):
+        ops.push(x(w2)); ops.push(x(w1)); ops.push(x(w0));
+        ops.extend(decompose_multi_cx(&control_wires, target_wire));
+        ops.push(x(w2)); ops.push(x(w1)); ops.push(x(w0));
+
+        let n = 4u8;
+        let dim = 16;
+        let decomp_u = gate_sequence_unitary(&ops, n);
+        println!("transposition (0,1) building block unitary (first 4x4):");
+        for row in 0..4 {
+            let phases: Vec<f64> = (0..4).map(|c| {
+                let v = decomp_u[row*16+c];
+                if v.norm() > 1e-9 { v.1.atan2(v.0) } else { 0.0 }
+            }).collect();
+            println!("  row {}: {:?}", row, (0..4).map(|c| decomp_u[row*16+c]).collect::<Vec<_>>());
+            println!("         phases: {:?}", phases);
+        }
+        // The transposition should: 0<->1, all others fixed (up to global phase)
+        for col in 0..dim {
+            let mut amps = vec![C64::ZERO; dim];
+            amps[col] = C64::ONE;
+            let result = apply_ops_to_sv(&amps, &ops, n);
+            let expected_col = if col == 0 { 1 } else if col == 1 { 0 } else { col };
+            let mut expected = vec![C64::ZERO; dim];
+            expected[expected_col] = C64::ONE;
+            let ok = unitaries_equal_up_to_phase(&result, &expected, 1e-9);
+            assert!(ok, "transposition (0,1) wrong on input |{:04b}>={}. result: {:?}",
+                col, col, result.iter().enumerate().filter(|(_, v)| v.norm() > 1e-9)
+                    .map(|(i, v)| (i, *v)).collect::<Vec<_>>());
+        }
+    }
+
     // =========================================================================
     // Passthrough tests
     // =========================================================================
