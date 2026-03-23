@@ -97,12 +97,12 @@ pub fn decompose_to_standard(
     out.wire_map = program.wire_map.clone();
 
     // Pre-allocate one shared ancilla qubit if the program contains any
-    // Grover/Diffuse kernels on >= 4 qubits. The ancilla is shared across
-    // ALL such kernels in the buffer — it starts and ends in |0> after each
-    // MCZ call, so reuse is safe.
+    // Grover/Diffuse/Permutation kernels on >= 4 qubits. The ancilla is shared
+    // across ALL such kernels in the buffer — it starts and ends in |0> after
+    // each MCX/MCZ call, so reuse is safe.
     let needs_ancilla = program.ops.iter().any(|op| {
         if let Op::Kernel(k) = op {
-            matches!(k.kernel, KernelId::Diffuse | KernelId::GroverIter)
+            matches!(k.kernel, KernelId::Diffuse | KernelId::GroverIter | KernelId::Permutation)
                 && k.wires.len() >= 4
         } else {
             false
@@ -239,16 +239,12 @@ fn decompose_kernel_with_ancilla(
     params: &KernelParams,
     shared_ancilla: Option<QWire>,
 ) -> Result<Vec<Op>, MicroError> {
+    // Use shared ancilla when n >= 4 (O(n) V-chain path needs it).
+    let ancilla = if wires.len() >= 4 { shared_ancilla } else { None };
     match kernel {
-        KernelId::Diffuse | KernelId::GroverIter => {
-            // Use shared ancilla when n >= 4 (O(n) V-chain path needs it).
-            let ancilla = if wires.len() >= 4 { shared_ancilla } else { None };
-            match kernel {
-                KernelId::Diffuse    => grover::decompose_diffuse(wires, params, ancilla),
-                KernelId::GroverIter => grover::decompose_grover(wires, params, ancilla),
-                _ => unreachable!(),
-            }
-        }
+        KernelId::Diffuse    => grover::decompose_diffuse(wires, params, ancilla),
+        KernelId::GroverIter => grover::decompose_grover(wires, params, ancilla),
+        KernelId::Permutation => permutation::decompose_permutation(wires, params, ancilla),
         _ => decompose_kernel(wires, kernel, params),
     }
 }
@@ -270,7 +266,7 @@ pub(super) fn decompose_kernel(
         KernelId::PhaseShift  => rotation::decompose_phase_shift(wires, params),
         KernelId::ControlledU => rotation::decompose_controlled_u(wires, params),
         KernelId::DiagonalUnitary => diagonal::decompose_diagonal_unitary(wires, params),
-        KernelId::Permutation => permutation::decompose_permutation(wires, params),
+        KernelId::Permutation => permutation::decompose_permutation(wires, params, None),
     }
 }
 
@@ -984,7 +980,7 @@ mod tests {
         let wires = make_wires(1);
         let table = vec![1i64, 0];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 1);
         let perm = Permutation::new(vec![1, 0]).unwrap();
@@ -998,7 +994,7 @@ mod tests {
         let wires = make_wires(2);
         let table = vec![0i64, 1, 2, 3];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
         assert!(ops.is_empty(), "Identity permutation should produce no gates");
     }
 
@@ -1010,7 +1006,7 @@ mod tests {
         // Swap states |01> and |10>: table = [0, 2, 1, 3]
         let table = vec![0i64, 2, 1, 3];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
 
         let decomp_u = gate_sequence_unitary(&ops, 2);
         let perm = Permutation::new(vec![0, 2, 1, 3]).unwrap();
@@ -1026,7 +1022,7 @@ mod tests {
         // Cyclic shift: |k> -> |(k+1) mod 8>
         let table = vec![1i64, 2, 3, 4, 5, 6, 7, 0];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
         let decomp_u = gate_sequence_unitary(&ops, 3);
         let perm = Permutation::new(vec![1, 2, 3, 4, 5, 6, 7, 0]).unwrap();
         let ref_u = kernel_unitary(&perm, 3);
@@ -1041,7 +1037,7 @@ mod tests {
         // Swap (0,1) and (2,3), rest fixed: [1,0,3,2,4,5,6,7]
         let table = vec![1i64, 0, 3, 2, 4, 5, 6, 7];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
         let decomp_u = gate_sequence_unitary(&ops, 3);
         let perm = Permutation::new(vec![1, 0, 3, 2, 4, 5, 6, 7]).unwrap();
         let ref_u = kernel_unitary(&perm, 3);
@@ -1061,12 +1057,22 @@ mod tests {
             9, 10, 11, 12, 13, 14, 15, 8, // coin=1: right shift
         ];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
-        let decomp_u = gate_sequence_unitary(&ops, 4);
+        let ancilla = QWire(4);
+        let ops = permutation::decompose_permutation(&wires, &params, Some(ancilla)).unwrap();
+        // Simulate on 5 qubits (4 + ancilla), project out ancilla=|0>
+        let total_n = 5u8;
+        let dim_full = 1usize << total_n;
+        let dim_n = 1usize << 4usize;
+        let u_full = gate_sequence_unitary(&ops, total_n);
+        let indices: Vec<usize> = (0..dim_full).filter(|i| i % 2 == 0).collect();
+        let mut decomp_u = vec![C64::ZERO; dim_n * dim_n];
+        for (ri, &row) in indices.iter().enumerate() {
+            for (ci, &col) in indices.iter().enumerate() {
+                decomp_u[ri * dim_n + ci] = u_full[row * dim_full + col];
+            }
+        }
         let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
         let ref_u = kernel_unitary(&perm, 4);
-        // Tolerance 1e-6: accumulated floating-point error from hundreds of Rz gates
-        // in the multi-CX decomposition chains grows with gate count.
         assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-6),
             "Permutation 4q walk shift unitary mismatch");
     }
@@ -1083,12 +1089,22 @@ mod tests {
             17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 16,
         ];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
-        let decomp_u = gate_sequence_unitary(&ops, 5);
+        let ancilla = QWire(5);
+        let ops = permutation::decompose_permutation(&wires, &params, Some(ancilla)).unwrap();
+        // Simulate on 6 qubits (5 + ancilla), project out ancilla=|0>
+        let total_n = 6u8;
+        let dim_full = 1usize << total_n;
+        let dim_n = 1usize << 5usize;
+        let u_full = gate_sequence_unitary(&ops, total_n);
+        let indices: Vec<usize> = (0..dim_full).filter(|i| i % 2 == 0).collect();
+        let mut decomp_u = vec![C64::ZERO; dim_n * dim_n];
+        for (ri, &row) in indices.iter().enumerate() {
+            for (ci, &col) in indices.iter().enumerate() {
+                decomp_u[ri * dim_n + ci] = u_full[row * dim_full + col];
+            }
+        }
         let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
         let ref_u = kernel_unitary(&perm, 5);
-        // Tolerance 1e-5: accumulated floating-point error from thousands of Rz gates
-        // in the multi-CX decomposition chains grows with gate count.
         assert!(unitaries_equal_up_to_phase(&decomp_u, &ref_u, 1e-5),
             "Permutation 5q walk shift unitary mismatch");
     }
@@ -1101,7 +1117,8 @@ mod tests {
             17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 16,
         ];
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ancilla = QWire(5);
+        let ops = permutation::decompose_permutation(&wires, &params, Some(ancilla)).unwrap();
         assert!(!ops.is_empty(), "5q walk shift should not be empty");
         assert!(ops.len() < 50_000, "gate count {} exceeds sanity bound", ops.len());
     }
@@ -1112,7 +1129,7 @@ mod tests {
         let dim = 1usize << 11;
         let table: Vec<i64> = (0..dim as i64).collect();
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table };
-        let result = permutation::decompose_permutation(&wires, &params);
+        let result = permutation::decompose_permutation(&wires, &params, None);
         assert!(result.is_err());
     }
 
@@ -1155,7 +1172,7 @@ mod tests {
         table[0] = 15;
         table[15] = 0;
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
         let decomp_u = gate_sequence_unitary(&ops, 4);
         let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
         let ref_u = kernel_unitary(&perm, 4);
@@ -1173,7 +1190,7 @@ mod tests {
         let mut table: Vec<i64> = (0..16).collect();
         table[0] = 1; table[1] = 2; table[2] = 3; table[3] = 0;
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
         let decomp_u = gate_sequence_unitary(&ops, 4);
         let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
         let ref_u = kernel_unitary(&perm, 4);
@@ -1189,7 +1206,7 @@ mod tests {
         let mut table: Vec<i64> = (0..16).collect();
         table[0] = 1; table[1] = 0;
         let params = KernelParams::Int { param0: 0, param1: 0, cmem_data: table.clone() };
-        let ops = permutation::decompose_permutation(&wires, &params).unwrap();
+        let ops = permutation::decompose_permutation(&wires, &params, None).unwrap();
         println!("4q swap (0,1): {} gates", ops.len());
         let decomp_u = gate_sequence_unitary(&ops, 4);
         let perm = Permutation::new(table.iter().map(|&v| v as usize).collect()).unwrap();
