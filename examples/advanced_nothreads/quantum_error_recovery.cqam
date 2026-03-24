@@ -1,34 +1,30 @@
-# quantum_error_recovery.cqam — Quantum error ISR, QCUSTOM, QPTRACE,
-#                                DF/CF flags, QPREPN, QMIXED
+# quantum_error_recovery.cqam — Quantum error ISR, QHADM, QMEAS,
+#                                DF/CF flags, QPREPN
 #
-# Exercises the quantum error interrupt system by creating a mixed
-# state via partial trace (purity < 1), catching the interrupt,
-# recovering, then applying a custom unitary and checking flags.
+# Exercises the quantum error interrupt system by:
+#   1. Preparing a Bell state (entangled, high purity)
+#   2. Mid-circuit measurement on one qubit (causes decoherence on hardware)
+#   3. Checking DF (decoherence flag) and triggering ISR if set
+#   4. Applying Hadamard via QHADM and verifying CF (collapse flag)
+#   5. Final measurement with HREDUCE statistics
 #
-# NOTE: This program is simulation-only. It uses QPTRACE to create
-# mixed states and QMIXED for mixed state preparation — operations
-# that require density matrix access and cannot run on real hardware.
+# Hardware-compatible: uses QMEAS instead of QPTRACE for decoherence,
+# and QHADM instead of QCUSTOM for Hadamard.
 #
 #! qubits 2
 
 .data
-    .org 200
-# 2x2 Hadamard matrix for QCUSTOM (row-major complex entries)
-hadamard:
-    .c64 0.7071067811865J0.0, 0.7071067811865J0.0,
-         0.7071067811865J0.0, -0.7071067811865J0.0
-
     .org 1000
 banner:
     .ascii "=== Quantum Error Recovery ===\n"
 bell_msg:
     .ascii "Bell state prepared\n"
-ptrace_msg:
-    .ascii "Partial trace: mixed state\n"
+meas_msg:
+    .ascii "Mid-circuit measurement (decoherence source)\n"
 trap_msg:
     .ascii "Quantum error trap handled\n"
-custom_msg:
-    .ascii "Custom Hadamard applied\n"
+hadamard_msg:
+    .ascii "Hadamard applied via QHADM\n"
 df_fmt:
     .ascii "DF=%d CF=%d\n"
 res_fmt:
@@ -38,6 +34,8 @@ res_fmt:
     ILDI R15, 1
 
 # --- Register quantum error ISR ---
+# Vector 1 = QuantumError interrupt. If purity drops below threshold
+# (e.g., from QMEAS decoherence), this handler is invoked.
     SETIV 1, qerr_handler
 
 # --- Banner ---
@@ -47,26 +45,32 @@ res_fmt:
     ECALL PRINT_STR
 
 # ============================================
-# Prepare Bell state
+# Prepare Bell state (entangled, purity = 1.0)
 # ============================================
-    QPREP Q0, 2                  # Bell |Phi+>
+    QPREP Q0, 2                  # Bell |Phi+> = (|00> + |11>)/sqrt(2)
     ILDI R0, @bell_msg
     ILDI R1, @bell_msg.len
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
 # ============================================
-# QPTRACE: trace out qubit 1 → maximally mixed
+# Mid-circuit measurement: measure qubit 1
+# On hardware, this collapses qubit 1 and partially
+# decoheres the entangled state. On the simulator,
+# QMEAS returns outcome 0 or 1 and may reduce purity.
+# This replaces QPTRACE which was simulation-only.
 # ============================================
-    QPTRACE Q1, Q0, R15          # Q1 = Tr_B(Bell) = I/2
-    ILDI R0, @ptrace_msg
-    ILDI R1, @ptrace_msg.len
+    ILDI R4, 1                   # qubit index 1
+    QMEAS R6, Q0, R4             # measure qubit 1 → R6
+    ILDI R0, @meas_msg
+    ILDI R1, @meas_msg.len
     ISUB R1, R1, R15
     ECALL PRINT_STR
-    # If fidelity threshold configured, this may trigger ISR
 
 # ============================================
 # Check DF flag (decoherence)
+# After mid-circuit measurement, the DF flag may be set
+# if purity dropped below the configured threshold.
 # ============================================
     JMPF DF, df_set
     ILDI R8, 0
@@ -76,21 +80,23 @@ LABEL: df_set
 LABEL: after_df
 
 # ============================================
-# QCUSTOM: apply Hadamard via arbitrary unitary
+# Apply Hadamard via QHADM (hardware-compatible)
+# Previously used QCUSTOM with a stored 2x2 matrix.
+# QHADM is a native gate instruction that the circuit
+# pipeline decomposes to SX+Rz automatically.
 # ============================================
     QPREPN Q2, 1, R15            # Q2 = |0> with 1 qubit
-    ILDI R2, @hadamard
-    ILDI R3, 2                   # dim = 2
-    QCUSTOM Q2, Q2, R2, R3       # Q2 = H|0> = |+>
-    ILDI R0, @custom_msg
-    ILDI R1, @custom_msg.len
+    ILDI R3, 1                   # mask = qubit 0
+    QHADM Q2, Q2, R3             # Q2 = H|0> = |+>
+    ILDI R0, @hadamard_msg
+    ILDI R1, @hadamard_msg.len
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
 # ============================================
-# Measurement and CF flag
+# Measurement and CF flag check
 # ============================================
-    QOBSERVE H0, Q2              # destructive measurement
+    QOBSERVE H0, Q2              # destructive measurement of |+>
     JMPF CF, cf_set
     ILDI R9, 0
     JMP after_cf
@@ -98,7 +104,7 @@ LABEL: cf_set
     ILDI R9, 1
 LABEL: after_cf
 
-    # Print DF and CF
+    # Print DF and CF values
     IADD R2, R8, R15
     ISUB R2, R2, R15             # R2 = DF value
     IADD R3, R9, R15
@@ -118,14 +124,15 @@ LABEL: after_cf
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
-    # Cleanup remaining Q registers
+    # Cleanup: observe the Bell state register
     QOBSERVE H1, Q0
-    QOBSERVE H2, Q1
 
     HALT
 
 # ============================================
 # ISR: quantum error handler
+# Invoked when QuantumError interrupt fires
+# (e.g., purity below threshold after QMEAS).
 # ============================================
 LABEL: qerr_handler
     ILDI R0, @trap_msg
