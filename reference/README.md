@@ -33,6 +33,19 @@ Abstract Machine (CQAM).
   operations, partial trace, float math, interrupt handling, and pragma
   directives.
 
+- [IBM QPU Backend](./IBM_integration.md) — How to build, configure, and
+  run CQAM programs on IBM Quantum hardware. Covers the Qiskit C API
+  prerequisite, IAM authentication flow, all CLI flags (including
+  `--qpu-timeout`), the 12-step execution pipeline, QPREPS/QPREPSM product
+  state instructions, decomposition optimizations (MCZ V-chain, cyclic shift
+  recognition), and troubleshooting.
+
+- [Hardware Compatibility](./HARDWARE_COMPATIBILITY.md) — Quick-reference table
+  of which CQAM operations, observation modes, and example programs work on
+  hardware versus simulation-only. Includes migration patterns for QENCODE,
+  QPTRACE, and AMP-mode observation, and known depth limits for current IBM
+  hardware.
+
 ---
 
 For build instructions and a project overview, see the top-level
