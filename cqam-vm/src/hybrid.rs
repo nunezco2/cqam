@@ -263,10 +263,13 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
                         HybridValue::Int(v) => {
                             $ctx.fregs.set($dst, v as f64)?;
                         }
+                        HybridValue::Float(v) => {
+                            $ctx.fregs.set($dst, v)?;
+                        }
                         _ => {
                             return Err(CqamError::TypeMismatch {
                                 instruction: concat!("HREDUCE/", $name).to_string(),
-                                detail: format!("expected Dist or Int, got {:?}", $val),
+                                detail: format!("expected Dist, Int, or Float, got {:?}", $val),
                             });
                         }
                     }
