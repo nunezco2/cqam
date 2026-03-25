@@ -111,7 +111,7 @@ fn run_program_with_config_metadata_and_data(
                 "ibm" => {
                     let token = resolve_ibm_token(config)?;
                     let opt_level = config.ibm_optimization_level.unwrap_or(1);
-                    let qpu = build_ibm_qpu(&token, device.as_deref(), opt_level)?;
+                    let qpu = build_ibm_qpu(&token, device.as_deref(), opt_level, config.qpu_timeout)?;
                     let convergence = ConvergenceCriterion {
                         confidence,
                         ..ConvergenceCriterion::default()
@@ -284,6 +284,7 @@ fn build_ibm_qpu(
     token: &str,
     device: Option<&str>,
     optimization_level: u8,
+    poll_timeout: Option<u64>,
 ) -> Result<cqam_qpu_ibm::IbmQpuBackend, CqamError> {
     let device_name = device.unwrap_or("ibm_torino");
 
@@ -293,6 +294,9 @@ fn build_ibm_qpu(
         ))?;
 
     backend = backend.with_optimization_level(optimization_level);
+    if let Some(secs) = poll_timeout {
+        backend = backend.with_poll_timeout(secs);
+    }
 
     // Best-effort calibration refresh; fall back to synthetic on failure.
     if let Err(e) = backend.refresh_calibration() {
@@ -768,7 +772,7 @@ mod tests {
     fn test_ibm_backend_gate_set() {
         let token = std::env::var("IBM_QUANTUM_TOKEN")
             .expect("IBM_QUANTUM_TOKEN must be set for this test");
-        let qpu = build_ibm_qpu(&token, Some("ibm_torino"), 1).unwrap();
+        let qpu = build_ibm_qpu(&token, Some("ibm_torino"), 1, None).unwrap();
         use cqam_qpu::traits::QpuBackend;
         assert_eq!(qpu.gate_set(), &cqam_core::native_ir::NativeGateSet::Superconducting);
     }

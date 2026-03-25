@@ -35,7 +35,7 @@ const IBM_JOBS_PATH: &str = "/api/v1/jobs";
 const IBM_BACKENDS_PATH: &str = "/api/v1/backends";
 
 const DEFAULT_POLL_INTERVAL_MS: u64 = 2_000;
-const DEFAULT_TIMEOUT_SECS: u64 = 600;
+const DEFAULT_TIMEOUT_SECS: u64 = 1800;
 
 // ---------------------------------------------------------------------------
 // REST data types
@@ -394,6 +394,8 @@ pub struct IbmRestClient {
     base_url: String,
     http: reqwest::blocking::Client,
     retry_policy: RetryPolicy,
+    /// Job polling timeout in seconds.
+    poll_timeout_secs: u64,
 }
 
 impl IbmRestClient {
@@ -429,6 +431,7 @@ impl IbmRestClient {
             base_url: base_url.into(),
             http,
             retry_policy: RetryPolicy::default(),
+            poll_timeout_secs: DEFAULT_TIMEOUT_SECS,
         })
     }
 
@@ -448,7 +451,14 @@ impl IbmRestClient {
             base_url: IBM_API_BASE.to_string(),
             http: reqwest::blocking::Client::new(),
             retry_policy: RetryPolicy::default(),
+            poll_timeout_secs: DEFAULT_TIMEOUT_SECS,
         }
+    }
+
+    /// Set the job polling timeout in seconds.
+    pub fn with_poll_timeout(mut self, secs: u64) -> Self {
+        self.poll_timeout_secs = secs;
+        self
     }
 
     /// Build a GET request with standard IBM headers (Bearer auth, CRN, accept).
@@ -533,7 +543,7 @@ impl IbmRestClient {
 
         let mut interval = initial_interval
             .unwrap_or(Duration::from_millis(DEFAULT_POLL_INTERVAL_MS));
-        let deadline = timeout.unwrap_or(Duration::from_secs(DEFAULT_TIMEOUT_SECS));
+        let deadline = timeout.unwrap_or(Duration::from_secs(self.poll_timeout_secs));
         let start = Instant::now();
 
         loop {

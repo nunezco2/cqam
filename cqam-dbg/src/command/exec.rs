@@ -589,6 +589,7 @@ fn copy_sim_config(c: &cqam_run::simconfig::SimConfig) -> cqam_run::simconfig::S
         backend: c.backend.clone(),
         ibm_token: c.ibm_token.clone(),
         ibm_optimization_level: c.ibm_optimization_level,
+        qpu_timeout: c.qpu_timeout,
     }
 }
 

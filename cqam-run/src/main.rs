@@ -57,6 +57,7 @@ fn print_help() {
     eprintln!("  --qpu-device <name>   QPU device name (provider-specific)");
     eprintln!("  --ibm-token <TOKEN>               IBM Quantum API token");
     eprintln!("  --ibm-optimization-level <N>      Qiskit transpiler optimization level (0-3) [default: 1]");
+    eprintln!("  --qpu-timeout <secs>  Job polling timeout in seconds (default: 1800)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -82,6 +83,7 @@ struct CliArgs {
     qpu_device: Option<String>,
     ibm_token: Option<String>,
     ibm_optimization_level: Option<u8>,
+    qpu_timeout: Option<u64>,
 }
 
 fn parse_args() -> Result<CliArgs, String> {
@@ -116,6 +118,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut qpu_device: Option<String> = None;
     let mut ibm_token: Option<String> = None;
     let mut ibm_optimization_level: Option<u8> = None;
+    let mut qpu_timeout: Option<u64> = None;
 
     let mut i = 1;
     while i < args.len() {
@@ -229,6 +232,14 @@ fn parse_args() -> Result<CliArgs, String> {
                 }
                 ibm_optimization_level = Some(n.min(3));
             }
+            "--qpu-timeout" => {
+                i += 1;
+                let secs: u64 = args.get(i)
+                    .ok_or("--qpu-timeout requires seconds")?
+                    .parse()
+                    .map_err(|_| "--qpu-timeout must be a positive integer")?;
+                qpu_timeout = Some(secs);
+            }
             // Backward compatibility
             "--psw-report" => print_psw = true,
             "--resource-usage" => print_resources = true,
@@ -267,6 +278,7 @@ fn parse_args() -> Result<CliArgs, String> {
         qpu_device,
         ibm_token,
         ibm_optimization_level,
+        qpu_timeout,
     })
 }
 
@@ -345,6 +357,9 @@ fn main() {
     }
     if let Some(level) = cli.ibm_optimization_level {
         config.ibm_optimization_level = Some(level);
+    }
+    if let Some(secs) = cli.qpu_timeout {
+        config.qpu_timeout = Some(secs);
     }
 
     // Incompatible-flag validation for QPU backends

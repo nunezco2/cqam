@@ -131,6 +131,10 @@ pub struct SimConfig {
     /// Forwarded to `qk_transpile` during circuit compilation.
     #[serde(skip)]
     pub ibm_optimization_level: Option<u8>,
+
+    /// QPU job polling timeout in seconds (from --qpu-timeout).
+    #[serde(skip)]
+    pub qpu_timeout: Option<u64>,
 }
 
 impl Default for SimConfig {
@@ -150,6 +154,7 @@ impl Default for SimConfig {
             backend: None,
             ibm_token: None,
             ibm_optimization_level: None,
+            qpu_timeout: None,
         }
     }
 }

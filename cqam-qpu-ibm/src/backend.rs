@@ -129,6 +129,12 @@ impl IbmQpuBackend {
         self
     }
 
+    /// Set the job polling timeout in seconds.
+    pub fn with_poll_timeout(mut self, secs: u64) -> Self {
+        self.rest = self.rest.with_poll_timeout(secs);
+        self
+    }
+
     /// Disable IBM transpilation (circuit is submitted as-is after conversion).
     pub fn without_transpiler(mut self) -> Self {
         self.use_transpiler = false;
