@@ -239,13 +239,20 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
 
             macro_rules! hreduce_complex_to_float {
                 ($val:expr, $name:expr, $body:expr, $ctx:expr, $dst:expr) => {
-                    if let HybridValue::Complex(re, im) = $val {
-                        $ctx.fregs.set($dst, ($body)(re, im))?;
-                    } else {
-                        return Err(CqamError::TypeMismatch {
-                            instruction: concat!("HREDUCE/", $name).to_string(),
-                            detail: format!("expected Complex, got {:?}", $val),
-                        });
+                    match $val {
+                        HybridValue::Complex(re, im) => {
+                            $ctx.fregs.set($dst, ($body)(re, im))?;
+                        }
+                        HybridValue::Float(v) => {
+                            // Float is a real value — treat as Complex(v, 0.0)
+                            $ctx.fregs.set($dst, ($body)(v, 0.0))?;
+                        }
+                        _ => {
+                            return Err(CqamError::TypeMismatch {
+                                instruction: concat!("HREDUCE/", $name).to_string(),
+                                detail: format!("expected Complex or Float, got {:?}", $val),
+                            });
+                        }
                     }
                 };
             }
@@ -353,24 +360,24 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
                 }, ctx, *dst),
 
                 ReduceFn::ConjZ => {
-                    if let HybridValue::Complex(re, im) = hybrid_val {
-                        ctx.zregs.set(*dst, (re, -im))?;
-                    } else {
-                        return Err(CqamError::TypeMismatch {
+                    match hybrid_val {
+                        HybridValue::Complex(re, im) => ctx.zregs.set(*dst, (re, -im))?,
+                        HybridValue::Float(v) => ctx.zregs.set(*dst, (v, 0.0))?,
+                        _ => return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/CONJ_Z".to_string(),
-                            detail: format!("expected Complex, got {:?}", hybrid_val),
-                        });
+                            detail: format!("expected Complex or Float, got {:?}", hybrid_val),
+                        }),
                     }
                 }
 
                 ReduceFn::NegateZ => {
-                    if let HybridValue::Complex(re, im) = hybrid_val {
-                        ctx.zregs.set(*dst, (-re, -im))?;
-                    } else {
-                        return Err(CqamError::TypeMismatch {
+                    match hybrid_val {
+                        HybridValue::Complex(re, im) => ctx.zregs.set(*dst, (-re, -im))?,
+                        HybridValue::Float(v) => ctx.zregs.set(*dst, (-v, 0.0))?,
+                        _ => return Err(CqamError::TypeMismatch {
                             instruction: "HREDUCE/NEGATE_Z".to_string(),
-                            detail: format!("expected Complex, got {:?}", hybrid_val),
-                        });
+                            detail: format!("expected Complex or Float, got {:?}", hybrid_val),
+                        }),
                     }
                 }
 
