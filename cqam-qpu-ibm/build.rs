@@ -1,21 +1,29 @@
 //! Build script for `cqam-qpu-ibm`.
 //!
-//! Resolves the location of the Qiskit C library (`libqiskit`) using the
-//! following precedence:
+//! Resolves the location of the Qiskit C library (`libqiskit`) and links
+//! against it. Resolution order:
 //!
-//!   1. `QISKIT_C_DIR` environment variable (explicit override).
-//!   2. The system default `/opt/qiskit/dist/c` when present.
-//!   3. A cargo-managed clone+build into `OUT_DIR/qiskit-src/dist/c`.
+//!   1. `QISKIT_C_DIR` — explicit override pointing at a prebuilt
+//!      `dist/c` directory (must contain `lib/libqiskit.{dylib,so}` and
+//!      `include/qiskit/*.h`).
+//!   2. `$HOME/.local/qiskit/dist/c` — user-local canonical location.
+//!      If absent, the build script clones upstream Qiskit into
+//!      `$HOME/.local/qiskit` and runs `make c` there as part of the
+//!      cargo build. Subsequent builds reuse the existing tree.
 //!
-//! The cargo-managed path clones the upstream Qiskit repository (pinned via
-//! `QISKIT_GIT_REV`, default `main`) and invokes `make c`. It requires `git`,
-//! `make`, and a working Python 3 toolchain on `PATH`. Set `CQAM_NO_QISKIT_BUILD=1`
-//! to disable the automatic build and fail fast instead.
+//! No sudo is required: `~/.local` is user-owned on macOS and Linux.
+//!
+//! Requirements for the automatic clone+build path: `git`, `make`,
+//! `python3`, and a working Rust toolchain on `PATH`.
+//!
+//! Knobs:
+//!   - `QISKIT_GIT_REV`        — upstream revision (default `main`)
+//!   - `CQAM_NO_QISKIT_BUILD`  — set to disable the auto-build and fail fast
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::Command;
 
-const DEFAULT_SYSTEM_PREFIX: &str = "/opt/qiskit/dist/c";
+const QISKIT_SUBDIR: &str = ".local/qiskit";
 const QISKIT_GIT_URL: &str = "https://github.com/Qiskit/qiskit.git";
 const DEFAULT_GIT_REV: &str = "main";
 
@@ -23,13 +31,14 @@ fn main() {
     println!("cargo:rerun-if-env-changed=QISKIT_C_DIR");
     println!("cargo:rerun-if-env-changed=QISKIT_GIT_REV");
     println!("cargo:rerun-if-env-changed=CQAM_NO_QISKIT_BUILD");
+    println!("cargo:rerun-if-env-changed=HOME");
 
-    let qiskit_c_dir = resolve_qiskit_c_dir();
+    let qiskit_c_dir = resolve_or_build();
     let lib_dir = qiskit_c_dir.join("lib");
 
     if !lib_dir.exists() {
         panic!(
-            "Resolved QISKIT_C_DIR={} but {} does not exist",
+            "Resolved qiskit C dir {} but {} does not exist",
             qiskit_c_dir.display(),
             lib_dir.display()
         );
@@ -40,7 +49,7 @@ fn main() {
     println!("cargo:qiskit_c_dir={}", qiskit_c_dir.display());
 }
 
-fn resolve_qiskit_c_dir() -> PathBuf {
+fn resolve_or_build() -> PathBuf {
     if let Ok(explicit) = std::env::var("QISKIT_C_DIR") {
         let p = PathBuf::from(&explicit);
         if !p.join("lib").exists() {
@@ -52,40 +61,67 @@ fn resolve_qiskit_c_dir() -> PathBuf {
         return p;
     }
 
-    let system = PathBuf::from(DEFAULT_SYSTEM_PREFIX);
-    if system.join("lib").exists() {
-        return system;
+    let prefix = default_prefix();
+    let dist_c = prefix.join("dist").join("c");
+    if dist_c.join("lib").exists() {
+        return dist_c;
     }
 
     if std::env::var("CQAM_NO_QISKIT_BUILD").is_ok() {
         panic!(
             "libqiskit not found at {} and CQAM_NO_QISKIT_BUILD is set. \
-             Install libqiskit to {} or unset CQAM_NO_QISKIT_BUILD to \
-             let cargo build it.",
-            DEFAULT_SYSTEM_PREFIX, DEFAULT_SYSTEM_PREFIX
+             Install libqiskit to {} or unset the flag.",
+            dist_c.display(),
+            dist_c.display()
         );
     }
 
-    build_vendored_qiskit()
+    clone_and_build(&prefix);
+
+    if !dist_c.join("lib").exists() {
+        panic!(
+            "`make c` completed but {} is missing",
+            dist_c.join("lib").display()
+        );
+    }
+    dist_c
 }
 
-fn build_vendored_qiskit() -> PathBuf {
-    let out_dir = PathBuf::from(std::env::var("OUT_DIR").expect("OUT_DIR not set"));
-    let src_dir = out_dir.join("qiskit-src");
-    let dist_c = src_dir.join("dist").join("c");
-    let rev = std::env::var("QISKIT_GIT_REV").unwrap_or_else(|_| DEFAULT_GIT_REV.to_string());
+fn default_prefix() -> PathBuf {
+    let home = std::env::var("HOME").unwrap_or_else(|_| {
+        panic!(
+            "$HOME is not set; cannot determine default qiskit prefix \
+             (~/{}). Set QISKIT_C_DIR explicitly or export HOME.",
+            QISKIT_SUBDIR
+        )
+    });
+    PathBuf::from(home).join(QISKIT_SUBDIR)
+}
 
-    if dist_c.join("lib").exists() {
-        return dist_c;
-    }
+fn clone_and_build(prefix: &Path) {
+    ensure_writable(prefix);
 
-    if !src_dir.join(".git").exists() {
+    if !prefix.join(".git").exists() {
+        let rev = std::env::var("QISKIT_GIT_REV").unwrap_or_else(|_| DEFAULT_GIT_REV.to_string());
         eprintln!(
             "cqam-qpu-ibm: cloning {} (rev {}) into {}",
             QISKIT_GIT_URL,
             rev,
-            src_dir.display()
+            prefix.display()
         );
+
+        let non_empty = std::fs::read_dir(prefix)
+            .map(|mut it| it.next().is_some())
+            .unwrap_or(false);
+        if non_empty {
+            panic!(
+                "{} exists and is non-empty but has no .git directory. \
+                 Remove its contents and rebuild, or point QISKIT_C_DIR at \
+                 an existing prebuilt tree.",
+                prefix.display()
+            );
+        }
+
         run(
             Command::new("git")
                 .arg("clone")
@@ -93,41 +129,55 @@ fn build_vendored_qiskit() -> PathBuf {
                 .arg("--branch")
                 .arg(&rev)
                 .arg(QISKIT_GIT_URL)
-                .arg(&src_dir),
+                .arg(prefix),
             "git clone qiskit",
         );
     }
 
     eprintln!(
         "cqam-qpu-ibm: building libqiskit via `make c` in {}",
-        src_dir.display()
+        prefix.display()
     );
     run(
-        Command::new("make").arg("c").current_dir(&src_dir),
+        Command::new("make").arg("c").current_dir(prefix),
         "make c (qiskit)",
     );
+}
 
-    if !dist_c.join("lib").exists() {
-        panic!(
-            "`make c` completed but {}/lib is missing",
-            dist_c.display()
-        );
+fn ensure_writable(prefix: &Path) {
+    if prefix.exists() {
+        let probe = prefix.join(".cqam-write-probe");
+        match std::fs::write(&probe, b"") {
+            Ok(()) => {
+                let _ = std::fs::remove_file(&probe);
+            }
+            Err(e) => panic!(
+                "{} exists but is not writable ({}). Check ownership/permissions.",
+                prefix.display(),
+                e
+            ),
+        }
+    } else if let Err(e) = std::fs::create_dir_all(prefix) {
+        panic!("failed to create {}: {}", prefix.display(), e);
     }
-    dist_c
 }
 
 fn run(cmd: &mut Command, label: &str) {
     let status = cmd.status().unwrap_or_else(|e| {
         panic!(
-            "failed to spawn `{}` for {}: {}. Ensure the required toolchain \
-             (git, make, python3) is installed.",
+            "failed to spawn `{}` for {}: {}. Ensure git, make, and python3 are on PATH.",
             format_cmd(cmd),
             label,
             e
         )
     });
     if !status.success() {
-        panic!("{} failed: {} (exit {:?})", label, format_cmd(cmd), status.code());
+        panic!(
+            "{} failed: {} (exit {:?})",
+            label,
+            format_cmd(cmd),
+            status.code()
+        );
     }
 }
 

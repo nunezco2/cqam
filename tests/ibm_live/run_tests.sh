@@ -8,7 +8,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_DIR="$(cd "$SCRIPT_DIR/../.." && pwd)"
 BINARY="$PROJECT_DIR/target/release/cqam-run"
 
-QISKIT_C_DIR="${QISKIT_C_DIR:-/opt/qiskit/dist/c}"
+QISKIT_C_DIR="${QISKIT_C_DIR:-$HOME/.local/qiskit/dist/c}"
 export DYLD_LIBRARY_PATH="$QISKIT_C_DIR/lib${DYLD_LIBRARY_PATH:+:$DYLD_LIBRARY_PATH}"
 export LD_LIBRARY_PATH="$QISKIT_C_DIR/lib${LD_LIBRARY_PATH:+:$LD_LIBRARY_PATH}"
 export IBM_QUANTUM_TOKEN="${1:-$IBM_QUANTUM_TOKEN}"

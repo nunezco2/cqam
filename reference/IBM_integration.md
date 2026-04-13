@@ -20,27 +20,31 @@ precedence:
 1. **`QISKIT_C_DIR` environment variable** — explicit override pointing at a
    directory that contains `lib/libqiskit.{dylib,so}` and
    `include/qiskit/*.h`.
-2. **System default `/opt/qiskit/dist/c`** — used automatically if it exists.
-   This is the recommended installation location for system-wide deployments.
-3. **Cargo-managed clone+build** — if neither of the above is available,
-   `build.rs` clones the upstream Qiskit repository into the crate's
-   `OUT_DIR`, runs `make c`, and links against the resulting artifact. This
-   happens automatically on the first build and is cached thereafter.
+2. **`$HOME/.local/qiskit/dist/c`** — user-local canonical location. If
+   absent, `build.rs` clones the upstream Qiskit repository into
+   `$HOME/.local/qiskit` and runs `make c` there as part of the cargo
+   build. Subsequent builds reuse the existing tree. No sudo required —
+   `~/.local` is user-owned on macOS and Linux.
 
 **Repository:** https://github.com/Qiskit/qiskit
 
-**Manual install to `/opt`:**
+**Typical first build:** nothing to prepare. Just run
 
 ```sh
-git clone https://github.com/Qiskit/qiskit.git
-cd qiskit
-make c
-sudo mkdir -p /opt/qiskit
-sudo cp -r dist /opt/qiskit/
+cargo build --features ibm -p cqam-run
 ```
 
-This populates `/opt/qiskit/dist/c/{lib,include}` and is picked up with no
-environment configuration required.
+The build script will:
+
+1. Check `$HOME/.local/qiskit/dist/c/lib` — if present, link it and stop.
+2. Otherwise clone `https://github.com/Qiskit/qiskit.git` (shallow, default
+   branch `main`) into `$HOME/.local/qiskit` and run `make c`.
+3. Emit `cargo:rustc-link-search=native=$HOME/.local/qiskit/dist/c/lib` and
+   `cargo:rustc-link-lib=dylib=qiskit`.
+
+Requirements on `PATH`: `git`, `make`, `python3`, and a working Rust
+toolchain. The first build downloads the Qiskit sources and compiles them,
+which may take several minutes. Subsequent builds are instant.
 
 **Custom location:**
 
@@ -48,18 +52,14 @@ environment configuration required.
 export QISKIT_C_DIR=/path/to/qiskit/dist/c
 ```
 
-The build script emits:
+Takes precedence over the default — useful for shared/system installs or
+when building from a branch.
 
-```
-cargo:rustc-link-search=native=$QISKIT_C_DIR/lib
-cargo:rustc-link-lib=dylib=qiskit
-```
+**Knobs:**
 
-**Cargo-managed fallback:** If no installation is found, cargo will clone
-and build Qiskit automatically. Requirements on `PATH`: `git`, `make`,
-`python3`, and a working Rust toolchain. Pin a specific revision via
-`QISKIT_GIT_REV` (default: `main`). Set `CQAM_NO_QISKIT_BUILD=1` to disable
-the fallback and fail fast when the library is missing.
+- `QISKIT_GIT_REV` — upstream revision (default `main`).
+- `CQAM_NO_QISKIT_BUILD=1` — disable the automatic clone+build and fail
+  fast when the library is missing.
 
 ### 1.2 IBM Quantum Account and API Token
 
@@ -81,20 +81,23 @@ default so that users without the Qiskit C dependency are not affected.
 **Build with IBM support:**
 
 ```sh
-QISKIT_C_DIR=/path/to/qiskit/dist/c cargo build --features ibm -p cqam-run
+cargo build --features ibm -p cqam-run
 ```
 
 **Build only the IBM crate (for development):**
 
 ```sh
-QISKIT_C_DIR=/path/to/qiskit/dist/c cargo build -p cqam-qpu-ibm
+cargo build -p cqam-qpu-ibm
 ```
 
 **Run tests (including the FFI layer):**
 
 ```sh
-QISKIT_C_DIR=/path/to/qiskit/dist/c cargo test --features ibm --workspace
+cargo test --features ibm --workspace
 ```
+
+Prepend `QISKIT_C_DIR=/path/to/qiskit/dist/c` to any of the above to
+override the default `~/.local/qiskit/dist/c`.
 
 **What happens without the feature flag:**
 
@@ -127,11 +130,13 @@ runtime via `DYLD_LIBRARY_PATH` (macOS) or `LD_LIBRARY_PATH` (Linux):
 
 ```sh
 # macOS
-export DYLD_LIBRARY_PATH=$QISKIT_C_DIR/lib:$DYLD_LIBRARY_PATH
+export DYLD_LIBRARY_PATH=$HOME/.local/qiskit/dist/c/lib:$DYLD_LIBRARY_PATH
 
 # Linux
-export LD_LIBRARY_PATH=$QISKIT_C_DIR/lib:$LD_LIBRARY_PATH
+export LD_LIBRARY_PATH=$HOME/.local/qiskit/dist/c/lib:$LD_LIBRARY_PATH
 ```
+
+If `QISKIT_C_DIR` is set, substitute `$QISKIT_C_DIR/lib` instead.
 
 ---
 
@@ -288,7 +293,6 @@ cqam-run program.cqam --backend ibm
 **Live integration test (requires `IBM_QUANTUM_TOKEN` in environment):**
 
 ```sh
-QISKIT_C_DIR=/path/to/qiskit/dist/c \
 IBM_QUANTUM_TOKEN=your_api_key_here \
 cargo test --features ibm -- --ignored test_ibm_backend_gate_set
 ```
@@ -764,13 +768,13 @@ warning (not an error).
 
 ### `error: could not find native library 'qiskit'`
 
-The build script could not locate `libqiskit`. It searches, in order,
-`QISKIT_C_DIR`, then `/opt/qiskit/dist/c`, and finally falls back to a
-cargo-managed clone+build unless `CQAM_NO_QISKIT_BUILD=1` is set. Verify one
-of these is populated:
+The build script could not locate `libqiskit`. It searches `QISKIT_C_DIR`
+first, then `$HOME/.local/qiskit/dist/c`, and clones + builds into
+`$HOME/.local/qiskit` if neither is populated (unless `CQAM_NO_QISKIT_BUILD=1`
+is set). Verify one of these exists:
 
 ```sh
-ls /opt/qiskit/dist/c/lib/
+ls $HOME/.local/qiskit/dist/c/lib/
 # or
 ls $QISKIT_C_DIR/lib/
 # Expected: libqiskit.dylib (macOS) or libqiskit.so (Linux)
@@ -796,7 +800,7 @@ export LD_LIBRARY_PATH=$QISKIT_C_DIR/lib:$LD_LIBRARY_PATH
 The `cqam-run` binary was built without the `ibm` feature flag. Rebuild:
 
 ```sh
-QISKIT_C_DIR=/path/to/qiskit/dist/c cargo build --features ibm -p cqam-run
+cargo build --features ibm -p cqam-run
 ```
 
 ### `IBM Quantum token not found`
