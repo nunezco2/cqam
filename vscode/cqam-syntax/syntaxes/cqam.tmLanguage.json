@@ -1,0 +1,220 @@
+{
+  "$schema": "https://raw.githubusercontent.com/martinring/tmlanguage/master/tmlanguage.json",
+  "name": "CQAM",
+  "scopeName": "source.cqam",
+  "fileTypes": ["cqam"],
+  "patterns": [
+    { "include": "#pragmas" },
+    { "include": "#strings" },
+    { "include": "#comments" },
+    { "include": "#sections" },
+    { "include": "#directives" },
+    { "include": "#labels" },
+    { "include": "#label-refs" },
+    { "include": "#opcodes" },
+    { "include": "#kernels" },
+    { "include": "#reduce-fns" },
+    { "include": "#ecall-procs" },
+    { "include": "#flags" },
+    { "include": "#mode-constants" },
+    { "include": "#dist-constants" },
+    { "include": "#file-constants" },
+    { "include": "#trap-constants" },
+    { "include": "#registers" },
+    { "include": "#numbers" },
+    { "include": "#punctuation" }
+  ],
+  "repository": {
+    "pragmas": {
+      "match": "^\\s*(#!)\\s*(qubits|threads)\\b(.*)$",
+      "captures": {
+        "1": { "name": "keyword.control.directive.pragma.cqam" },
+        "2": { "name": "support.function.pragma.cqam" },
+        "3": { "name": "meta.preprocessor.cqam" }
+      }
+    },
+    "strings": {
+      "name": "string.quoted.double.cqam",
+      "begin": "\"",
+      "end": "\"",
+      "patterns": [
+        {
+          "name": "constant.character.escape.cqam",
+          "match": "\\\\[nt\"\\\\0]"
+        },
+        {
+          "name": "constant.other.placeholder.cqam",
+          "match": "%[dfsc]"
+        }
+      ]
+    },
+    "comments": {
+      "patterns": [
+        {
+          "name": "comment.line.number-sign.cqam",
+          "match": "(?<!\\S)#(?!!).*$"
+        },
+        {
+          "name": "comment.line.double-slash.cqam",
+          "match": "//.*$"
+        }
+      ]
+    },
+    "sections": {
+      "match": "^\\s*(\\.(?:code|data|shared|private))\\b",
+      "captures": {
+        "1": { "name": "keyword.control.section.cqam" }
+      }
+    },
+    "directives": {
+      "patterns": [
+        {
+          "name": "storage.type.directive.cqam",
+          "match": "\\.(?:org|i64|f64|c64|ascii|asciiz|qstate)\\b"
+        },
+        {
+          "name": "storage.modifier.cqam",
+          "match": "^\\s*(?:size|base)\\b"
+        }
+      ]
+    },
+    "labels": {
+      "patterns": [
+        {
+          "match": "^\\s*([A-Za-z_][A-Za-z0-9_\\-]*)\\s*:",
+          "captures": {
+            "1": { "name": "entity.name.label.cqam" }
+          }
+        }
+      ]
+    },
+    "label-refs": {
+      "patterns": [
+        {
+          "match": "(@)([A-Za-z_][A-Za-z0-9_\\-]*)(\\.len)?",
+          "captures": {
+            "1": { "name": "punctuation.definition.variable.cqam" },
+            "2": { "name": "variable.other.label.cqam" },
+            "3": { "name": "support.constant.cqam" }
+          }
+        }
+      ]
+    },
+    "opcodes": {
+      "patterns": [
+        {
+          "name": "keyword.other.opcode.integer.cqam",
+          "match": "\\b(?:IADD|ISUB|IMUL|IDIV|IMOD|IAND|IOR|IXOR|INOT|ISHL|ISHR|ILDI|ILDM|ISTR|ILDX|ISTRX|IEQ|ILT|IGT)\\b"
+        },
+        {
+          "name": "keyword.other.opcode.float.cqam",
+          "match": "\\b(?:FADD|FSUB|FMUL|FDIV|FLDI|FLDM|FSTR|FLDX|FSTRX|FEQ|FLT|FGT|FSIN|FCOS|FATAN2|FSQRT)\\b"
+        },
+        {
+          "name": "keyword.other.opcode.complex.cqam",
+          "match": "\\b(?:ZADD|ZSUB|ZMUL|ZDIV|ZLDI|ZLDM|ZSTR|ZLDX|ZSTRX)\\b"
+        },
+        {
+          "name": "keyword.other.opcode.cvt.cqam",
+          "match": "\\b(?:CVTIF|CVTFI|CVTFZ|CVTZF)\\b"
+        },
+        {
+          "name": "keyword.control.flow.cqam",
+          "match": "\\b(?:JMP|JIF|JMPF|CALL|RET|HALT|NOP)\\b"
+        },
+        {
+          "name": "keyword.control.interrupt.cqam",
+          "match": "\\b(?:SETIV|RETI)\\b"
+        },
+        {
+          "name": "keyword.other.opcode.system.cqam",
+          "match": "\\b(?:ECALL|IQCFG|ICCFG|ITID)\\b"
+        },
+        {
+          "name": "keyword.other.opcode.quantum.cqam",
+          "match": "\\b(?:QPREPSM|QPREPS|QPREPR|QPREPN|QPREP|QKERNELF|QKERNELZ|QKERNEL|QOBSERVE|QLOAD|QSTORE|QHADM|QFLIP|QPHASE|QCNOT|QCZ|QSWAP|QROT|QMEAS|QTENSOR|QCUSTOM|QENCODE|QMIXED|QPTRACE|QRESET)\\b"
+        },
+        {
+          "name": "keyword.other.opcode.hybrid.cqam",
+          "match": "\\b(?:HFORK|HMERGE|HATMS|HATME|HREDUCE)\\b"
+        }
+      ]
+    },
+    "kernels": {
+      "name": "entity.name.function.kernel.cqam",
+      "match": "\\b(?:UNIT|ENTG|QFFT|QIFT|DIFF|GROV|DROT|PHSH|CTLU|DIAG|PERM)\\b"
+    },
+    "reduce-fns": {
+      "name": "entity.name.function.reduce.cqam",
+      "match": "\\b(?:ROUND|FLOOR|CEILI|TRUNC|ABSOL|NEGAT|MAGNI|PHASE|REALP|IMAGP|MEANT|MODEV|ARGMX|VARNC|CONJZ|NEGTZ|EXPCT)\\b"
+    },
+    "ecall-procs": {
+      "name": "support.function.builtin.ecall.cqam",
+      "match": "\\b(?:PRINT_INT|PRINT_FLOAT|PRINT_STR|PRINT_CHAR|PRINT_HIST|DUMP_REGS)\\b"
+    },
+    "flags": {
+      "name": "support.constant.flag.cqam",
+      "match": "\\b(?:ZF|NF|OF|PF|QF|SF|EF|HF|IF|AF)\\b"
+    },
+    "mode-constants": {
+      "name": "support.constant.mode.cqam",
+      "match": "\\b(?:DIST|PROB|AMP)\\b"
+    },
+    "dist-constants": {
+      "name": "support.constant.dist.cqam",
+      "match": "\\b(?:UNIFORM|ZERO|BELL|GHZ)\\b"
+    },
+    "file-constants": {
+      "name": "support.constant.file.cqam",
+      "match": "\\b(?:R_FILE|F_FILE|Z_FILE)\\b"
+    },
+    "trap-constants": {
+      "name": "support.constant.trap.cqam",
+      "match": "\\b(?:ARITHMETIC|QUANTUM_ERROR|SYNC_FAILURE)\\b"
+    },
+    "registers": {
+      "patterns": [
+        {
+          "name": "variable.language.register.quantum.cqam",
+          "match": "\\b[QH][0-7]\\b"
+        },
+        {
+          "name": "variable.language.register.cqam",
+          "match": "\\b[RFZ](?:1[0-5]|[0-9])\\b"
+        }
+      ]
+    },
+    "numbers": {
+      "patterns": [
+        {
+          "name": "constant.numeric.hex.cqam",
+          "match": "\\b0[xX][0-9A-Fa-f]+\\b"
+        },
+        {
+          "name": "constant.numeric.binary.cqam",
+          "match": "\\b0[bB][01]+\\b"
+        },
+        {
+          "name": "constant.numeric.complex.cqam",
+          "match": "[-+]?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?J[-+]?[0-9]+(?:\\.[0-9]+)?(?:[eE][-+]?[0-9]+)?"
+        },
+        {
+          "name": "constant.numeric.float.cqam",
+          "match": "[-+]?\\b[0-9]+\\.[0-9]+(?:[eE][-+]?[0-9]+)?\\b"
+        },
+        {
+          "name": "constant.numeric.integer.cqam",
+          "match": "[-+]?\\b[0-9]+\\b"
+        }
+      ]
+    },
+    "punctuation": {
+      "patterns": [
+        {
+          "name": "punctuation.separator.comma.cqam",
+          "match": ","
+        }
+      ]
+    }
+  }
+}

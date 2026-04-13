@@ -1,0 +1,80 @@
+{
+  "Program skeleton (data + code)": {
+    "prefix": "cqam-skel",
+    "description": "Minimal CQAM program with .data and .code sections and a HALT.",
+    "body": [
+      "#! qubits ${1:4}",
+      "",
+      ".data",
+      "    .org 1000",
+      "${2:msg}:",
+      "    .ascii \"${3:hello}\\n\"",
+      "",
+      ".code",
+      "    ILDI R0, @${2:msg}",
+      "    ILDI R1, @${2:msg}.len",
+      "    ILDI R15, 1",
+      "    ISUB R1, R1, R15",
+      "    ECALL PRINT_STR",
+      "    HALT",
+      "$0"
+    ]
+  },
+
+  "Quantum pipeline (QPREP → QKERNEL → QOBSERVE → HREDUCE)": {
+    "prefix": "cqam-qpipe",
+    "description": "Register-level quantum pipeline: prepare, transform via kernel, observe, and reduce to a classical value.",
+    "body": [
+      "    QPREP Q${1:0}, ${2:0}              # ${3:uniform superposition}",
+      "    QKERNEL ${4|QFFT,QIFT,DIFF,GROV,DROT,PHSH,CTLU,DIAG,PERM,UNIT,ENTG|}, Q${1:0}, Q${1:0}, R0, R0",
+      "    QOBSERVE H${5:0}, Q${1:0}",
+      "    HREDUCE ${6|REALP,MODEV,ARGMX,MEANT,VARNC,EXPCT,MAGNI,PHASE,IMAGP|}, H${5:0}, ${7:F0}",
+      "$0"
+    ]
+  },
+
+  "Observe probability of |0>": {
+    "prefix": "cqam-observe0",
+    "description": "Destructive single-basis observation of P(|0>) with HREDUCE REALP.",
+    "body": [
+      "    QOBSERVE H${1:0}, Q${2:0}, 1, R${3:1}, R${3:1}",
+      "    HREDUCE REALP, H${1:0}, F${4:0}",
+      "$0"
+    ]
+  },
+
+  "Fork/merge thread block": {
+    "prefix": "cqam-hfork",
+    "description": "Atomic HFORK/HMERGE block with HATMS/HATME markers.",
+    "body": [
+      "    HATMS",
+      "    HFORK",
+      "${1:    # per-thread body}",
+      "    HMERGE",
+      "    HATME",
+      "$0"
+    ]
+  },
+
+  "ECALL PRINT_STR boilerplate": {
+    "prefix": "cqam-printstr",
+    "description": "Load a .data label address and length, trim the NUL, and call PRINT_STR.",
+    "body": [
+      "    ILDI R0, @${1:label}",
+      "    ILDI R1, @${1:label}.len",
+      "    ILDI R15, 1",
+      "    ISUB R1, R1, R15",
+      "    ECALL PRINT_STR",
+      "$0"
+    ]
+  },
+
+  "Conditional jump (JMPF)": {
+    "prefix": "cqam-jmpf",
+    "description": "Jump when a PSW flag is set.",
+    "body": [
+      "    JMPF ${1|ZF,NF,OF,PF,QF,SF,EF,HF,IF,AF|}, ${2:target}",
+      "$0"
+    ]
+  }
+}

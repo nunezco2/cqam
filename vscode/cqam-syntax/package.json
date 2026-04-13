@@ -1,0 +1,51 @@
+{
+  "name": "cqam-syntax",
+  "displayName": "CQAM Syntax",
+  "description": "Syntax highlighting and starter snippets for CQAM (Classical-Quantum Assembly Language) source files.",
+  "version": "0.1.0",
+  "publisher": "cqam-local",
+  "engines": {
+    "vscode": "^1.80.0"
+  },
+  "categories": [
+    "Programming Languages",
+    "Snippets"
+  ],
+  "keywords": [
+    "cqam",
+    "quantum",
+    "assembly",
+    "qasm",
+    "isa"
+  ],
+  "license": "SEE LICENSE IN ../../LICENSE",
+  "contributes": {
+    "languages": [
+      {
+        "id": "cqam",
+        "aliases": [
+          "CQAM",
+          "cqam"
+        ],
+        "extensions": [
+          ".cqam"
+        ],
+        "configuration": "./language-configuration.json",
+        "firstLine": "^#!\\s*(qubits|threads)\\b"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "cqam",
+        "scopeName": "source.cqam",
+        "path": "./syntaxes/cqam.tmLanguage.json"
+      }
+    ],
+    "snippets": [
+      {
+        "language": "cqam",
+        "path": "./snippets/cqam.code-snippets"
+      }
+    ]
+  }
+}

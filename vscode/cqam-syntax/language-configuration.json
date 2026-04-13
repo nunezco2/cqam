@@ -1,0 +1,17 @@
+{
+  "comments": {
+    "lineComment": "#"
+  },
+  "brackets": [],
+  "autoClosingPairs": [
+    { "open": "\"", "close": "\"", "notIn": ["comment"] }
+  ],
+  "surroundingPairs": [
+    ["\"", "\""]
+  ],
+  "wordPattern": "[A-Za-z_][A-Za-z0-9_\\-]*",
+  "indentationRules": {
+    "increaseIndentPattern": "^\\s*\\.(code|data|shared|private)\\b",
+    "decreaseIndentPattern": "^\\s*\\.(code|data|shared|private)\\b"
+  }
+}
