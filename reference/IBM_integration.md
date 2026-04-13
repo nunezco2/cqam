@@ -13,41 +13,53 @@ circuit transpilation.
 
 ### 1.1 Qiskit C API
 
-The transpiler path calls into the Qiskit C API (`libqiskit`). You must build
-it before compiling the `ibm` feature.
+The transpiler path calls into the Qiskit C API (`libqiskit`). The
+`cqam-qpu-ibm` build script resolves the library location using the following
+precedence:
 
-**Repository:** https://github.com/Qiskit/qiskit (the `c-api` branch or the
-directory that produces C header exports).
+1. **`QISKIT_C_DIR` environment variable** — explicit override pointing at a
+   directory that contains `lib/libqiskit.{dylib,so}` and
+   `include/qiskit/*.h`.
+2. **System default `/opt/qiskit/dist/c`** — used automatically if it exists.
+   This is the recommended installation location for system-wide deployments.
+3. **Cargo-managed clone+build** — if neither of the above is available,
+   `build.rs` clones the upstream Qiskit repository into the crate's
+   `OUT_DIR`, runs `make c`, and links against the resulting artifact. This
+   happens automatically on the first build and is cached thereafter.
 
-**Build command:**
+**Repository:** https://github.com/Qiskit/qiskit
+
+**Manual install to `/opt`:**
 
 ```sh
-cd /path/to/qiskit
+git clone https://github.com/Qiskit/qiskit.git
+cd qiskit
 make c
+sudo mkdir -p /opt/qiskit
+sudo cp -r dist /opt/qiskit/
 ```
 
-This produces:
+This populates `/opt/qiskit/dist/c/{lib,include}` and is picked up with no
+environment configuration required.
 
-- `dist/c/lib/libqiskit.dylib` (macOS) or `libqiskit.so` (Linux)
-- `dist/c/include/qiskit/types.h`, `funcs.h`, and related headers
-
-**Environment variable:**
+**Custom location:**
 
 ```sh
 export QISKIT_C_DIR=/path/to/qiskit/dist/c
 ```
 
-The `cqam-qpu-ibm` build script (`build.rs`) reads this variable and passes
-the correct library search path to the linker:
+The build script emits:
 
 ```
 cargo:rustc-link-search=native=$QISKIT_C_DIR/lib
 cargo:rustc-link-lib=dylib=qiskit
 ```
 
-If `QISKIT_C_DIR` is not set, the build script defaults to `/tmp/qiskit/dist/c`.
-The build will succeed but the binary will fail to launch at runtime if the
-library is not present at that fallback path.
+**Cargo-managed fallback:** If no installation is found, cargo will clone
+and build Qiskit automatically. Requirements on `PATH`: `git`, `make`,
+`python3`, and a working Rust toolchain. Pin a specific revision via
+`QISKIT_GIT_REV` (default: `main`). Set `CQAM_NO_QISKIT_BUILD=1` to disable
+the fallback and fail fast when the library is missing.
 
 ### 1.2 IBM Quantum Account and API Token
 
@@ -752,14 +764,21 @@ warning (not an error).
 
 ### `error: could not find native library 'qiskit'`
 
-The `QISKIT_C_DIR` environment variable is not set, or points to a directory
-that does not contain `lib/libqiskit.dylib` (macOS) or `lib/libqiskit.so`
-(Linux). Verify:
+The build script could not locate `libqiskit`. It searches, in order,
+`QISKIT_C_DIR`, then `/opt/qiskit/dist/c`, and finally falls back to a
+cargo-managed clone+build unless `CQAM_NO_QISKIT_BUILD=1` is set. Verify one
+of these is populated:
 
 ```sh
+ls /opt/qiskit/dist/c/lib/
+# or
 ls $QISKIT_C_DIR/lib/
 # Expected: libqiskit.dylib (macOS) or libqiskit.so (Linux)
 ```
+
+If the cargo-managed build is running but failing, ensure `git`, `make`, and
+`python3` are on `PATH`, and check the build log for the upstream `make c`
+error.
 
 If the file exists but the binary still fails to launch, the dynamic library
 search path is not configured:
