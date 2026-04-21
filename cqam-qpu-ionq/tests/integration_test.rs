@@ -49,20 +49,20 @@ fn test_live_list_backends() {
 #[test]
 #[ignore]
 fn test_live_get_forte1_characterization() {
-    let client = IonQRestClient::new(api_key(), "qpu.forte-1");
+    let client = IonQRestClient::new(api_key(), "qpu.forte-enterprise-1");
     let backends = client.list_backends().expect("list_backends should succeed");
 
-    let forte1 = backends.iter().find(|b| b.backend == "qpu.forte-1")
-        .expect("qpu.forte-1 must be in backend list");
+    let forte1 = backends.iter().find(|b| b.backend == "qpu.forte-enterprise-1")
+        .expect("qpu.forte-enterprise-1 must be in backend list");
 
     let char_id = forte1.characterization_id.as_deref()
-        .expect("qpu.forte-1 must have a characterization_id");
+        .expect("qpu.forte-enterprise-1 must have a characterization_id");
 
     let char_resp = client
-        .get_characterization("qpu.forte-1", char_id)
+        .get_characterization("qpu.forte-enterprise-1", char_id)
         .expect("get_characterization should succeed");
 
-    assert_eq!(char_resp.backend, "qpu.forte-1");
+    assert_eq!(char_resp.backend, "qpu.forte-enterprise-1");
     assert_eq!(char_resp.qubits, 36);
 
     // Verify fidelity fields are present and plausible.
@@ -162,8 +162,8 @@ fn test_live_bell_circuit_simulator() {
 #[test]
 #[ignore]
 fn test_live_from_device_calibration() {
-    let backend = IonQQpuBackend::from_device(api_key(), "qpu.forte-1")
-        .expect("from_device should succeed for qpu.forte-1");
+    let backend = IonQQpuBackend::from_device(api_key(), "qpu.forte-enterprise-1")
+        .expect("from_device should succeed for qpu.forte-enterprise-1");
 
     assert_eq!(backend.max_qubits(), 36);
 
@@ -195,4 +195,78 @@ fn test_live_from_device_calibration() {
 
     use cqam_qpu::traits::QpuBackend;
     backend.compile(&c).expect("compile should accept a valid Bell circuit");
+}
+
+/// Submit a Bell circuit to the real `qpu.forte-enterprise-1` hardware, wait for it to
+/// complete, and verify the results are physically sensible.
+///
+/// This test costs real QPU time. Run only when you want end-to-end hardware
+/// validation. Queue time is typically minutes; the timeout is set to 30 min.
+///
+/// ```sh
+/// IONQ_API_KEY=<key> cargo test -p cqam-qpu-ionq test_live_bell_circuit_forte1 -- --ignored --nocapture
+/// ```
+#[test]
+#[ignore]
+fn test_live_bell_circuit_forte1() {
+    let client = IonQRestClient::new(api_key(), "qpu.forte-enterprise-1");
+
+    let circuit_json = serde_json::json!({
+        "gateset": "qis",
+        "qubits": 2,
+        "circuit": [
+            {"gate": "v", "target": 0},
+            {"gate": "cnot", "control": 0, "target": 1}
+        ]
+    });
+
+    let job_id = client
+        .submit_job(circuit_json, 100)
+        .expect("submit_job to forte-1 should succeed");
+
+    assert!(!job_id.is_empty(), "job ID should not be empty");
+    println!("Submitted to qpu.forte-enterprise-1, job_id={job_id}");
+
+    // 30-minute timeout — QPU queue can be several minutes.
+    let result = client
+        .poll_until_done(
+            &job_id,
+            Some(std::time::Duration::from_secs(10)),
+            Some(std::time::Duration::from_secs(1800)),
+        )
+        .expect("job should complete within 30 minutes");
+
+    println!("Job status: {}", result.status);
+    assert_eq!(result.status, "completed");
+
+    let probs_url = result
+        .results.expect("completed QPU job must have results")
+        .probabilities.expect("completed QPU job must have probabilities URL");
+
+    let (counts, total_shots) = client
+        .get_probabilities_with_shots(&probs_url.url, 100)
+        .expect("get_probabilities_with_shots should succeed");
+
+    println!("QPU counts: {counts:?}, total_shots={total_shots}");
+
+    // Bell state on real hardware: dominant outcomes must be |00⟩ and |11⟩.
+    // With noise, small leakage into |01⟩/|10⟩ is expected — allow up to 15%.
+    let p00 = counts.get(&0).copied().unwrap_or(0) as f64 / total_shots as f64;
+    let p11 = counts.get(&3).copied().unwrap_or(0) as f64 / total_shots as f64;
+    let p_bell = p00 + p11;
+
+    println!("|00⟩={p00:.3}  |11⟩={p11:.3}  Bell fidelity={p_bell:.3}");
+
+    assert!(
+        p_bell > 0.70,
+        "Bell state fidelity on forte-1 should exceed 70%, got {p_bell:.3}"
+    );
+    assert!(
+        p00 > 0.25,
+        "|00⟩ probability should be significant (>25%), got {p00:.3}"
+    );
+    assert!(
+        p11 > 0.25,
+        "|11⟩ probability should be significant (>25%), got {p11:.3}"
+    );
 }
