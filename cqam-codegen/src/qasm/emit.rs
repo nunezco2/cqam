@@ -527,6 +527,12 @@ impl QasmFormat for Instruction {
                     dst, r_base, r_count
                 )]
             }
+            Instruction::QXch { qa, qb } => {
+                vec![format!(
+                    "// @cqam.qxch Q{} <-> Q{} [handle swap, no gates]",
+                    qa, qb
+                )]
+            }
         }
     }
 }

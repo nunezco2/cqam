@@ -1853,3 +1853,55 @@ fn zmov_encoded_word() {
     let word = encode(&Instruction::ZMov { dst: 0, src: 7 }, &labels).unwrap();
     assert_eq!(word, 0x6407_0000);
 }
+
+// =============================================================================
+// QXCH encode/decode round-trip tests
+// =============================================================================
+
+#[test]
+fn roundtrip_qxch() {
+    let instr = Instruction::QXch { qa: 0, qb: 1 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qxch_max_regs() {
+    let instr = Instruction::QXch { qa: 7, qb: 6 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_qxch_same_reg_encodes_correctly() {
+    // Encoding QXCH Q3, Q3 produces a valid word that decodes back.
+    // (Self-swap is caught at the assembler/parser level, not the encoder.)
+    let instr = Instruction::QXch { qa: 3, qb: 3 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn qxch_exact_encoding() {
+    // QXCH Q0, Q1: opcode=0x65, qa=0 at bit 21, qb=1 at bit 18
+    // => 0x65_000000 | (0 << 21) | (1 << 18) = 0x65040000
+    let labels = HashMap::new();
+    let word = encode(&Instruction::QXch { qa: 0, qb: 1 }, &labels).unwrap();
+    assert_eq!(word, 0x65040000);
+}
+
+#[test]
+fn qxch_mnemonic() {
+    assert_eq!(mnemonic(op::QXCH), Some("QXCH"));
+}
+
+#[test]
+fn error_qxch_qa_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QXch { qa: 8, qb: 0 };
+    assert!(encode(&instr, &labels).is_err());
+}
+
+#[test]
+fn error_qxch_qb_overflow() {
+    let labels = HashMap::new();
+    let instr = Instruction::QXch { qa: 0, qb: 8 };
+    assert!(encode(&instr, &labels).is_err());
+}

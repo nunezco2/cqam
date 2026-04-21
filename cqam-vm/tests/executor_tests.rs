@@ -1745,3 +1745,160 @@ fn test_zmov_does_not_update_psw() {
     ).unwrap();
     assert!(ctx.psw.zf); // Still set
 }
+
+// ===========================================================================
+// QXCH -- quantum register handle swap
+// ===========================================================================
+
+#[test]
+fn test_qxch_swaps_handles() {
+    use cqam_core::instruction::{DistId, Instruction};
+    use cqam_vm::qop::execute_qop;
+
+    let program = vec![];
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Prepare two distinct quantum registers
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Zero }, &mut backend).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 1, dist: DistId::Uniform }, &mut backend).unwrap();
+
+    let handle_a_before = ctx.qregs[0].unwrap();
+    let handle_b_before = ctx.qregs[1].unwrap();
+
+    // Swap Q0 <-> Q1
+    execute_instruction(
+        &mut ctx,
+        &Instruction::QXch { qa: 0, qb: 1 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+
+    // After swap: Q0 holds what Q1 had, Q1 holds what Q0 had
+    assert_eq!(ctx.qregs[0].unwrap(), handle_b_before);
+    assert_eq!(ctx.qregs[1].unwrap(), handle_a_before);
+}
+
+#[test]
+fn test_qxch_psw_untouched() {
+    use cqam_core::instruction::{DistId, Instruction};
+    use cqam_vm::qop::execute_qop;
+
+    let program = vec![];
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Zero }, &mut backend).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 1, dist: DistId::Zero }, &mut backend).unwrap();
+
+    // Set a PSW flag manually to confirm QXCH leaves it untouched
+    ctx.psw.zf = true;
+    ctx.psw.qf = true;
+
+    execute_instruction(
+        &mut ctx,
+        &Instruction::QXch { qa: 0, qb: 1 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+
+    assert!(ctx.psw.zf, "ZF must be untouched by QXCH");
+    assert!(ctx.psw.qf, "QF must be untouched by QXCH");
+}
+
+#[test]
+fn test_qxch_uninitialized_qa_errors() {
+    use cqam_core::instruction::{DistId, Instruction};
+    use cqam_vm::qop::execute_qop;
+
+    let program = vec![];
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Only Q1 is initialized; Q0 is None
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 1, dist: DistId::Zero }, &mut backend).unwrap();
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::QXch { qa: 0, qb: 1 },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_err(), "QXCH with uninitialized Qa must return error");
+}
+
+#[test]
+fn test_qxch_uninitialized_qb_errors() {
+    use cqam_core::instruction::{DistId, Instruction};
+    use cqam_vm::qop::execute_qop;
+
+    let program = vec![];
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Only Q0 is initialized; Q1 is None
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Zero }, &mut backend).unwrap();
+
+    let result = execute_instruction(
+        &mut ctx,
+        &Instruction::QXch { qa: 0, qb: 1 },
+        &mut fm,
+        &mut backend,
+    );
+    assert!(result.is_err(), "QXCH with uninitialized Qb must return error");
+}
+
+#[test]
+fn test_qxch_state_accessible_via_swapped_registers() {
+    use cqam_core::instruction::{DistId, Instruction};
+    use cqam_core::quantum_backend::QuantumBackend;
+    use cqam_vm::qop::execute_qop;
+
+    let program = vec![];
+    let mut ctx = ExecutionContext::new(program);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Q0 = Zero state, Q1 = Uniform state
+    ctx.config.default_qubits = 2;
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Zero }, &mut backend).unwrap();
+    execute_qop(&mut ctx, &Instruction::QPrep { dst: 1, dist: DistId::Uniform }, &mut backend).unwrap();
+
+    // Record probabilities before swap
+    let q0_prob_00_before = backend
+        .get_element(ctx.qregs[0].unwrap(), 0, 0)
+        .unwrap()
+        .0;
+    let q1_prob_00_before = backend
+        .get_element(ctx.qregs[1].unwrap(), 0, 0)
+        .unwrap()
+        .0;
+
+    // Swap
+    execute_instruction(
+        &mut ctx,
+        &Instruction::QXch { qa: 0, qb: 1 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+
+    // After swap: Q0 now holds what was Q1, Q1 holds what was Q0
+    let q0_prob_00_after = backend
+        .get_element(ctx.qregs[0].unwrap(), 0, 0)
+        .unwrap()
+        .0;
+    let q1_prob_00_after = backend
+        .get_element(ctx.qregs[1].unwrap(), 0, 0)
+        .unwrap()
+        .0;
+
+    // States should be exchanged
+    assert!((q0_prob_00_after - q1_prob_00_before).abs() < 1e-10,
+        "Q0 after swap should have Q1's original state");
+    assert!((q1_prob_00_after - q0_prob_00_before).abs() < 1e-10,
+        "Q1 after swap should have Q0's original state");
+}

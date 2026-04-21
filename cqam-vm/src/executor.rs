@@ -689,6 +689,24 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
         }
 
         // =====================================================================
+        // QXCH -- quantum register handle swap (zero gates, handle-level only)
+        // =====================================================================
+
+        Instruction::QXch { qa, qb } => {
+            let handle_a = ctx.qregs[*qa as usize].ok_or(CqamError::UninitializedRegister {
+                file: "Q".to_string(),
+                index: *qa,
+            })?;
+            let handle_b = ctx.qregs[*qb as usize].ok_or(CqamError::UninitializedRegister {
+                file: "Q".to_string(),
+                index: *qb,
+            })?;
+            ctx.qregs[*qa as usize] = Some(handle_b);
+            ctx.qregs[*qb as usize] = Some(handle_a);
+            // PSW untouched
+        }
+
+        // =====================================================================
         // Quantum -- delegate to qop.rs
         // =====================================================================
 

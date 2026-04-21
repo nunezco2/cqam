@@ -142,6 +142,9 @@ pub mod op {
     pub const FMOV: u8 = 0x63;
     pub const ZMOV: u8 = 0x64;
 
+    // -- Quantum register handle swap (0x65) ----------------------------------
+    pub const QXCH: u8 = 0x65;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;

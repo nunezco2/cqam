@@ -337,6 +337,13 @@ pub fn decode_with_debug(
             Ok(Instruction::QKernelZ { dst, src, kernel, zctx0, zctx1 })
         }
 
+        // -- QXch-format (quantum register handle swap) ---------------------------
+        op::QXCH => {
+            let qa = extract_reg3(word, 21);
+            let qb = extract_reg3(word, 18);
+            Ok(Instruction::QXch { qa, qb })
+        }
+
         // -- QR-format (quantum prepare from register) ----------------------------
         op::QPREPR => {
             let dst = extract_reg3(word, 21);
@@ -623,6 +630,7 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::QSTORE => Some("QSTORE"),
         op::QKERNELF => Some("QKERNELF"),
         op::QKERNELZ => Some("QKERNELZ"),
+        op::QXCH => Some("QXCH"),
         op::QPREPR => Some("QPREPR"),
         op::QENCODE => Some("QENCODE"),
         op::QHADM => Some("QHADM"),

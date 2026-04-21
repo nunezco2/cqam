@@ -311,6 +311,7 @@ channel proportional to `(1 - bell_pair_fidelity)` on the transferred state.
 |-------------|---------|-------------|
 | QSTORE | `QSTORE Q0, 10` | Teleport Q0 into QMEM[10]; Q0 is consumed; costs one Bell pair |
 | QLOAD | `QLOAD Q0, 10` | Teleport QMEM[10] into Q0; QMEM[10] is emptied; costs one Bell pair |
+| QXCH | `QXCH Q0, Q1` | Swap Q-file handles between Q0 and Q1; zero-cost, no gates emitted |
 
 ### QSTORE / QLOAD move example
 
@@ -322,6 +323,29 @@ channel proportional to `(1 - bell_pair_fidelity)` on the transferred state.
     QOBSERVE H0, Q2, 0, R0, R0   # measure Q2; Q2 consumed
 
 One Bell pair is spent on QSTORE and one on QLOAD (two total for the round trip).
+
+### QXCH example
+
+QXCH swaps the register handles held in two Q-file slots. No gate is emitted,
+no quantum state is modified, and no Bell pair is consumed. It is a pure
+bookkeeping operation on the register file.
+
+    QPREP Q0, 0              # Q0 = uniform superposition
+    QPREP Q1, 1              # Q1 = |0...0>
+    QKERNEL QFFT, Q2, Q0, R0, R1   # Q2 = QFT result; Q0 consumed
+
+    # A downstream routine expects its input in Q1, but the result is in Q2.
+    # Rename the slots at zero cost:
+    QXCH Q1, Q2              # Q1 now holds the QFT result; Q2 holds |0>
+
+    QOBSERVE H0, Q1, 0, R0, R0    # measure (the formerly Q2) QFT result
+
+Self-swap is a no-op and generates an assembler warning:
+
+    QXCH Q3, Q3              # warning: self-swap has no effect; encoded as NOP
+
+Note: QXCH moves register handles, not qubit indices. To physically reorder
+qubits within a register, use QSWAP instead.
 
 ## Masked Gate Operations
 

@@ -466,6 +466,13 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             interference: 0.0,
         },
 
+        // QXCH: pure handle swap, zero quantum cost
+        Instruction::QXch { .. } => ResourceDelta {
+            time: 1,
+            space: 0,
+            ..Default::default()
+        },
+
         // No-op / labels: zero cost
         Instruction::Nop
         | Instruction::Label(_) => ResourceDelta::default(),

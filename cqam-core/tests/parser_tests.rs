@@ -2075,3 +2075,47 @@ fn test_parse_fmov_wrong_operand_count() {
 fn test_parse_zmov_wrong_operand_count() {
     assert!(parse_instruction("ZMOV Z0").is_err());
 }
+
+// ===========================================================================
+// QXCH parser tests
+// ===========================================================================
+
+#[test]
+fn test_parse_qxch_normal() {
+    let instr = parse_instruction("QXCH Q0, Q1").unwrap();
+    assert_eq!(instr, Instruction::QXch { qa: 0, qb: 1 });
+}
+
+#[test]
+fn test_parse_qxch_reversed_operands() {
+    // QXCH is symmetric in effect; both orderings parse fine
+    let instr = parse_instruction("QXCH Q3, Q5").unwrap();
+    assert_eq!(instr, Instruction::QXch { qa: 3, qb: 5 });
+}
+
+#[test]
+fn test_parse_qxch_max_regs() {
+    let instr = parse_instruction("QXCH Q7, Q6").unwrap();
+    assert_eq!(instr, Instruction::QXch { qa: 7, qb: 6 });
+}
+
+#[test]
+fn test_parse_qxch_self_swap_becomes_nop() {
+    // Self-swap emits a warning and produces NOP
+    let instr = parse_instruction("QXCH Q2, Q2").unwrap();
+    assert_eq!(instr, Instruction::Nop);
+}
+
+#[test]
+fn test_parse_qxch_wrong_operand_count() {
+    assert!(parse_instruction("QXCH Q0").is_err());
+    assert!(parse_instruction("QXCH Q0, Q1, Q2").is_err());
+}
+
+#[test]
+fn test_parse_qxch_invalid_register() {
+    // Q8 is out of range (Q-file is Q0-Q7)
+    assert!(parse_instruction("QXCH Q0, Q8").is_err());
+    // Q9 is also out of range
+    assert!(parse_instruction("QXCH Q9, Q1").is_err());
+}

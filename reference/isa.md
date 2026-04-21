@@ -136,6 +136,7 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | `QHADM` | dst, src, mask_reg | Apply H to qubits selected by R[mask_reg] bitmask | QMK |
 | `QFLIP` | dst, src, mask_reg | Apply X to qubits selected by R[mask_reg] bitmask | QMK |
 | `QPHASE` | dst, src, mask_reg | Apply Z to qubits selected by R[mask_reg] bitmask | QMK |
+| `QXCH` | qa, qb | Swap Q-file handles between Q[qa] and Q[qb]; zero-cost, no gates emitted; self-swap encodes as NOP | Q2 |
 
 **QSTORE and QLOAD implement quantum teleportation.** Each operation consumes one Bell
 pair from the VM's Bell pair budget (default 256, configurable via `VmConfig`). When the
@@ -213,6 +214,7 @@ following formats.
 | **QR** | opcode[8] | dst_q[3] _[1] dist_reg[4] _[16] | QPREPR |
 | **QE** | opcode[8] | dst_q[3] _[1] src_base[4] count[4] file_sel[2] _[10] | QENCODE |
 | **QMK** | opcode[8] | dst_q[3] src_q[3] _[4] mask_reg[4] _[10] | QHADM, QFLIP, QPHASE |
+| **Q2** | opcode[8] | qa[3] qb[3] _[18] | QXCH |
 | **L** | opcode[8] | label_id[16] _[8] | LABEL pseudo-instruction |
 
 ### 3.2 Opcode byte assignments
@@ -236,6 +238,7 @@ following formats.
 | 0x60-0x62 | Integer increment/decrement/move (IINC, IDEC, IMOV) |
 | 0x63 | Float register move (FMOV) |
 | 0x64 | Complex register move (ZMOV) |
+| 0x65 | Quantum register handle exchange (QXCH) |
 
 ---
 

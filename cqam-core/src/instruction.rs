@@ -447,6 +447,14 @@ pub enum Instruction {
     /// Precondition: Qdst must hold a valid handle from QPREP Qdst, ZERO.
     QPrepsm { dst: u8, r_base: u8, r_count: u8 },
 
+    /// Swap quantum register handles between Qa and Qb.
+    ///
+    /// Pure handle-level swap — no quantum gates are emitted. The quantum states
+    /// do not move; only the pointers (handles) in the Q-register file are
+    /// exchanged. Both Qa and Qb must hold valid (non-None) handles.
+    /// PSW is untouched.
+    QXch { qa: u8, qb: u8 },
+
     // -- Hybrid (H-file: HybridValue x 8) ------------------------------------
 
     /// Fork hybrid execution into parallel threads. Sets PSW fork flags.

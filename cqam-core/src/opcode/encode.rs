@@ -291,6 +291,15 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
                 | ((*r_count as u32) << 13))
         }
 
+        // -- QXch-format (quantum register handle swap): {opcode:8, qa:3, qb:3, padding:18}
+        Instruction::QXch { qa, qb } => {
+            validate_reg3(*qa, "qa")?;
+            validate_reg3(*qb, "qb")?;
+            Ok(((op::QXCH as u32) << 24)
+                | ((*qa as u32) << 21)
+                | ((*qb as u32) << 18))
+        }
+
         // -- QR-format (quantum prepare from register) ----------------------------
         Instruction::QPrepR { dst, dist_reg } =>
             encode_qr(op::QPREPR, *dst, *dist_reg),

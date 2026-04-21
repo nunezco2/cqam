@@ -35,6 +35,7 @@ bits [31:24] contain the 8-bit opcode.
 | QPN | `[opcode:8][dst_q:3][dist:3][qubit_count_reg:4][_:14]` | QPREPN |
 | QPT | `[opcode:8][dst_q:3][src_q:3][num_qubits_a_reg:4][_:14]` | QPTRACE |
 | QRS | `[opcode:8][dst_q:3][src_q:3][qubit_reg:4][_:14]` | QRESET |
+| Q2 | `[opcode:8][qa:3][qb:3][_:18]` | QXCH |
 | L | `[opcode:8][label_id:16][_:8]` | LABEL pseudo |
 
 ## 3. Opcode Table
@@ -136,8 +137,9 @@ bits [31:24] contain the 8-bit opcode.
 | 0x62 | IMOV     | RR     | R[dst] = R[src]; ZF/SF updated |
 | 0x63 | FMOV     | RR     | F[dst] = F[src]; no PSW update |
 | 0x64 | ZMOV     | RR     | Z[dst] = Z[src]; no PSW update |
+| 0x65 | QXCH     | Q2     | Swap Q-file handles between Q[qa] and Q[qb]; zero-cost, no gates emitted; self-swap (qa==qb) encodes as NOP |
 
-Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0x5F (reserved), 0x65-0xFF (future).
+Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0x5F (reserved), 0x66-0xFF (future).
 
 ## 4. Distribution IDs (QPREP / QPREPR / QPREPN dist field)
 

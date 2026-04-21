@@ -256,6 +256,7 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::QPrepsm { dst, r_base, r_count } => {
             format!("QPREPSM Q{}, R{}, R{}", dst, r_base, r_count)
         }
+        Instruction::QXch { qa, qb } => format!("QXCH Q{}, Q{}", qa, qb),
 
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),

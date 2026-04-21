@@ -716,6 +716,26 @@ Note: Q[src] is NOT consumed.
                                             PC := PC + 1]
 ```
 
+**Quantum Register Handle Exchange (QXCH):**
+```
+    Q[a] != NULL     Q[b] != NULL     a != b
+    tmp = Q[a]
+  -------------------------------------------------------
+  sigma --QXCH(a, b)--> sigma[Q[a] := Q[b],
+                               Q[b] := tmp,
+                               PC  := PC + 1]
+
+    a == b
+  -------------------------------------------------------
+  sigma --QXCH(a, a)--> sigma[PC := PC + 1]
+```
+
+PSW is not modified by QXCH. When `a == b`, the assembler encodes NOP; the
+transition rule above states the equivalent runtime identity for completeness.
+No quantum state is evolved, no gate is applied, and the Bell pair budget is
+unchanged. The operation is total provided both handles are non-NULL; if either
+slot is NULL, the VM raises `CqamError::UninitializedRegister`.
+
 **Hybrid Reduce (HREDUCE):**
 ```
     H[src] = val     result = reduce(val, func_mnem)

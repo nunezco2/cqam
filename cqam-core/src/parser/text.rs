@@ -807,6 +807,28 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             Ok(Instruction::QPrepsm { dst, r_base, r_count })
         }
 
+        "QXCH" => {
+            if ops.len() != 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("QXCH requires 2 operands, got {}", ops.len()),
+                });
+            }
+            let qa = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QXCH: invalid register '{}'", ops[0]),
+            })?;
+            let qb = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("QXCH: invalid register '{}'", ops[1]),
+            })?;
+            if qa == qb {
+                eprintln!("warning: QXCH Q{}, Q{}: self-swap is a NOP", qa, qb);
+                return Ok(Instruction::Nop);
+            }
+            Ok(Instruction::QXch { qa, qb })
+        }
+
         // -- Hybrid -----------------------------------------------------------
         "HFORK" => Ok(Instruction::HFork),
         "HMERGE" => Ok(Instruction::HMerge),

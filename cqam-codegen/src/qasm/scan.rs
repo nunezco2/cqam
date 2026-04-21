@@ -415,5 +415,11 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.int_regs.insert(*r_count);
             used.uses_cmem = true;
         }
+
+        // -- Quantum register handle swap --
+        Instruction::QXch { qa, qb } => {
+            used.quantum_regs.insert(*qa);
+            used.quantum_regs.insert(*qb);
+        }
     }
 }
