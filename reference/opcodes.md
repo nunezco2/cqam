@@ -133,8 +133,11 @@ bits [31:24] contain the 8-bit opcode.
 | 0x5C | HATME    | N      | Atomic section end: snapshot commit + barrier resume |
 | 0x60 | IINC     | RR     | R[dst] = R[src] + 1; ZF/SF/OF updated |
 | 0x61 | IDEC     | RR     | R[dst] = R[src] - 1; ZF/SF/OF updated |
+| 0x62 | IMOV     | RR     | R[dst] = R[src]; ZF/SF updated |
+| 0x63 | FMOV     | RR     | F[dst] = F[src]; no PSW update |
+| 0x64 | ZMOV     | RR     | Z[dst] = Z[src]; no PSW update |
 
-Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0x5F (reserved), 0x62-0xFF (future).
+Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0x5F (reserved), 0x65-0xFF (future).
 
 ## 4. Distribution IDs (QPREP / QPREPR / QPREPN dist field)
 
