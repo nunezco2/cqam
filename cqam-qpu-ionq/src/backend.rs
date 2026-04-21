@@ -32,12 +32,6 @@ use crate::rest::IonQRestClient;
 // IonQ device presets
 // ---------------------------------------------------------------------------
 
-/// Well-known IonQ device names and their qubit counts.
-pub struct DevicePreset {
-    pub target: &'static str,
-    pub qubits: u32,
-}
-
 /// Return the qubit count for a known IonQ device name, or `None` if unknown.
 fn qubit_count_for_target(target: &str) -> Option<u32> {
     match target {
@@ -145,7 +139,13 @@ impl IonQQpuBackend {
         let num_qubits = info
             .qubits
             .or_else(|| qubit_count_for_target(&target))
-            .unwrap_or(36);
+            .unwrap_or_else(|| {
+                tracing::warn!(
+                    target = %target,
+                    "qubit count not available from API or presets; defaulting to 36"
+                );
+                36
+            });
 
         let connectivity = ConnectivityGraph::all_to_all(num_qubits);
 
@@ -154,7 +154,15 @@ impl IonQQpuBackend {
                 Ok(char_resp) => {
                     IonQCalibrationData::from_characterization_response(&char_resp)
                 }
-                Err(_) => IonQCalibrationData::synthetic(num_qubits),
+                Err(e) => {
+                    tracing::warn!(
+                        target = %target,
+                        char_id = %char_id,
+                        error = %e,
+                        "characterization fetch failed; using synthetic calibration"
+                    );
+                    IonQCalibrationData::synthetic(num_qubits)
+                }
             }
         } else {
             IonQCalibrationData::synthetic(num_qubits)
