@@ -105,6 +105,18 @@ impl EcallInterceptor {
                     format!("H{}: (invalid index)", h_index)
                 }
             }
+            ProcId::PrintCmpx => {
+                let z_idx = ctx.iregs.regs[0] as u8;
+                if let Ok((re, im)) = ctx.zregs.get(z_idx) {
+                    if im >= 0.0 {
+                        format!("{} + i{}", re, im)
+                    } else {
+                        format!("{} - i{}", re, -im)
+                    }
+                } else {
+                    format!("Z{}: (invalid index)", z_idx)
+                }
+            }
             // All ProcId variants are exhaustively matched above.
         };
 

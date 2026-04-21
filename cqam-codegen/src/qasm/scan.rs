@@ -205,6 +205,9 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
                     used.int_regs.insert(1);
                     used.int_regs.insert(2);
                 }
+                ProcId::PrintCmpx => {
+                    used.int_regs.insert(0);
+                }
             }
         }
 

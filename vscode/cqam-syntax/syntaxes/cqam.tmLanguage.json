@@ -150,7 +150,7 @@
     },
     "ecall-procs": {
       "name": "support.function.builtin.ecall.cqam",
-      "match": "\\b(?:PRINT_INT|PRINT_FLOAT|PRINT_STR|PRINT_CHAR|PRINT_HIST|DUMP_REGS)\\b"
+      "match": "\\b(?:PRINT_INT|PRINT_FLOAT|PRINT_STR|PRINT_CHAR|PRINT_HIST|PRINT_CMPX|DUMP_REGS)\\b"
     },
     "flags": {
       "name": "support.constant.flag.cqam",

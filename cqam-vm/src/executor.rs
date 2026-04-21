@@ -481,6 +481,7 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
                         .collect();
                     let mut int_cursor = 2u8;
                     let mut float_cursor = 1u8;
+                    let mut cmpx_cursor = 0u8;
                     let mut output = String::new();
                     let mut i = 0;
                     while i < fmt.len() {
@@ -498,6 +499,17 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
                                         output.push_str(&format!("{}", v));
                                     }
                                     float_cursor += 1;
+                                    i += 2;
+                                }
+                                b'c' => {
+                                    if let Ok((re, im)) = ctx.zregs.get(cmpx_cursor) {
+                                        if im >= 0.0 {
+                                            output.push_str(&format!("{} + i{}", re, im));
+                                        } else {
+                                            output.push_str(&format!("{} - i{}", re, -im));
+                                        }
+                                    }
+                                    cmpx_cursor += 1;
                                     i += 2;
                                 }
                                 b'%' => {
@@ -553,6 +565,15 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
                         ctx.config.default_qubits,
                     );
                     println!("{}", output);
+                }
+                ProcId::PrintCmpx => {
+                    let z_idx = ctx.iregs.get(0)? as u8;
+                    let (re, im) = ctx.zregs.get(z_idx)?;
+                    if im >= 0.0 {
+                        print!("{} + i{}", re, im);
+                    } else {
+                        print!("{} - i{}", re, -im);
+                    }
                 }
             }
         }

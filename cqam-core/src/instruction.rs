@@ -1129,6 +1129,8 @@ pub enum ProcId {
     DumpRegs = 4,
     /// Print H register histogram to stdout.
     PrintHist = 5,
+    /// Print Z[R[0]] as `a + ib` or `a - ib` to stdout.
+    PrintCmpx = 6,
 }
 
 impl TryFrom<u8> for ProcId {
@@ -1141,6 +1143,7 @@ impl TryFrom<u8> for ProcId {
             3 => Ok(ProcId::PrintChar),
             4 => Ok(ProcId::DumpRegs),
             5 => Ok(ProcId::PrintHist),
+            6 => Ok(ProcId::PrintCmpx),
             _ => Err(CqamError::InvalidId { domain: "ProcId", value: v }),
         }
     }
@@ -1166,6 +1169,7 @@ impl ProcId {
             ProcId::PrintChar => "PRINT_CHAR",
             ProcId::DumpRegs => "DUMP_REGS",
             ProcId::PrintHist => "PRINT_HIST",
+            ProcId::PrintCmpx => "PRINT_CMPX",
         }
     }
 
@@ -1178,6 +1182,7 @@ impl ProcId {
             "PRINT_CHAR" => Some(ProcId::PrintChar),
             "DUMP_REGS" => Some(ProcId::DumpRegs),
             "PRINT_HIST" => Some(ProcId::PrintHist),
+            "PRINT_CMPX" => Some(ProcId::PrintCmpx),
             _ => None,
         }
     }
