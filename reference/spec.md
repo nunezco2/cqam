@@ -502,6 +502,24 @@ Notation: `sigma' = sigma[field := value]` denotes a state identical to
                                        PC := PC + 1]
 ```
 
+**Increment (IINC):**
+```
+                  v = R[src] + 1
+  -------------------------------------------------------
+  sigma --IINC(dst, src)--> sigma[R[dst] := v,
+                                   PSW := update_arith(PSW, v),
+                                   PC := PC + 1]
+```
+
+**Decrement (IDEC):**
+```
+                  v = R[src] - 1
+  -------------------------------------------------------
+  sigma --IDEC(dst, src)--> sigma[R[dst] := v,
+                                   PSW := update_arith(PSW, v),
+                                   PC := PC + 1]
+```
+
 **Unconditional Jump (JMP):**
 ```
                   addr = labels(target)

@@ -94,6 +94,8 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
 
         // -- RR-format (2-register) -------------------------------------------
         Instruction::INot { dst, src } => encode_rr(op::INOT, *dst, *src),
+        Instruction::IInc { dst, src } => encode_rr(op::IINC, *dst, *src),
+        Instruction::IDec { dst, src } => encode_rr(op::IDEC, *dst, *src),
         Instruction::CvtIF { dst_f, src_i } => encode_rr(op::CVTIF, *dst_f, *src_i),
         Instruction::CvtFI { dst_i, src_f } => encode_rr(op::CVTFI, *dst_i, *src_f),
         Instruction::CvtFZ { dst_z, src_f } => encode_rr(op::CVTFZ, *dst_z, *src_f),

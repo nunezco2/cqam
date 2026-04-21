@@ -54,6 +54,10 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 | IEQ | `IEQ R3, R0, R1` | Equality: R3 = (R0 == R1) ? 1 : 0 |
 | ILT | `ILT R3, R0, R1` | Less than: R3 = (R0 < R1) ? 1 : 0 |
 | IGT | `IGT R3, R0, R1` | Greater than: R3 = (R0 > R1) ? 1 : 0 |
+| IINC | `IINC R0` | Increment: R0 = R0 + 1 |
+| IINC | `IINC R1, R0` | Increment into dst: R1 = R0 + 1 |
+| IDEC | `IDEC R0` | Decrement: R0 = R0 - 1 |
+| IDEC | `IDEC R1, R0` | Decrement into dst: R1 = R0 - 1 |
 
 ## Float Instructions
 

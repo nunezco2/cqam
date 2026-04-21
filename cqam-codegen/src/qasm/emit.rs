@@ -49,6 +49,12 @@ impl QasmFormat for Instruction {
             Instruction::INot { dst, src } => {
                 vec![format!("R{} = R{} ^ -1;", dst, src)]
             }
+            Instruction::IInc { dst, src } => {
+                vec![format!("R{} = R{} + 1;", dst, src)]
+            }
+            Instruction::IDec { dst, src } => {
+                vec![format!("R{} = R{} - 1;", dst, src)]
+            }
             Instruction::IShl { dst, src, amt } => {
                 vec![format!("R{} = R{} << {};", dst, src, amt)]
             }

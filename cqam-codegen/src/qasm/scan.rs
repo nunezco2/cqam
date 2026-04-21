@@ -50,7 +50,9 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.int_regs.insert(*rhs);
         }
 
-        Instruction::INot { dst, src } => {
+        Instruction::INot { dst, src }
+        | Instruction::IInc { dst, src }
+        | Instruction::IDec { dst, src } => {
             used.int_regs.insert(*dst);
             used.int_regs.insert(*src);
         }

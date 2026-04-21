@@ -34,6 +34,8 @@ In text-format source, register names include the prefix (e.g. `R0`, `F3`,
 | `IMUL` | dst, lhs, rhs | R[dst] = R[lhs] * R[rhs] (wrapping) | RRR |
 | `IDIV` | dst, lhs, rhs | R[dst] = R[lhs] / R[rhs]; traps if rhs == 0 | RRR |
 | `IMOD` | dst, lhs, rhs | R[dst] = R[lhs] % R[rhs]; traps if rhs == 0 | RRR |
+| `IINC` | dst [, src] | R[dst] = R[src] + 1 (src defaults to dst) | RR |
+| `IDEC` | dst [, src] | R[dst] = R[src] - 1 (src defaults to dst) | RR |
 
 ### 1.3 Integer bitwise (R-file)
 
@@ -228,6 +230,7 @@ following formats.
 | 0x4F-0x57 | Mixed-state, partial-trace, reset, and float math |
 | 0x58 | Qubit-count query (IQCFG) |
 | 0x59-0x5C | Thread-identity and atomic section instructions (ICCFG, ITID, HATMS, HATME) |
+| 0x60-0x61 | Integer increment/decrement (IINC, IDEC) |
 
 ---
 

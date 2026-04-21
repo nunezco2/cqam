@@ -1961,3 +1961,65 @@ b:
     assert_eq!(parsed.instructions[1],
         Instruction::ILdi { dst: 1, imm: 1 });
 }
+
+// ===========================================================================
+// IINC / IDEC parser tests
+// ===========================================================================
+
+#[test]
+fn test_parse_iinc_one_operand() {
+    // Single-operand form: IINC R0 -> IInc { dst: 0, src: 0 }
+    assert_eq!(
+        parse_instruction("IINC R0").unwrap(),
+        Instruction::IInc { dst: 0, src: 0 }
+    );
+}
+
+#[test]
+fn test_parse_iinc_two_operands() {
+    // Two-operand form: IINC R1, R0 -> IInc { dst: 1, src: 0 }
+    assert_eq!(
+        parse_instruction("IINC R1, R0").unwrap(),
+        Instruction::IInc { dst: 1, src: 0 }
+    );
+}
+
+#[test]
+fn test_parse_idec_one_operand() {
+    assert_eq!(
+        parse_instruction("IDEC R3").unwrap(),
+        Instruction::IDec { dst: 3, src: 3 }
+    );
+}
+
+#[test]
+fn test_parse_idec_two_operands() {
+    assert_eq!(
+        parse_instruction("IDEC R4, R3").unwrap(),
+        Instruction::IDec { dst: 4, src: 3 }
+    );
+}
+
+#[test]
+fn test_parse_iinc_no_operands_err() {
+    assert!(parse_instruction("IINC").is_err());
+}
+
+#[test]
+fn test_parse_iinc_three_operands_err() {
+    assert!(parse_instruction("IINC R0, R1, R2").is_err());
+}
+
+#[test]
+fn test_parse_idec_no_operands_err() {
+    assert!(parse_instruction("IDEC").is_err());
+}
+
+#[test]
+fn test_parse_iinc_high_reg() {
+    // R15 is legal
+    assert_eq!(
+        parse_instruction("IINC R15").unwrap(),
+        Instruction::IInc { dst: 15, src: 15 }
+    );
+}

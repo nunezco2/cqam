@@ -90,6 +90,16 @@ pub fn decode_with_debug(
             let src = extract_reg4(word, 16);
             Ok(Instruction::INot { dst, src })
         }
+        op::IINC => {
+            let dst = extract_reg4(word, 20);
+            let src = extract_reg4(word, 16);
+            Ok(Instruction::IInc { dst, src })
+        }
+        op::IDEC => {
+            let dst = extract_reg4(word, 20);
+            let src = extract_reg4(word, 16);
+            Ok(Instruction::IDec { dst, src })
+        }
         op::CVTIF => {
             let dst_f = extract_reg4(word, 20);
             let src_i = extract_reg4(word, 16);
@@ -546,6 +556,8 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::IOR => Some("IOR"),
         op::IXOR => Some("IXOR"),
         op::INOT => Some("INOT"),
+        op::IINC => Some("IINC"),
+        op::IDEC => Some("IDEC"),
         op::ISHL => Some("ISHL"),
         op::ISHR => Some("ISHR"),
         op::ILDI => Some("ILDI"),

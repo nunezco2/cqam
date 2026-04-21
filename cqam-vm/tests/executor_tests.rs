@@ -1511,3 +1511,100 @@ fn test_ecall_printstr_trailing_percent() {
     );
     assert!(result.is_ok(), "ECALL PrintStr with trailing %% should not panic");
 }
+
+// ===========================================================================
+// IINC / IDEC execution tests
+// ===========================================================================
+
+#[test]
+fn test_iinc_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, 41).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IInc { dst: 0, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 42);
+    assert!(!ctx.psw.zf);
+}
+
+#[test]
+fn test_iinc_two_reg() {
+    // dst != src: R1 = R0 + 1, R0 unchanged
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, 10).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IInc { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), 11);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 10);
+}
+
+#[test]
+fn test_iinc_zero_crossing() {
+    // -1 + 1 = 0: ZF should be set
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, -1i64).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IInc { dst: 0, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 0);
+    assert!(ctx.psw.zf);
+}
+
+#[test]
+fn test_iinc_overflow() {
+    // i64::MAX + 1 wraps to i64::MIN; OF should be set
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, i64::MAX).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IInc { dst: 0, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), i64::MIN);
+    assert!(ctx.psw.of);
+}
+
+#[test]
+fn test_idec_basic() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, 43).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDec { dst: 0, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 42);
+    assert!(!ctx.psw.zf);
+}
+
+#[test]
+fn test_idec_two_reg() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, 5).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDec { dst: 1, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(1).unwrap(), 4);
+    assert_eq!(ctx.iregs.get(0).unwrap(), 5);
+}
+
+#[test]
+fn test_idec_zero_crossing() {
+    // 1 - 1 = 0: ZF should be set
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, 1).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDec { dst: 0, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), 0);
+    assert!(ctx.psw.zf);
+}
+
+#[test]
+fn test_idec_overflow() {
+    // i64::MIN - 1 wraps to i64::MAX; OF should be set
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(0, i64::MIN).unwrap();
+    execute_instruction(&mut ctx, &Instruction::IDec { dst: 0, src: 0 }, &mut fm, &mut backend).unwrap();
+    assert_eq!(ctx.iregs.get(0).unwrap(), i64::MAX);
+    assert!(ctx.psw.of);
+}

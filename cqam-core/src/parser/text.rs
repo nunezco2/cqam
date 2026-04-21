@@ -76,6 +76,58 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             })?;
             Ok(Instruction::INot { dst, src })
         }
+        "IINC" => {
+            match ops.len() {
+                1 => {
+                    let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                        line: line_num,
+                        message: format!("IINC: invalid register '{}'", ops[0]),
+                    })?;
+                    Ok(Instruction::IInc { dst, src: dst })
+                }
+                2 => {
+                    let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                        line: line_num,
+                        message: format!("IINC: invalid destination register '{}'", ops[0]),
+                    })?;
+                    let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                        line: line_num,
+                        message: format!("IINC: invalid source register '{}'", ops[1]),
+                    })?;
+                    Ok(Instruction::IInc { dst, src })
+                }
+                _ => Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("IINC requires 1 or 2 operands, got {}", ops.len()),
+                }),
+            }
+        }
+        "IDEC" => {
+            match ops.len() {
+                1 => {
+                    let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                        line: line_num,
+                        message: format!("IDEC: invalid register '{}'", ops[0]),
+                    })?;
+                    Ok(Instruction::IDec { dst, src: dst })
+                }
+                2 => {
+                    let dst = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                        line: line_num,
+                        message: format!("IDEC: invalid destination register '{}'", ops[0]),
+                    })?;
+                    let src = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                        line: line_num,
+                        message: format!("IDEC: invalid source register '{}'", ops[1]),
+                    })?;
+                    Ok(Instruction::IDec { dst, src })
+                }
+                _ => Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("IDEC requires 1 or 2 operands, got {}", ops.len()),
+                }),
+            }
+        }
         "ISHL" => parse_rr_u8(&ops, |dst, src, amt| Instruction::IShl { dst, src, amt }, "ISHL", line_num),
         "ISHR" => parse_rr_u8(&ops, |dst, src, amt| Instruction::IShr { dst, src, amt }, "ISHR", line_num),
 

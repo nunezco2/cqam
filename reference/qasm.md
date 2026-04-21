@@ -44,6 +44,8 @@ Complex registers are lowered to paired floats (real and imaginary parts).
 | `IMUL R4, R0, R1` | `R4 = R0 * R1;` |
 | `IDIV R4, R2, R1` | `R4 = R2 / R1;` |
 | `IMOD R5, R1, R0` | `R5 = R1 % R0;` |
+| `IINC R0` | `R0 = R0 + 1;` |
+| `IDEC R0` | `R0 = R0 - 1;` |
 
 ### 4.2 Integer Bitwise
 

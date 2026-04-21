@@ -82,6 +82,8 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         | Instruction::IOr { .. }
         | Instruction::IXor { .. }
         | Instruction::INot { .. }
+        | Instruction::IInc { .. }
+        | Instruction::IDec { .. }
         | Instruction::IShl { .. }
         | Instruction::IShr { .. } => ResourceDelta {
             time: 1,

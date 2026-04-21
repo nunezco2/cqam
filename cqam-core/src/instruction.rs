@@ -61,6 +61,16 @@ pub enum Instruction {
     /// Bitwise NOT: R[dst] = !R[src]
     INot { dst: u8, src: u8 },
 
+    /// Integer increment: R[dst] = R[src] + 1
+    /// Single-operand form: IINC Rd  (src = dst, in-place)
+    /// Two-operand form:    IINC Rd, Rs
+    IInc { dst: u8, src: u8 },
+
+    /// Integer decrement: R[dst] = R[src] - 1
+    /// Single-operand form: IDEC Rd  (src = dst, in-place)
+    /// Two-operand form:    IDEC Rd, Rs
+    IDec { dst: u8, src: u8 },
+
     /// Shift left: R[dst] = R[src] << amt
     /// amt is a literal shift amount (0-63).
     IShl { dst: u8, src: u8, amt: u8 },

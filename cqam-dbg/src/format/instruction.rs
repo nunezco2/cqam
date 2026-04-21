@@ -27,6 +27,8 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::IOr { dst, lhs, rhs } => format!("IOR R{}, R{}, R{}", dst, lhs, rhs),
         Instruction::IXor { dst, lhs, rhs } => format!("IXOR R{}, R{}, R{}", dst, lhs, rhs),
         Instruction::INot { dst, src } => format!("INOT R{}, R{}", dst, src),
+        Instruction::IInc { dst, src } => format!("IINC R{}, R{}", dst, src),
+        Instruction::IDec { dst, src } => format!("IDEC R{}, R{}", dst, src),
         Instruction::IShl { dst, src, amt } => format!("ISHL R{}, R{}, {}", dst, src, amt),
         Instruction::IShr { dst, src, amt } => format!("ISHR R{}, R{}, {}", dst, src, amt),
 

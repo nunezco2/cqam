@@ -103,6 +103,8 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::IOr { dst, lhs, rhs } => format!("IOR R{}, R{}, R{}", dst, lhs, rhs),
         Instruction::IXor { dst, lhs, rhs } => format!("IXOR R{}, R{}, R{}", dst, lhs, rhs),
         Instruction::INot { dst, src } => format!("INOT R{}, R{}", dst, src),
+        Instruction::IInc { dst, src } => format!("IINC R{}, R{}", dst, src),
+        Instruction::IDec { dst, src } => format!("IDEC R{}, R{}", dst, src),
         Instruction::IShl { dst, src, amt } => format!("ISHL R{}, R{}, {}", dst, src, amt),
         Instruction::IShr { dst, src, amt } => format!("ISHR R{}, R{}, {}", dst, src, amt),
 
@@ -316,5 +318,24 @@ mod tests {
     fn test_disassemble_empty() {
         let text = disassemble(&[], None).unwrap();
         assert_eq!(text, "");
+    }
+
+    #[test]
+    fn test_format_iinc() {
+        let instr = Instruction::IInc { dst: 1, src: 0 };
+        assert_eq!(format_instruction(&instr), "IINC R1, R0");
+    }
+
+    #[test]
+    fn test_format_iinc_in_place() {
+        // Single-operand form always disassembles as two-operand (lossless).
+        let instr = Instruction::IInc { dst: 2, src: 2 };
+        assert_eq!(format_instruction(&instr), "IINC R2, R2");
+    }
+
+    #[test]
+    fn test_format_idec() {
+        let instr = Instruction::IDec { dst: 3, src: 1 };
+        assert_eq!(format_instruction(&instr), "IDEC R3, R1");
     }
 }

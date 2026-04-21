@@ -119,6 +119,18 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
             ctx.psw.update_from_arithmetic(result);
         }
 
+        Instruction::IInc { dst, src } => {
+            let (result, overflowed) = ctx.iregs.get(*src)?.overflowing_add(1);
+            ctx.iregs.set(*dst, result)?;
+            ctx.psw.update_from_arithmetic_with_overflow(result, overflowed);
+        }
+
+        Instruction::IDec { dst, src } => {
+            let (result, overflowed) = ctx.iregs.get(*src)?.overflowing_sub(1);
+            ctx.iregs.set(*dst, result)?;
+            ctx.psw.update_from_arithmetic_with_overflow(result, overflowed);
+        }
+
         Instruction::IShl { dst, src, amt } => {
             let safe_amt = std::cmp::min(*amt, 63) as u32;
             let result = ctx.iregs.get(*src)? << safe_amt;

@@ -1730,3 +1730,62 @@ fn roundtrip_hreduce_expect() {
     let decoded = decode(word).unwrap();
     assert_eq!(decoded, instr);
 }
+
+// =============================================================================
+// Round-trip tests: IINC / IDEC (0x60 / 0x61)
+// =============================================================================
+
+#[test]
+fn roundtrip_iinc_two_reg() {
+    let instr = Instruction::IInc { dst: 3, src: 5 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_iinc_in_place() {
+    // The "single-operand" encoding is just dst == src in the binary word.
+    let instr = Instruction::IInc { dst: 7, src: 7 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_idec_two_reg() {
+    let instr = Instruction::IDec { dst: 2, src: 4 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_idec_in_place() {
+    let instr = Instruction::IDec { dst: 0, src: 0 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn mnemonic_iinc_idec() {
+    assert_eq!(mnemonic(op::IINC), Some("IINC"));
+    assert_eq!(mnemonic(op::IDEC), Some("IDEC"));
+}
+
+#[test]
+fn iinc_opcode_value() {
+    // Spec mandates 0x60 / 0x61.
+    assert_eq!(op::IINC, 0x60);
+    assert_eq!(op::IDEC, 0x61);
+}
+
+#[test]
+fn iinc_encoded_word() {
+    // RR-format: [0x60][dst:4][src:4][pad:16]
+    // IInc { dst: 3, src: 5 } -> 0x60_35_0000
+    let labels = HashMap::new();
+    let word = encode(&Instruction::IInc { dst: 3, src: 5 }, &labels).unwrap();
+    assert_eq!(word, 0x6035_0000);
+}
+
+#[test]
+fn idec_encoded_word() {
+    // IDec { dst: 1, src: 2 } -> 0x61_12_0000
+    let labels = HashMap::new();
+    let word = encode(&Instruction::IDec { dst: 1, src: 2 }, &labels).unwrap();
+    assert_eq!(word, 0x6112_0000);
+}
