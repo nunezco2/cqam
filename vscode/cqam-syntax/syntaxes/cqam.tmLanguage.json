@@ -18,6 +18,7 @@
     { "include": "#flags" },
     { "include": "#mode-constants" },
     { "include": "#dist-constants" },
+    { "include": "#rot-axis" },
     { "include": "#file-constants" },
     { "include": "#trap-constants" },
     { "include": "#registers" },
@@ -104,15 +105,15 @@
       "patterns": [
         {
           "name": "keyword.other.opcode.integer.cqam",
-          "match": "\\b(?:IADD|ISUB|IMUL|IDIV|IMOD|IAND|IOR|IXOR|INOT|ISHL|ISHR|ILDI|ILDM|ISTR|ILDX|ISTRX|IEQ|ILT|IGT)\\b"
+          "match": "\\b(?:IADD|ISUB|IMUL|IDIV|IMOD|IAND|IOR|IXOR|INOT|IINC|IDEC|IMOV|ISHL|ISHR|ILDI|ILDM|ISTR|ILDX|ISTRX|IEQ|ILT|IGT)\\b"
         },
         {
           "name": "keyword.other.opcode.float.cqam",
-          "match": "\\b(?:FADD|FSUB|FMUL|FDIV|FLDI|FLDM|FSTR|FLDX|FSTRX|FEQ|FLT|FGT|FSIN|FCOS|FATAN2|FSQRT)\\b"
+          "match": "\\b(?:FADD|FSUB|FMUL|FDIV|FMOV|FLDI|FLDM|FSTR|FLDX|FSTRX|FEQ|FLT|FGT|FSIN|FCOS|FATAN2|FSQRT)\\b"
         },
         {
           "name": "keyword.other.opcode.complex.cqam",
-          "match": "\\b(?:ZADD|ZSUB|ZMUL|ZDIV|ZLDI|ZLDM|ZSTR|ZLDX|ZSTRX)\\b"
+          "match": "\\b(?:ZADD|ZSUB|ZMUL|ZDIV|ZMOV|ZLDI|ZLDM|ZSTR|ZLDX|ZSTRX)\\b"
         },
         {
           "name": "keyword.other.opcode.cvt.cqam",
@@ -132,7 +133,7 @@
         },
         {
           "name": "keyword.other.opcode.quantum.cqam",
-          "match": "\\b(?:QPREPSM|QPREPS|QPREPR|QPREPN|QPREP|QKERNELF|QKERNELZ|QKERNEL|QOBSERVE|QLOAD|QSTORE|QHADM|QFLIP|QPHASE|QCNOT|QCZ|QSWAP|QROT|QMEAS|QTENSOR|QCUSTOM|QENCODE|QMIXED|QPTRACE|QRESET)\\b"
+          "match": "\\b(?:QPREPSM|QPREPS|QPREPR|QPREPN|QPREP|QKERNELF|QKERNELZ|QKERNEL|QOBSERVE|QLOAD|QSTORE|QHADM|QFLIP|QPHASE|QCNOT|QCZ|QSWAP|QROT|QMEAS|QTENSOR|QCUSTOM|QENCODE|QMIXED|QPTRACE|QRESET|QXCH)\\b"
         },
         {
           "name": "keyword.other.opcode.hybrid.cqam",
@@ -154,15 +155,19 @@
     },
     "flags": {
       "name": "support.constant.flag.cqam",
-      "match": "\\b(?:ZF|NF|OF|PF|QF|SF|EF|HF|IF|AF)\\b"
+      "match": "\\b(?:ZF|NF|OF|PF|QF|SF|EF|HF|DF|CF|FK|MG|IF|AF)\\b"
     },
     "mode-constants": {
       "name": "support.constant.mode.cqam",
-      "match": "\\b(?:DIST|PROB|AMP)\\b"
+      "match": "\\b(?:DIST|PROB|SAMPLE)\\b"
     },
     "dist-constants": {
       "name": "support.constant.dist.cqam",
-      "match": "\\b(?:UNIFORM|ZERO|BELL|GHZ)\\b"
+      "match": "\\b(?:ZERO|UNIF|UNIFORM|BELL|GHZS|GHZ)\\b"
+    },
+    "rot-axis": {
+      "name": "support.constant.axis.cqam",
+      "match": "\\b(?:X|Y|Z)\\b"
     },
     "file-constants": {
       "name": "support.constant.file.cqam",
