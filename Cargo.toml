@@ -1,5 +1,5 @@
 [workspace]
 resolver = "3"
 members = [ "cqam-as", "cqam-codegen",
-    "cqam-core", "cqam-dbg", "cqam-micro", "cqam-qpu", "cqam-qpu-ibm", "cqam-run", "cqam-sim", "cqam-vm"
+    "cqam-core", "cqam-dbg", "cqam-micro", "cqam-qpu", "cqam-qpu-ibm", "cqam-qpu-ionq", "cqam-run", "cqam-sim", "cqam-vm"
 , "cqam2qasm"]

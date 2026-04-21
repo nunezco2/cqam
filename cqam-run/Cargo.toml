@@ -6,6 +6,7 @@ edition = "2024"
 [features]
 default = []
 ibm = ["cqam-qpu-ibm"]
+ionq = ["cqam-qpu-ionq"]
 
 [dependencies]
 cqam-core = { path = "../cqam-core" }
@@ -14,7 +15,8 @@ cqam-sim = { path = "../cqam-sim" }
 cqam-vm = { path = "../cqam-vm" }
 cqam-qpu = { path = "../cqam-qpu", features = ["mock"] }
 cqam-micro = { path = "../cqam-micro" }
-cqam-qpu-ibm = { path = "../cqam-qpu-ibm", optional = true }
+cqam-qpu-ibm  = { path = "../cqam-qpu-ibm",  optional = true }
+cqam-qpu-ionq = { path = "../cqam-qpu-ionq", optional = true }
 serde = { version = "1.0", features = ["derive"] }
 toml = "0.7"
 log = "0.4"

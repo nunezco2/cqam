@@ -1,3 +1,6 @@
+# === Secrets ===
+*_api-key.txt
+
 # === Rust Specific ===
 /target/
 **/target/
