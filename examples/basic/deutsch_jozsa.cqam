@@ -33,14 +33,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -107,8 +105,7 @@ res_fmt:
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0            # CMEM[0] = constant verdict
     ILDM R3, 1            # CMEM[1] = balanced verdict
     ECALL PRINT_STR

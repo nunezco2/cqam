@@ -40,30 +40,27 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     IQCFG R2                 # R2 = N (qubit count) for %d
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # --- Parametric setup: derive 2^N - 1 = |1...1> ---
     IQCFG R15            # R15 = N (qubit count from pragma)
     ILDI R11, 1          # R11 = accumulator for 2^N
     ILDI R12, 0          # R12 = loop counter
-    ILDI R13, 1          # R13 = constant 1
 LABEL: ghz_pow2
     IEQ R14, R12, R15
     JIF R14, ghz_pow2_done
     IADD R11, R11, R11   # R11 *= 2
-    IADD R12, R12, R13
+    IINC R12
     JMP ghz_pow2
 LABEL: ghz_pow2_done
-    ISUB R5, R11, R13    # R5 = 2^N - 1 = |1...1>
+    IDEC R5, R11         # R5 = 2^N - 1 = |1...1>
 
 # --- Constants ---
     ILDI R0, 0           # R0 = state |0...0> index = 0
@@ -145,8 +142,7 @@ LABEL: merge_verify
     ILDM R2, 4               # R2 = CMEM[4] = entanglement flag
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

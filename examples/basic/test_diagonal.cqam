@@ -43,8 +43,7 @@ res_msg:
 # ===========================================================================
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ===========================================================================
@@ -89,8 +88,7 @@ res_msg:
     # Print result
     ILDI R0, @res_msg
     ILDI R1, @res_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

@@ -71,7 +71,6 @@ edge_lowj:
 
 .code
 
-    ILDI R15, 1          # constant 1
     ILDI R14, 0          # R14 = overall failure count
 
 # ===========================================================================
@@ -85,16 +84,16 @@ edge_lowj:
     # FAIL
     ILDI R0, @len_fail
     ILDI R1, @len_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, @diag.len
     ECALL PRINT_STR
-    IADD R14, R14, R15   # increment failure count
+    IINC R14             # increment failure count
     JMP len_done
 
 LABEL: len_ok
     ILDI R0, @len_pass
     ILDI R1, @len_pass.len
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, @diag.len
     ECALL PRINT_STR
 
@@ -129,7 +128,7 @@ LABEL: len_done
     HREDUCE MODEV, H3, R2   # R2 = mode (basis state key with highest probability)
     ILDI R0, @meas_msg
     ILDI R1, @meas_msg.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Check mode == 1
@@ -140,16 +139,16 @@ LABEL: len_done
     # FAIL
     ILDI R0, @diag_fail
     ILDI R1, @diag_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     # R2 already holds the measured value for %d
     ECALL PRINT_STR
-    IADD R14, R14, R15
+    IINC R14
     JMP diag_done
 
 LABEL: diag_ok
     ILDI R0, @diag_pass
     ILDI R1, @diag_pass.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 LABEL: diag_done
@@ -177,7 +176,7 @@ LABEL: sci_ok_1
     # Load im of first entry: should be -20.0
     # @sci is the base; im is at @sci + 1
     ILDI R6, @sci
-    IADD R6, R6, R15      # R6 = @sci + 1
+    IINC R6      # R6 = @sci + 1
     FLDX F0, R6           # F0 = im(first) = -20.0
     CVTFI R3, F0           # R3 = -20
     ILDI R4, -20
@@ -213,15 +212,15 @@ LABEL: sci_ok_4
 
     ILDI R0, @sci_fail
     ILDI R1, @sci_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
-    IADD R14, R14, R15
+    IINC R14
     JMP sci_done
 
 LABEL: sci_pass_print
     ILDI R0, @sci_pass
     ILDI R1, @sci_pass.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 LABEL: sci_done
@@ -234,7 +233,7 @@ LABEL: sci_done
     # Pure imaginary: 0J1.0 -> re=0.0, im=1.0
     FLDM F0, @edge_pimag
     ILDI R6, @edge_pimag
-    IADD R6, R6, R15
+    IINC R6
     FLDX F1, R6
     FLDI F4, 0
     FLDI F5, 1
@@ -250,7 +249,7 @@ LABEL: edge_pimag_ok2
     # Pure real: 3.14J0 -> re=3.14, im=0.0
     FLDM F0, @edge_preal
     ILDI R6, @edge_preal
-    IADD R6, R6, R15
+    IINC R6
     FLDX F1, R6
     # Check im == 0.0
     FEQ R5, F1, F4        # im == 0.0?
@@ -271,7 +270,7 @@ LABEL: edge_preal_ok2
     # Negative both: -1.5J-2.5 -> re=-1.5, im=-2.5
     FLDM F0, @edge_neg
     ILDI R6, @edge_neg
-    IADD R6, R6, R15
+    IINC R6
     FLDX F1, R6
     # Check re: -1.5 * -2 = 3.0 -> int = 3
     ILDI R0, -2
@@ -294,7 +293,7 @@ LABEL: edge_neg_ok2
     # Lowercase j: 1.0j0.0 -> re=1.0, im=0.0
     FLDM F0, @edge_lowj
     ILDI R6, @edge_lowj
-    IADD R6, R6, R15
+    IINC R6
     FLDX F1, R6
     FLDI F5, 1
     FEQ R5, F0, F5        # re == 1.0?
@@ -313,15 +312,15 @@ LABEL: edge_lowj_ok2
 
     ILDI R0, @edge_fail
     ILDI R1, @edge_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
-    IADD R14, R14, R15
+    IINC R14
     JMP edge_done
 
 LABEL: edge_pass_print
     ILDI R0, @edge_pass
     ILDI R1, @edge_pass.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 LABEL: edge_done
@@ -335,14 +334,14 @@ LABEL: edge_done
 
     ILDI R0, @overall_fail
     ILDI R1, @overall_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     HALT
 
 LABEL: all_pass
     ILDI R0, @overall_pass
     ILDI R1, @overall_pass.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

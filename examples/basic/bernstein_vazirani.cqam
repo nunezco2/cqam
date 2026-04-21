@@ -28,14 +28,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 21
     ILDI R3, 5
     ECALL PRINT_STR
@@ -44,15 +42,14 @@ res_fmt:
     IQCFG R10            # R10 = N (qubit count from pragma)
     ILDI R11, 1          # R11 = accumulator for 2^N
     ILDI R12, 0          # R12 = loop counter
-    ILDI R13, 1          # R13 = constant 1
 LABEL: bv_pow2
     IEQ R14, R12, R10
     JIF R14, bv_pow2_done
     IADD R11, R11, R11   # R11 *= 2
-    IADD R12, R12, R13
+    IINC R12
     JMP bv_pow2
 LABEL: bv_pow2_done
-    ISUB R2, R11, R13    # R2 = 2^N - 1 = all-qubits Hadamard mask
+    IDEC R2, R11         # R2 = 2^N - 1 = all-qubits Hadamard mask
 
 # --- Classical setup: define the secret string ---
     ILDI R0, 0           # R0 = unused ctx
@@ -93,8 +90,7 @@ LABEL: bv_pow2_done
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0            # CMEM[0] = secret
     ILDM R3, 1            # CMEM[1] = recovered
     ILDM R4, 2            # CMEM[2] = success

@@ -36,15 +36,13 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     IQCFG R2                 # R2 = N (qubit count) for %d
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # --- Setup ---
@@ -144,8 +142,7 @@ LABEL: end_program
     ILDM R3, 3               # R3 = CMEM[3] = Bob's measurement
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

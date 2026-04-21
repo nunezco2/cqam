@@ -73,11 +73,9 @@ done_msg:
 # ===========================================================================
 # Print banner
 # ===========================================================================
-    ILDI R15, 1          # constant 1
-
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ===========================================================================
@@ -136,7 +134,7 @@ done_msg:
 # ===========================================================================
     ILDI R0, @ta_hdr
     ILDI R1, @ta_hdr.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ---------------------------------------------------------------------------
@@ -164,7 +162,7 @@ done_msg:
 
     ILDI R0, @ta1_pre
     ILDI R1, @ta1_pre.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Check F1 == 1.0
@@ -173,13 +171,13 @@ done_msg:
     JIF R10, ta1_pass
     ILDI R0, @ta1_fail
     ILDI R1, @ta1_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP ta1_end
 LABEL: ta1_pass
     ILDI R0, @ta1_ok
     ILDI R1, @ta1_ok.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: ta1_end
 
@@ -208,13 +206,13 @@ LABEL: ta1_end
     JIF R10, ta2_pass
     ILDI R0, @ta2_fail
     ILDI R1, @ta2_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP ta2_end
 LABEL: ta2_pass
     ILDI R0, @ta2_ok
     ILDI R1, @ta2_ok.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: ta2_end
 
@@ -223,7 +221,7 @@ LABEL: ta2_end
 # ===========================================================================
     ILDI R0, @tb_hdr
     ILDI R1, @tb_hdr.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ---------------------------------------------------------------------------
@@ -248,7 +246,7 @@ LABEL: ta2_end
 
     ILDI R0, @tb1_pre
     ILDI R1, @tb1_pre.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Check F1 == 1.0
@@ -257,13 +255,13 @@ LABEL: ta2_end
     JIF R10, tb1_pass
     ILDI R0, @tb1_fail
     ILDI R1, @tb1_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP tb1_end
 LABEL: tb1_pass
     ILDI R0, @tb1_ok
     ILDI R1, @tb1_ok.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: tb1_end
 
@@ -289,7 +287,7 @@ LABEL: tb1_end
 
     ILDI R0, @tb2_pre
     ILDI R1, @tb2_pre.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Check F1 == 1.0
@@ -298,13 +296,13 @@ LABEL: tb1_end
     JIF R10, tb2_pass
     ILDI R0, @tb2_fail
     ILDI R1, @tb2_fail.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP tb2_end
 LABEL: tb2_pass
     ILDI R0, @tb2_ok
     ILDI R1, @tb2_ok.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: tb2_end
 
@@ -313,7 +311,7 @@ LABEL: tb2_end
 # ===========================================================================
     ILDI R0, @done_msg
     ILDI R1, @done_msg.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

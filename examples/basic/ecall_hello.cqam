@@ -46,8 +46,7 @@ hello:
 # === PRINT_STR: formatted output using .data string ===
     ILDI R0, @fmt             # base address of format string
     ILDI R1, @fmt.len         # length (includes NUL terminator)
-    ILDI R5, 1
-    ISUB R1, R1, R5           # exclude NUL for PRINT_STR
+    IDEC R1                   # exclude NUL for PRINT_STR
     IQCFG R2                  # R2 = qubit count (integer arg for %d)
     # Compute pi/4 into F1
     ILDI R5, 785
@@ -60,8 +59,7 @@ hello:
 # === PRINT_STR: print hello string (no format specifiers) ===
     ILDI R0, @hello           # base address
     ILDI R1, @hello.len       # length (includes NUL)
-    ILDI R5, 1
-    ISUB R1, R1, R5           # exclude NUL
+    IDEC R1                   # exclude NUL
     ECALL PRINT_STR           # stdout: "CQAM"
 
     # Print a newline

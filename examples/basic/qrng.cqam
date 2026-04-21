@@ -27,21 +27,18 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 8
     IQCFG R3              # R3 = qubit count from config
     ECALL PRINT_STR
 
 # --- Setup ---
     ILDI R0, 8           # R0 = number of random samples to generate
-    ILDI R1, 1           # R1 = constant 1
     ILDI R2, 0           # R2 = sample counter
     ILDI R3, 0           # R3 = sum of random values (for computing mean)
     ILDI R4, 0           # R4 = memory write pointer (starts at address 0)
@@ -61,7 +58,7 @@ LABEL: rng_loop
 
 # Print measurement histogram for random sample
     ISTR R0, 90           # Save R0 (loop counter) to CMEM[90]
-    ISTR R1, 91           # Save R1 (constant 1) to CMEM[91]
+    ISTR R1, 91           # Save R1 to CMEM[91]
     ILDI R0, 0            # H0 = random sample
     ILDI R1, 0            # Mode 0: table
     ECALL PRINT_HIST
@@ -74,15 +71,15 @@ LABEL: rng_loop
 
 # Step 4: Store random number to memory using indirect addressing
     ISTRX R8, R4         # CMEM[R4] = random number
-    IADD R4, R4, R1      # R4++ (advance memory pointer)
+    IINC R4              # R4++ (advance memory pointer)
 
 # Accumulate statistics
     IADD R3, R3, R8      # Sum of random values
     FADD F0, F0, F2      # Sum of means
 
 # Increment counter
-    IADD R2, R2, R1
-    ISUB R0, R0, R1
+    IINC R2
+    IDEC R0
 
 # Continue if more samples needed
     JIF R0, rng_loop
@@ -101,10 +98,10 @@ LABEL: rng_pow2
     IEQ R12, R11, R9
     JIF R12, rng_pow2_done
     IADD R10, R10, R10
-    IADD R11, R11, R1     # R1 = constant 1
+    IINC R11
     JMP rng_pow2
 LABEL: rng_pow2_done
-    ISUB R9, R10, R1      # R9 = 2^N - 1
+    IDEC R9, R10          # R9 = 2^N - 1
     CVTIF F6, R9          # F6 = (2^N - 1) as float
     FLDI F9, 2
     FDIV F6, F6, F9       # F6 = (2^N - 1) / 2 = expected mean
@@ -127,8 +124,7 @@ LABEL: rng_pow2_done
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 103          # CMEM[103] = sample count
     ILDM R3, 104          # CMEM[104] = sum
     FLDM F1, 100          # F1 = empirical mean (CMEM[100])

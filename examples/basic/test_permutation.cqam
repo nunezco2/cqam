@@ -66,8 +66,7 @@ done_msg:
 # ===========================================================================
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ===========================================================================
@@ -79,8 +78,7 @@ done_msg:
 # ===========================================================================
     ILDI R0, @t1_hdr
     ILDI R1, @t1_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Store permutation table at CMEM[200..203]
@@ -111,15 +109,13 @@ done_msg:
     JIF R10, t1_pass
     ILDI R0, @t1_fail
     ILDI R1, @t1_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t1_end
 LABEL: t1_pass
     ILDI R0, @t1_ok
     ILDI R1, @t1_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: t1_end
 
@@ -131,8 +127,7 @@ LABEL: t1_end
 # ===========================================================================
     ILDI R0, @t2_hdr
     ILDI R1, @t2_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Store permutation table at CMEM[300..307]
@@ -170,15 +165,13 @@ LABEL: t1_end
     JIF R10, t2_pass
     ILDI R0, @t2_fail
     ILDI R1, @t2_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t2_end
 LABEL: t2_pass
     ILDI R0, @t2_ok
     ILDI R1, @t2_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: t2_end
 
@@ -191,8 +184,7 @@ LABEL: t2_end
 # ===========================================================================
     ILDI R0, @t3_hdr
     ILDI R1, @t3_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Store permutation table at CMEM[400..407]
@@ -232,15 +224,13 @@ LABEL: t2_end
     JIF R10, t3_pass
     ILDI R0, @t3_fail
     ILDI R1, @t3_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t3_end
 LABEL: t3_pass
     ILDI R0, @t3_ok
     ILDI R1, @t3_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: t3_end
 
@@ -252,8 +242,7 @@ LABEL: t3_end
 # ===========================================================================
     ILDI R0, @t4_hdr
     ILDI R1, @t4_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     # Store identity permutation at CMEM[500..503]
@@ -284,15 +273,13 @@ LABEL: t3_end
     JIF R10, t4_pass
     ILDI R0, @t4_fail
     ILDI R1, @t4_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t4_end
 LABEL: t4_pass
     ILDI R0, @t4_ok
     ILDI R1, @t4_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: t4_end
 
@@ -301,8 +288,7 @@ LABEL: t4_end
 # ===========================================================================
     ILDI R0, @done_msg
     ILDI R1, @done_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

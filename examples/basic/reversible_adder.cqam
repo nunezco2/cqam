@@ -101,14 +101,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 2
     IQCFG R3              # R3 = total qubit count from config
     ECALL PRINT_STR
@@ -217,8 +215,7 @@ res_fmt:
 # ===========================================================================
     ILDI R0, @t1_hdr
     ILDI R1, @t1_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # Prepare state 9 = |1001> = flip qubits 0 and 3
@@ -240,18 +237,15 @@ res_fmt:
     JIF R10, t1_pass
     ILDI R0, @t1_fail
     ILDI R1, @t1_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t1_end
 LABEL: t1_pass
     ILDI R0, @t1_ok
     ILDI R1, @t1_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
-    ILDI R15, 1
-    IADD R14, R14, R15
+    IINC R14
 LABEL: t1_end
 
 # ===========================================================================
@@ -260,8 +254,7 @@ LABEL: t1_end
 # ===========================================================================
     ILDI R0, @t2_hdr
     ILDI R1, @t2_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     QPREP Q1, ZERO
@@ -278,18 +271,15 @@ LABEL: t1_end
     JIF R10, t2_pass
     ILDI R0, @t2_fail
     ILDI R1, @t2_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t2_end
 LABEL: t2_pass
     ILDI R0, @t2_ok
     ILDI R1, @t2_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
-    ILDI R15, 1
-    IADD R14, R14, R15
+    IINC R14
 LABEL: t2_end
 
 # ===========================================================================
@@ -301,14 +291,12 @@ LABEL: t2_end
 # ===========================================================================
     ILDI R0, @t3_hdr
     ILDI R1, @t3_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @t3_info
     ILDI R1, @t3_info.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     QPREP Q2, ZERO           # |0000>
@@ -331,18 +319,15 @@ LABEL: t2_end
     JIF R10, t3_pass
     ILDI R0, @t3_fail
     ILDI R1, @t3_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t3_end
 LABEL: t3_pass
     ILDI R0, @t3_ok
     ILDI R1, @t3_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
-    ILDI R15, 1
-    IADD R14, R14, R15
+    IINC R14
 LABEL: t3_end
 
 # ===========================================================================
@@ -351,8 +336,7 @@ LABEL: t3_end
 # ===========================================================================
     ILDI R0, @t4_hdr
     ILDI R1, @t4_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     QPREP Q3, ZERO
@@ -371,18 +355,15 @@ LABEL: t3_end
     JIF R10, t4_pass
     ILDI R0, @t4_fail
     ILDI R1, @t4_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t4_end
 LABEL: t4_pass
     ILDI R0, @t4_ok
     ILDI R1, @t4_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
-    ILDI R15, 1
-    IADD R14, R14, R15
+    IINC R14
 LABEL: t4_end
 
 # ===========================================================================
@@ -394,8 +375,7 @@ LABEL: t4_end
 
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0
     ECALL PRINT_STR
 
