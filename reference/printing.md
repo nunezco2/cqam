@@ -149,7 +149,7 @@ amp_fmt:
     .ascii "|00> amplitude: %c\n"
 
 .code
-    QPREP  Q0, UNIFORM
+    QPREP  Q0, UNIF
     QAMP   Z0, Q0, 0           ; store amplitude of |00> in Z0
 
     ILDI R0, @amp_fmt
@@ -376,7 +376,7 @@ through `|111>`; a 16-qubit program labels them as `|0000000000000000>` through
 #! qubits 3
 
 .code
-    QPREP Q0, UNIFORM
+    QPREP Q0, UNIF
     QOBSERVE H0, Q0, DIST, R0, R0
 
     ; Mode 0: table, probability-descending
@@ -409,7 +409,7 @@ From `ghz_verify.cqam`: after observing a 16-qubit GHZ state, only the two non-z
 entries are meaningful.  Mode 3 with K = 10 makes this explicit:
 
 ```
-    QPREP Q0, GHZ
+    QPREP Q0, GHZS
     QOBSERVE H3, Q0
 
     ILDI R0, 3    ; H register index
@@ -528,7 +528,7 @@ newline:
 
 .code
     ; Prepare a 2-qubit state and extract an amplitude into Z0
-    QPREP  Q0, UNIFORM
+    QPREP  Q0, UNIF
     QAMP   Z0, Q0, 0       ; store amplitude of |00> in Z0
 
     ; Print label

@@ -50,7 +50,7 @@ res_fmt:
 # ===============================================
 # Message 00: Identity (no operation)
 # ===============================================
-    QPREP Q0, 2          # Shared Bell pair |Phi+> = (|00>+|11>)/sqrt(2)
+    QPREP Q0, BELL          # Shared Bell pair |Phi+> = (|00>+|11>)/sqrt(2)
 # Alice does nothing (identity encoding)
     NOP
 # Bob decodes: Bell measurement = CNOT(q0,q1) + H(q0)
@@ -62,7 +62,7 @@ res_fmt:
 # ===============================================
 # Message 01: Bit-flip (X on Alice's qubit = q0)
 # ===============================================
-    QPREP Q1, 2          # Fresh Bell pair
+    QPREP Q1, BELL          # Fresh Bell pair
 # Alice applies X to her qubit (q0)
     QFLIP Q1, Q1, R1     # X on qubit 0 (mask=1)
 # Bob decodes: Bell measurement
@@ -74,7 +74,7 @@ res_fmt:
 # ===============================================
 # Message 10: Phase-flip (Z on Alice's qubit = q0)
 # ===============================================
-    QPREP Q2, 2          # Fresh Bell pair
+    QPREP Q2, BELL          # Fresh Bell pair
 # Alice applies Z to her qubit (q0)
     QPHASE Q2, Q2, R1    # Z on qubit 0 (mask=1)
 # Bob decodes: Bell measurement
@@ -86,7 +86,7 @@ res_fmt:
 # ===============================================
 # Message 11: XZ (bit-flip + phase-flip on q0)
 # ===============================================
-    QPREP Q3, 2          # Fresh Bell pair
+    QPREP Q3, BELL          # Fresh Bell pair
 # Alice applies both X and Z to her qubit (q0)
     QFLIP Q3, Q3, R1
     QPHASE Q3, Q3, R1

@@ -55,7 +55,7 @@ res_fmt:
 # ===============================================
 # Step 1: Prepare uniform superposition (register-level)
 # ===============================================
-    QPREP Q0, 1          # Uniform superposition on counting register
+    QPREP Q0, UNIF          # Uniform superposition on counting register
 
 # ===============================================
 # Step 2: Simulate modular exponentiation via phase encoding

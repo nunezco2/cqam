@@ -171,7 +171,7 @@ res_fmt:
 # ===========================================================================
 # Initialize walker at position 0, coin |0>
 # ===========================================================================
-    QPREP Q0, 0           # Q0 = |00000> (pos=0, coin=0)
+    QPREP Q0, ZERO           # Q0 = |00000> (pos=0, coin=0)
 
 # Initial coin flip
     QHADM Q0, Q0, R4      # Hadamard on coin qubit only

@@ -130,7 +130,7 @@ neg_fmt:
 # Factored as: qubit0 = |-> = [1,-1]/sqrt(2), qubit1 = |+i> = [1,i]/sqrt(2).
 # Amplitude data stored at .org 600 (qprepsm_amps label).
 # Note: ZLDI Z0-Z3 loads no longer needed; amplitude data is in .qstate static table.
-    QPREP Q0, 0                  # allocate 2-qubit zero state (precondition for QPREPSM)
+    QPREP Q0, ZERO                  # allocate 2-qubit zero state (precondition for QPREPSM)
     ILDI R4, @qprepsm_amps       # CMEM base address of amplitude data
     ILDI R5, 2                   # qubit count
     QPREPSM Q0, R4, R5           # Q0 = |--> ⊗ |+i> = [1,i,-1,-i]/2

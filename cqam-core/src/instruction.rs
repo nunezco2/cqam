@@ -609,10 +609,10 @@ impl DistId {
     /// Parse from token: accepts "UNIFORM", "ZERO", "BELL", "GHZ" or numeric.
     pub fn from_token(token: &str) -> Option<Self> {
         match token {
-            "UNIFORM" | "uniform" => Some(DistId::Uniform),
             "ZERO" | "zero" => Some(DistId::Zero),
+            "UNIF" | "unif" | "UNIFORM" | "uniform" => Some(DistId::Uniform),
             "BELL" | "bell" => Some(DistId::Bell),
-            "GHZ" | "ghz" => Some(DistId::Ghz),
+            "GHZS" | "ghzs" | "GHZ" | "ghz" => Some(DistId::Ghz),
             _ => token.parse::<u8>().ok().and_then(|v| Self::try_from(v).ok()),
         }
     }

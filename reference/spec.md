@@ -87,7 +87,7 @@ before and after each operation.
 SF, EF, and IF are intent-based flags. They are set according to the identity of
 the kernel applied, not by dynamic state inspection: SF is set by kernels that
 create superposition (UNIT, QFFT, QIFT, DIFF, GROV, DROT, PHSH); EF is set by
-kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP with BELL/GHZ
+kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP with BELL/GHZS
 distributions; IF is set by kernels that exploit interference (QFFT, QIFT, DIFF,
 GROV).
 

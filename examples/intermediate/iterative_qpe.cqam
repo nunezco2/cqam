@@ -65,11 +65,11 @@ res:
     ISTR R3, 104         # target_qubits = 1
 
 # --- Prepare eigenstate register: 1 qubit in |1⟩ ---
-    QPREPN Q1, 0, R3     # Q1 = |0⟩ (1 qubit)
+    QPREPN Q1, ZERO, R3     # Q1 = |0⟩ (1 qubit)
     QFLIP Q1, Q1, R3     # Q1 = |1⟩
 
 # --- Prepare ancilla: 1 qubit in |+⟩ ---
-    QPREPN Q0, 0, R3     # Q0 = |0⟩ (1 qubit)
+    QPREPN Q0, ZERO, R3     # Q0 = |0⟩ (1 qubit)
     QHADM Q0, Q0, R3     # Q0 = |+⟩
 
 # --- Combine: Q2 = ancilla ⊗ eigenstate ---

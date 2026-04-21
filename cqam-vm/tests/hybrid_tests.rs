@@ -979,7 +979,7 @@ fn test_e2e_text_observe_prob_round_pipeline() {
 
     let source = r#"
 # Prepare uniform 2-qubit state: each |k> has p=0.25
-QPREP Q0, 0
+QPREP Q0, ZERO
 # Set R0 = 2 (query basis state 2)
 ILDI R0, 2
 # QOBSERVE in PROB mode: H0 = p(|2>) = 0.25

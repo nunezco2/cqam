@@ -246,12 +246,14 @@ following formats.
 
 ### 4.1 Distribution IDs (`dist_id` module, used by `QPREP`)
 
-| Name | Value | Description |
-|------|-------|-------------|
-| `UNIFORM` | 0 | Equal probability over all 2^n basis states (H^n\|0>) |
-| `ZERO` | 1 | Delta distribution at \|0...0> (computational zero state) |
+| Mnemonic | Value | Description |
+|----------|-------|-------------|
+| `ZERO` | 0 | Delta distribution at \|0...0> (computational zero state) |
+| `UNIF` | 1 | Equal probability over all 2^n basis states (H^n\|0>) |
 | `BELL` | 2 | Two-qubit Bell state \|Phi+> = (\|00> + \|11>) / sqrt(2) |
-| `GHZ` | 3 | n-qubit GHZ state (\|0...0> + \|1...1>) / sqrt(2) |
+| `GHZS` | 3 | n-qubit GHZ state (\|0...0> + \|1...1>) / sqrt(2) |
+
+The legacy forms `UNIFORM`, `uniform`, `GHZ`, `ghz`, `zero`, `bell`, and bare numerics `0`–`3` are still accepted for backward compatibility; standard new code uses the 4-letter mnemonics above.
 
 ### 4.2 Kernel IDs (`kernel_id` module, used by `QKERNEL`)
 
@@ -285,7 +287,7 @@ operation applied, not by dynamic state inspection.
 | `PF` | 3 | `psw.pf` | comparison ops | Predicate: set by comparison instructions |
 | `QF` | 4 | `psw.qf` | QPREP/QKERNEL | Quantum active: at least one Q register is occupied |
 | `SF` | 5 | `psw.sf` | QKERNEL intent | Superposition created: set by kernels that create superposition (UNIT, QFFT, QIFT, DIFF, GROV, DROT, PHSH) |
-| `EF` | 6 | `psw.ef` | QKERNEL intent | Entanglement created: set by kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP BELL/GHZ |
+| `EF` | 6 | `psw.ef` | QKERNEL intent | Entanglement created: set by kernels that create entanglement (ENTG, GROV, CTLU) and by QPREP BELL/GHZS |
 | `HF` | 7 | `psw.hf` | HFORK/HMERGE | Hybrid mode: inside an HFORK/HMERGE block |
 | `IF` | 12 | `psw.if_flag` | QKERNEL intent | Interference: set by kernels that exploit interference (QFFT, QIFT, DIFF, GROV) |
 | `AF` | 13 | `psw.af` | HATMS/HATME | Atomic section: set on the elected leader thread between HATMS and HATME |

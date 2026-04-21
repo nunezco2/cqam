@@ -29,7 +29,7 @@ bal_fmt:
 # ============================================
 # Test 1: constant f(x) = 0 (no oracle)
 # ============================================
-    QPREP Q0, 1                  # uniform superposition
+    QPREP Q0, UNIF                  # uniform superposition
     NOP                          # oracle: identity
     QKERNEL QFFT, Q0, Q0, R14, R14
     QOBSERVE H0, Q0
@@ -42,7 +42,7 @@ bal_fmt:
 # ============================================
 # Test 2: balanced f(x) = x_0 (parity of LSB)
 # ============================================
-    QPREP Q1, 1
+    QPREP Q1, UNIF
     ILDI R3, 1
     QPHASE Q1, Q1, R3            # Z on qubit 0 → balanced oracle
     QKERNEL QFFT, Q1, Q1, R14, R14

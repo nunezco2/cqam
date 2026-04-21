@@ -64,7 +64,7 @@ res_fmt:
     ZLDI Z1, 0, 0        # Z1 = unused zctx1
 
 # === Initialize: uniform superposition (register-level) ===
-    QPREP Q0, 1          # Q0 = uniform superposition
+    QPREP Q0, UNIF          # Q0 = uniform superposition
 
 # === QAOA Round 1 ===
 # Cost layer: phase_shift kernel (register-level)

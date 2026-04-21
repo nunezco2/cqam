@@ -816,7 +816,7 @@ JMP LOOP
 #[test]
 fn test_parse_program_quantum_workflow() {
     let source = "\
-QPREP Q0, 0
+QPREP Q0, ZERO
 QKERNEL ENTG, Q1, Q0, R0, R1
 QOBSERVE H0, Q1
 HREDUCE ARGMX, H0, R2
@@ -1071,7 +1071,7 @@ fn test_parse_qkernelz_invalid_register() {
 #[test]
 fn test_parse_program_qkernelf_workflow() {
     let source = "\
-QPREP Q0, 0
+QPREP Q0, ZERO
 FLDI F0, 1
 FLDI F1, 0
 QKERNELF DROT, Q1, Q0, F0, F1
@@ -1086,7 +1086,7 @@ HALT
 #[test]
 fn test_parse_program_qkernelz_workflow() {
     let source = "\
-QPREP Q0, 0
+QPREP Q0, ZERO
 ZLDI Z0, 1, 2
 ZLDI Z1, 0, 0
 QKERNELZ PHSH, Q1, Q0, Z0, Z1
@@ -1259,7 +1259,7 @@ fn test_parse_qphase_wrong_operand_count() {
 #[test]
 fn test_parse_program_masked_workflow() {
     let source = "\
-QPREP Q0, 1
+QPREP Q0, UNIF
 ILDI R0, 3
 QHADM Q0, Q0, R0
 QOBSERVE H0, Q0

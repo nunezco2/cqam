@@ -72,7 +72,7 @@ LABEL: ghz_pow2_done
 # ===============================================
 # Method 1: Direct GHZ preparation
 # ===============================================
-    QPREP Q0, 3          # Q0 = GHZ state (dist_id 3)
+    QPREP Q0, GHZS          # Q0 = GHZ state (GHZS)
 
 # Full distribution measurement (captures P(|0...0>) and P(|1...1>))
     QOBSERVE H3, Q0              # Destructive measurement
@@ -90,7 +90,7 @@ LABEL: ghz_pow2_done
 # ===============================================
 # Method 2: Build GHZ via entangle kernel
 # ===============================================
-    QPREP Q1, 0          # Q1 = |0...0>
+    QPREP Q1, ZERO          # Q1 = |0...0>
     QKERNEL ENTG, Q1, Q1, R2, R2   # Entangle kernel
 
 # Observe to compare with direct GHZ
@@ -106,7 +106,7 @@ LABEL: ghz_pow2_done
 # .qstate alpha_re, alpha_im, beta_re, beta_im:
 #   qubit 0: alpha=(1/sqrt(2), 0), beta=(1/sqrt(2), 0) → |+>
 # QENCODE Q2, F8, 2, 1 was: normalized [1,1]/sqrt(2) = |+> (1 qubit)
-    QPREP Q2, 0                  # allocate 1-qubit zero state
+    QPREP Q2, ZERO                  # allocate 1-qubit zero state
     ILDI R8, @qprepsm_amps_m3    # CMEM base address of amplitude data
     ILDI R9, 1                   # qubit count
     QPREPSM Q2, R8, R9           # Q2 = |+> = (|0>+|1>)/sqrt(2)
@@ -118,7 +118,7 @@ LABEL: ghz_pow2_done
 # ===============================================
     HFORK
 # Check if entanglement flag (EF) is set
-    QPREP Q3, 3          # GHZ should set EF
+    QPREP Q3, GHZS          # GHZ should set EF
     QKERNEL ENTG, Q3, Q3, R2, R2   # Entangle (should set SF and EF)
     JMPF EF, entangled_branch   # Jump if EF set
 

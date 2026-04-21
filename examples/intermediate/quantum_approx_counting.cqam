@@ -62,7 +62,7 @@ res_fmt:
 LABEL: count_outer
 
 # --- Prepare uniform superposition ---
-    QPREP Q0, 1          # Q0 = |+>^n (uniform)
+    QPREP Q0, UNIF          # Q0 = |+>^n (uniform)
 
 # --- Apply 2^k Grover iterations ---
     ILDI R7, 0           # R7 = inner iteration counter

@@ -1,6 +1,6 @@
 #! qubits 2
 # Test 3: 2-qubit Bell state. Expected: ~50% |00>, ~50% |11>.
 .code
-QPREP Q0, 2
+QPREP Q0, BELL
 QOBSERVE H0, Q0
 HALT

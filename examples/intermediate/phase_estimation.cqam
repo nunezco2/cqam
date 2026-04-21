@@ -52,7 +52,7 @@ res:
     ILDI R3, 0           # R3 = unused ctx
 
 # --- Prepare initial state: uniform superposition ---
-    QPREP Q0, 1          # Q0 = uniform superposition
+    QPREP Q0, UNIF          # Q0 = uniform superposition
 
 # --- QPE rotation loop: apply U^(2^k) for k = 0, 1, ..., R1-1 ---
 # Each iteration doubles the rotation angle, simulating controlled-U^(2^k)

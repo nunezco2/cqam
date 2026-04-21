@@ -275,13 +275,13 @@ fn test_ef_flag_ghz() {
 fn ghz_stepping_with_breakpoints() {
     let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
 
-    // Find the QPREP Q0, 3 instruction (GHZ preparation).
+    // Find the QPREP Q0, GHZS instruction (GHZ preparation).
     let qprep_pc = engine
         .ctx
         .program
         .iter()
         .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: DistId::Ghz }))
-        .expect("Should find QPREP Q0, 3 in GHZ program");
+        .expect("Should find QPREP Q0, GHZS in GHZ program");
 
     // Set a breakpoint right after QPREP (to inspect the freshly prepared GHZ state).
     let bp_id = engine.breakpoints.add_address(qprep_pc + 1);
@@ -423,13 +423,13 @@ fn test_df_cf_after_observe() {
 fn test_df_sticky_across_kernels() {
     let (mut engine, _) = load_and_build(&example_path("examples/basic/ghz_verify.cqam"));
 
-    // Find the first QPREP Q0, 3 (GHZ preparation) instruction.
+    // Find the first QPREP Q0, GHZS (GHZ preparation) instruction.
     let qprep_pc = engine
         .ctx
         .program
         .iter()
         .position(|i| matches!(i, cqam_core::instruction::Instruction::QPrep { dst: 0, dist: DistId::Ghz }))
-        .expect("Should find QPREP Q0, 3 in GHZ program");
+        .expect("Should find QPREP Q0, GHZS in GHZ program");
 
     // Set a breakpoint right after QPREP (to inspect flags post-preparation).
     let bp_id = engine.breakpoints.add_address(qprep_pc + 1);

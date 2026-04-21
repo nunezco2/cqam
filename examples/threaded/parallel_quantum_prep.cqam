@@ -61,7 +61,7 @@ done_msg:
 # ===================================================================
 
 # Q0: Hadamard superposition on qubit 0
-    QPREP Q0, 0               # Q0 = |00>
+    QPREP Q0, ZERO               # Q0 = |00>
     ILDI R6, 1
     QHADM Q0, Q0, R6          # Apply H to qubit 0 -> (|00> + |10>) / sqrt(2)
 
@@ -78,7 +78,7 @@ done_msg:
     ECALL PRINT_STR
 
 # Q1: Bell state (entangled 2-qubit pair)
-    QPREP Q1, 2               # Q1 = (|00> + |11>) / sqrt(2)
+    QPREP Q1, BELL               # Q1 = (|00> + |11>) / sqrt(2)
 
     QOBSERVE H1, Q1
     HREDUCE MODEV, H1, R3      # R3 = Q1 measurement (0 or 3)

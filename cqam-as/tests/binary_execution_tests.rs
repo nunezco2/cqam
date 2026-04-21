@@ -38,7 +38,7 @@ fn test_binary_roundtrip_arithmetic() {
 #[test]
 fn test_binary_roundtrip_quantum() {
     let source = "\
-QPREP Q0, 0
+QPREP Q0, ZERO
 QKERNEL ENTG, Q1, Q0, R0, R1
 QOBSERVE H0, Q1
 HALT

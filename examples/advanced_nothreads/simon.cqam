@@ -54,7 +54,7 @@ res_fmt:
 
 LABEL: query_loop
     # Prepare |0>, Hadamard lower n qubits
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     QHADM Q0, Q0, R9
 
     # Oracle: phase-shift encodes period

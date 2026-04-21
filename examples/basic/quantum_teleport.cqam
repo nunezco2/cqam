@@ -57,7 +57,7 @@ res_fmt:
 # ===============================================
 # Step 1: Prepare the state to teleport |psi>
 # ===============================================
-    QPREP Q0, 0          # Q0 = |0...0>
+    QPREP Q0, ZERO          # Q0 = |0...0>
     FLDI F0, 2           # F0 = rotation angle (creates non-trivial state)
     FLDI F1, 0           # F1 = unused
     QKERNELF DROT, Q0, Q0, F0, F1  # Q0 = Rotate(|0>, theta=2) = |psi>
@@ -67,7 +67,7 @@ res_fmt:
 # ===============================================
 # Step 2: Create shared Bell pair
 # ===============================================
-    QPREP Q1, 2          # Q1 = Bell state (register-level preparation)
+    QPREP Q1, BELL          # Q1 = Bell state (register-level preparation)
 
 # ===============================================
 # Step 3: Alice's operations
@@ -94,7 +94,7 @@ res_fmt:
 # Step 5: Bob's corrections based on Alice's bits
 # ===============================================
 # Prepare Bob's state (derived from Bell pair)
-    QPREP Q2, 2          # Q2 = Bell state (Bob's entangled copy)
+    QPREP Q2, BELL          # Q2 = Bell state (Bob's entangled copy)
 
 # Correction 1: if bit 0 = 1, apply X (bit-flip).
 # QFLIP is required: per-qubit conditional correction.

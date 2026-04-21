@@ -73,7 +73,7 @@ LABEL: pow2_done
 # ============================================
 # Iterative Grover amplification
 # ============================================
-    QPREP Q0, 1                  # uniform superposition
+    QPREP Q0, UNIF                  # uniform superposition
     ILDI R6, 0                   # iteration counter
     ILDI R14, 0                  # zero ctx
 
@@ -121,7 +121,7 @@ LABEL: grover_done
 # ============================================
 # GHZ entanglement flag verification
 # ============================================
-    QPREP Q1, 3                  # GHZ → sets EF
+    QPREP Q1, GHZS                  # GHZ → sets EF
     JMPF EF, ef_set
     ILDI R2, 0
     JMP ef_print

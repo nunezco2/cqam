@@ -57,7 +57,7 @@ reduce_fmt:
 #  before prepping Q0 to keep Q0+Q2 in the
 #  same circuit epoch for QTENSOR.)
 # ============================================
-    QPREP Q1, 2                  # Q1 = Bell |Phi+>
+    QPREP Q1, BELL                  # Q1 = Bell |Phi+>
     QOBSERVE H0, Q1
     HREDUCE MODEV, H0, R2        # mode: 0 or 3
     ILDI R0, @bell_fmt
@@ -69,7 +69,7 @@ reduce_fmt:
 # QPREPN: runtime qubit count (Q0 = |00>)
 # ============================================
     ILDI R3, 2
-    QPREPN Q0, 0, R3             # Q0 = |00> with 2 qubits
+    QPREPN Q0, ZERO, R3             # Q0 = |00> with 2 qubits
 
 # ============================================
 # Gate-level operations on Q0
@@ -116,7 +116,7 @@ reduce_fmt:
 # Q2 is prepped in the SAME circuit epoch as Q0,
 # so QTENSOR can merge their wires without collision.
 # ============================================
-    QPREP Q2, 0                  # allocate 1-qubit zero state
+    QPREP Q2, ZERO                  # allocate 1-qubit zero state
     ILDI R8, @qprepsm_amps       # CMEM base address of amplitude data
     ILDI R9, 1                   # qubit count
     QPREPSM Q2, R8, R9           # Q2 = |+> = (|0>+|1>)/sqrt(2)
@@ -137,7 +137,7 @@ reduce_fmt:
 # ============================================
 # Subsystem observation (replaces QPTRACE)
 # ============================================
-    QPREP Q4, 0                  # Q4 = |0> (1 qubit)
+    QPREP Q4, ZERO                  # Q4 = |0> (1 qubit)
     QOBSERVE H2, Q4
     ILDI R0, @subsys_msg
     ILDI R1, @subsys_msg.len
@@ -147,7 +147,7 @@ reduce_fmt:
 # ============================================
 # HREDUCE float-to-int suite
 # ============================================
-    QPREP Q6, 0                  # zero state
+    QPREP Q6, ZERO                  # zero state
     QOBSERVE H4, Q6
     HREDUCE MEANT, H4, F6
 

@@ -31,7 +31,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- QPE rotation loop ---
-    QPREP Q0, 1                  # uniform superposition
+    QPREP Q0, UNIF                  # uniform superposition
     FLDI F0, 1                   # base angle theta = 1.0 rad
     FLDI F1, 2                   # doubling factor
     FLDI F2, 1                   # current angle (starts at theta)

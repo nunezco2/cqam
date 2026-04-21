@@ -225,7 +225,7 @@ res_fmt:
 # qubit 0 (MSB) -> mask bit 0 = 1 -> state index += 8
 # qubit 3 (LSB) -> mask bit 3 = 8 -> state index += 1
 # Combined mask = 1|8 = 9
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     ILDI R6, 9            # mask = 0b1001 -> flip qubits 0 and 3
     QFLIP Q0, Q0, R6      # state index = 8 + 1 = 9
 
@@ -264,7 +264,7 @@ LABEL: t1_end
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
-    QPREP Q1, 0
+    QPREP Q1, ZERO
     ILDI R6, 15            # mask = 0b1111 -> state index 15
     QFLIP Q1, Q1, R6
 
@@ -311,7 +311,7 @@ LABEL: t2_end
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
-    QPREP Q2, 0           # |0000>
+    QPREP Q2, ZERO           # |0000>
     ILDI R6, 3             # mask = 0b0011 -> Hadamard on qubits 0,1 (a-register)
     QHADM Q2, Q2, R6      # (|00>+|01>+|10>+|11>)/2 tensor |00>
 
@@ -355,7 +355,7 @@ LABEL: t3_end
     ISUB R1, R1, R15
     ECALL PRINT_STR
 
-    QPREP Q3, 0
+    QPREP Q3, ZERO
     ILDI R6, 9
     QFLIP Q3, Q3, R6      # state 9 = |a=2,b=1>
 

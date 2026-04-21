@@ -63,7 +63,7 @@ amps:
     .qstate 0.0, 0.0, 1.0, 0.0
 
 .code
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     ILDI R0, 500
     ILDI R1, 3
     QPREPSM Q0, R0, R1
@@ -100,7 +100,7 @@ amps:
     .qstate 1.0, 0.0, 0.0, 0.0
 
 .code
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     ILDI R0, 100
     ILDI R1, 3
     QPREPSM Q0, R0, R1
@@ -126,7 +126,7 @@ amps:
     .qstate 0.0, 0.0, 1.0, 0.0
 
 .code
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     ILDI R0, 200
     ILDI R1, 2
     QPREPSM Q0, R0, R1
@@ -187,7 +187,7 @@ amps:
     .qstate 0.0, 0.0, 1.0, 0.0
 
 .code
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     ILDI R0, 50
     ILDI R1, 2
     QPREPSM Q0, R0, R1

@@ -79,8 +79,8 @@ res_fmt:
     ILDI R7, 3           # R7 = qubit 3
 
 # --- Prepare initial state: |0...0> (ground state of H_Z) ---
-    QPREP Q0, 0          # Q0 = |0000> (for evolution)
-    QPREP Q1, 0          # Q1 = |0000> (reference copy for comparison)
+    QPREP Q0, ZERO          # Q0 = |0000> (for evolution)
+    QPREP Q1, ZERO          # Q1 = |0000> (reference copy for comparison)
     QSTORE Q1, 0         # Teleport reference to QMEM[0] (Q1 consumed, 1 Bell pair)
 
 # Runs blind — no mid-step observation (physical realism)

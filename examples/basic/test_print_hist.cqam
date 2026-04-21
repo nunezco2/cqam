@@ -4,7 +4,7 @@
 #! qubits 3
 
 # --- Section 1: Uniform superposition, QOBSERVE DIST ---
-QPREP Q0, UNIFORM
+QPREP Q0, UNIF
 QOBSERVE H0, Q0, DIST, R0, R0
 
 # Print exact distribution (no shots) or histogram (with shots)
@@ -30,7 +30,7 @@ ILDI R2, 3
 ECALL PRINT_HIST
 
 # --- Section 2: GHZ state ---
-QPREP Q1, GHZ
+QPREP Q1, GHZS
 QOBSERVE H1, Q1, DIST, R0, R0
 
 ILDI R0, 1          # H register index 1

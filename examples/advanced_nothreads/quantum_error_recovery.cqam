@@ -47,7 +47,7 @@ res_fmt:
 # ============================================
 # Prepare Bell state (entangled, purity = 1.0)
 # ============================================
-    QPREP Q0, 2                  # Bell |Phi+> = (|00> + |11>)/sqrt(2)
+    QPREP Q0, BELL                  # Bell |Phi+> = (|00> + |11>)/sqrt(2)
     ILDI R0, @bell_msg
     ILDI R1, @bell_msg.len
     ISUB R1, R1, R15
@@ -85,7 +85,7 @@ LABEL: after_df
 # QHADM is a native gate instruction that the circuit
 # pipeline decomposes to SX+Rz automatically.
 # ============================================
-    QPREPN Q2, 0, R15            # Q2 = |0> with 1 qubit
+    QPREPN Q2, ZERO, R15            # Q2 = |0> with 1 qubit
     ILDI R3, 1                   # mask = qubit 0
     QHADM Q2, Q2, R3             # Q2 = H|0> = |+>
     ILDI R0, @hadamard_msg

@@ -58,7 +58,7 @@ res_fmt:
     ILDI R7, 0           # R7 = measurement qubit index (qubit 0)
 
 # --- Step 0: Initialize threshold from random measurement ---
-    QPREP Q0, 1          # Uniform superposition
+    QPREP Q0, UNIF          # Uniform superposition
     QOBSERVE H0, Q0, SAMPLE  # Projective measurement -> random outcome
     HREDUCE ROUND, H0, R0    # R0 = random initial threshold y
     ILDI R6, 0
@@ -71,7 +71,7 @@ res_fmt:
 LABEL: dh_loop
 
 # --- Step 1: Prepare uniform state ---
-    QPREP Q0, 1          # Q0 = uniform superposition
+    QPREP Q0, UNIF          # Q0 = uniform superposition
 
 # --- Step 2: Apply adaptive Grover iterations ---
 # Search for states below current threshold R0
@@ -131,7 +131,7 @@ LABEL: dh_no_update
     JIF R2, dh_loop
 
 # === Verification: final Grover search at found minimum ===
-    QPREP Q1, 1
+    QPREP Q1, UNIF
 # Apply extra Grover iterations at the found minimum target
     ILDI R14, 8          # R14 = verification iterations
 LABEL: dh_verify_loop

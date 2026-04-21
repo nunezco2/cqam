@@ -2,6 +2,6 @@
 # Test 8: 8-qubit GHZ state — larger circuit test.
 # Expected: ~50% |00000000>, ~50% |11111111>.
 .code
-QPREP Q0, 3
+QPREP Q0, GHZS
 QOBSERVE H0, Q0
 HALT

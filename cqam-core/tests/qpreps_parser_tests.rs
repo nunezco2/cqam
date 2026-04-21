@@ -184,7 +184,7 @@ amps:
     .qstate 0.0, 0.0, 1.0, 0.0
 
 .code
-    QPREP Q0, 0
+    QPREP Q0, ZERO
     ILDI R0, 500
     ILDI R1, 3
     QPREPSM Q0, R0, R1

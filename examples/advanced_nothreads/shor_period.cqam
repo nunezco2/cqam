@@ -40,7 +40,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- Quantum phase estimation ---
-    QPREP Q0, 1                      # uniform superposition
+    QPREP Q0, UNIF                      # uniform superposition
     FLDI F0, 1
     FLDI F1, 0
     QKERNELF DROT, Q0, Q0, F0, F1    # encode period via rotation

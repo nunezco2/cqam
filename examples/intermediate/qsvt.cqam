@@ -83,7 +83,7 @@ res_fmt:
     FSTR F5, 505         # CMEM[505] = phi_5
 
 # --- Prepare initial state ---
-    QPREP Q0, 1          # Q0 = uniform superposition (register-level)
+    QPREP Q0, UNIF          # Q0 = uniform superposition (register-level)
     # Runs blind — no mid-step observation (physical realism)
 
 # === QSVT main loop: interleave R(phi_k) and W ===

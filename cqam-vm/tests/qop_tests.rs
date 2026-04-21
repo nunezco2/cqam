@@ -384,7 +384,7 @@ fn test_bell_state_example_runs_through_vm() {
 
     let source = r#"
 # Bell state example
-QPREP Q0, 2
+QPREP Q0, BELL
 QOBSERVE H0, Q0
 HREDUCE MODEV, H0, R0
 HREDUCE MEANT, H0, F0
@@ -817,7 +817,7 @@ fn test_e2e_qkernelf_rotate_observe_reduce() {
     // Uniform(0,1,2,3) with p=0.25 each -> MEAN = 1.5
     let source = r#"
 # Prepare uniform 2-qubit state
-QPREP Q0, 1
+QPREP Q0, UNIF
 # Load theta = 0 into F0 (identity rotation)
 FLDI F0, 0
 FLDI F1, 0
@@ -863,7 +863,7 @@ fn test_e2e_qkernelz_phase_shift_observe() {
     // Diagonal probabilities should be 0.25 each.
     let source = r#"
 # Prepare uniform 2-qubit state
-QPREP Q0, 1
+QPREP Q0, UNIF
 # Load amplitude = (0, 0) into Z0 (zero amplitude -> identity)
 ZLDI Z0, 0, 0
 ZLDI Z1, 0, 0

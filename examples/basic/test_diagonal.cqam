@@ -50,7 +50,7 @@ res_msg:
 # ===========================================================================
 # Step 1: Prepare uniform superposition, apply diagonal oracle
 # ===========================================================================
-    QPREP Q0, 1          # Q0 = uniform superposition over 16 states
+    QPREP Q0, UNIF          # Q0 = uniform superposition over 16 states
 
     # Runs blind — no mid-step observation (physical realism)
 

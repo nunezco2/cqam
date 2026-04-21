@@ -53,7 +53,7 @@ res_fmt:
 # ===============================================
 
 # Step 1: Prepare uniform superposition directly
-    QPREP Q0, 1          # Q0 = uniform superposition (register-level)
+    QPREP Q0, UNIF          # Q0 = uniform superposition (register-level)
 
 # Step 2: Oracle for constant function — identity (no operation)
     NOP
@@ -70,7 +70,7 @@ res_fmt:
 # ===============================================
 
 # Step 1: Prepare uniform superposition directly
-    QPREP Q1, 1          # Q1 = uniform superposition (register-level)
+    QPREP Q1, UNIF          # Q1 = uniform superposition (register-level)
 
 # Step 2: Oracle for balanced function — Z on qubit 0 (LSB)
 # QPHASE is required here: the oracle applies (-1)^f(x) where f(x) = x_0,

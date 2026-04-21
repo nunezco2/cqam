@@ -28,7 +28,7 @@ in that program, overriding the config file but not the `--qubits` CLI flag:
 
 ```
 #! qubits 4
-QPREP Q0, 0          # Prepares a 4-qubit uniform state
+QPREP Q0, UNIF       # Prepares a 4-qubit uniform state
 ```
 
 ## Integer Instructions
@@ -158,16 +158,16 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 
 | Instruction | Example | Description |
 |-------------|---------|-------------|
-| QPREP | `QPREP Q0, 0` | Prepare Q0 with distribution (0=uniform, 1=zero, 2=bell, 3=ghz) |
+| QPREP | `QPREP Q0, ZERO` | Prepare Q0 with distribution (ZERO=0, UNIF=1, BELL=2, GHZS=3) |
 | QPREPR | `QPREPR Q0, R0` | Prepare with dist ID from R0 at runtime |
-| QPREPN | `QPREPN Q0, 0, R1` | Prepare uniform state with R1 qubits |
+| QPREPN | `QPREPN Q0, UNIF, R1` | Prepare uniform state with R1 qubits |
 | QENCODE | `QENCODE Q0, F0, 4, 1` | Encode F0..F3 (4 float regs) as quantum amplitudes |
 | QMIXED | `QMIXED Q0, R5, R6` | Build mixed state from CMEM[R5], R6 entries |
 
 ### QPREPN example
 
     ILDI R1, 4               # num_qubits = 4
-    QPREPN Q0, 0, R1         # Q0 = uniform 4-qubit state (16-dimensional)
+    QPREPN Q0, UNIF, R1      # Q0 = uniform 4-qubit state (16-dimensional)
 
 ### QMIXED example
 
@@ -229,7 +229,7 @@ QIFT (fourier_inv), CTLU (controlled_u), DIAG (diagonal_unitary), PERM (permutat
 
 ### QCNOT example
 
-    QPREP Q0, 1              # |00> state (2 qubits)
+    QPREP Q0, ZERO           # |00> state (2 qubits)
     ILDI R0, 0               # ctrl = qubit 0
     ILDI R1, 1               # tgt  = qubit 1
     QHADM Q1, Q0, R0         # Hadamard on qubit 0 -> (|00>+|10>)/sqrt(2)
@@ -237,7 +237,7 @@ QIFT (fourier_inv), CTLU (controlled_u), DIAG (diagonal_unitary), PERM (permutat
 
 ### QROT example (Rx rotation)
 
-    QPREP Q0, 1              # |0> state (1 qubit)
+    QPREP Q0, ZERO           # |0> state (1 qubit)
     ILDI R0, 0               # target qubit = 0
     FLDI F0, 1               # angle = 1.0 radian
     QROT Q1, Q0, R0, 0, F0  # Rx(1.0) on qubit 0
@@ -261,7 +261,7 @@ destructive measurement or QMEAS for partial single-qubit measurement.
 
 ### QMEAS example
 
-    QPREP Q0, 0              # uniform 2-qubit superposition
+    QPREP Q0, UNIF           # uniform 2-qubit superposition
     ILDI R0, 0               # measure qubit 0
     QMEAS R1, Q0, R0         # R1 = 0 or 1; Q0 = post-measurement state
     ILDI R0, 1               # now measure qubit 1
@@ -274,14 +274,14 @@ quantum register. All modes are destructive: Q[src] is consumed.
 
 ### Mode 0 (DIST): Full distribution (default)
 
-    QPREP Q0, 0              # Uniform 2-qubit superposition
+    QPREP Q0, UNIF           # Uniform 2-qubit superposition
     QOBSERVE H0, Q0, 0, R0, R0   # H0 = Dist([(0,0.25),(1,0.25),(2,0.25),(3,0.25)]); Q0 consumed
 
 ctx0 and ctx1 are ignored in DIST mode.
 
 ### Mode 1 (PROB): Single basis-state probability
 
-    QPREP Q0, 2              # Bell state (fresh copy needed per query, since QOBSERVE is destructive)
+    QPREP Q0, BELL           # Bell state (fresh copy needed per query, since QOBSERVE is destructive)
     ILDI R0, 0               # Query basis state |0>
     QOBSERVE H0, Q0, 1, R0, R0   # H0 = Float(0.5); Q0 consumed
 
@@ -290,7 +290,7 @@ consumes the register; prepare a fresh state for each distinct query.
 
 ### Mode 2 (AMP): Density matrix element
 
-    QPREP Q0, 2              # Bell state (fresh copy needed per query)
+    QPREP Q0, BELL           # Bell state (fresh copy needed per query)
     ILDI R0, 0               # row = 0
     ILDI R1, 3               # col = 3 (|11> = state 3)
     QOBSERVE H0, Q0, 2, R0, R1   # H0 = Complex(0.5, 0.0); Q0 consumed
@@ -315,7 +315,7 @@ channel proportional to `(1 - bell_pair_fidelity)` on the transferred state.
 
 ### QSTORE / QLOAD move example
 
-    QPREP Q0, 0              # prepare 2-qubit uniform superposition in Q0
+    QPREP Q0, UNIF           # prepare 2-qubit uniform superposition in Q0
     QKERNEL QFFT, Q1, Q0, R0, R1  # apply QFT; result in Q1
     QSTORE Q1, 5             # teleport Q1 to QMEM[5]; Q1 is now None
     # ... intervening classical computation ...
@@ -330,8 +330,8 @@ QXCH swaps the register handles held in two Q-file slots. No gate is emitted,
 no quantum state is modified, and no Bell pair is consumed. It is a pure
 bookkeeping operation on the register file.
 
-    QPREP Q0, 0              # Q0 = uniform superposition
-    QPREP Q1, 1              # Q1 = |0...0>
+    QPREP Q0, UNIF           # Q0 = uniform superposition
+    QPREP Q1, ZERO           # Q1 = |0...0>
     QKERNEL QFFT, Q2, Q0, R0, R1   # Q2 = QFT result; Q0 consumed
 
     # A downstream routine expects its input in Q1, but the result is in Q2.
@@ -351,7 +351,7 @@ qubits within a register, use QSWAP instead.
 
 Masked gates apply single-qubit gates to qubits selected by a classical bitmask:
 
-    QPREP Q0, 1              # |00> state
+    QPREP Q0, ZERO           # |00> state
     ILDI R0, 1               # mask = 0b01 (qubit 0 only)
     QHADM Q1, Q0, R0         # Hadamard on qubit 0 only -> (|0>+|1>)/sqrt(2) tensor |0>
 
@@ -364,21 +364,21 @@ Masked gates apply single-qubit gates to qubits selected by a classical bitmask:
 
 ### QTENSOR example
 
-    QPREP Q0, 1              # 1-qubit state |0>
-    QPREP Q1, 1              # 1-qubit state |0>
+    QPREP Q0, ZERO           # 1-qubit state |0>
+    QPREP Q1, ZERO           # 1-qubit state |0>
     QHADM Q2, Q0, R0         # Q2 = |+> (mask qubit 0)
     QTENSOR Q3, Q2, Q1       # Q3 = |+> tensor |0> = (|00>+|10>)/sqrt(2); Q2, Q1 consumed
 
 ### QPTRACE example
 
-    QPREP Q0, 2              # Bell state (2 qubits)
+    QPREP Q0, BELL           # Bell state (2 qubits)
     ILDI R0, 1               # num_qubits_a = 1 (keep subsystem A)
     QPTRACE Q1, Q0, R0      # Q1 = Tr_B(Bell state) = I/2 (maximally mixed 1-qubit state)
     # Q0 is NOT consumed; Q1 is always Mixed (DensityMatrix)
 
 ### QRESET example
 
-    QPREP Q0, 0              # Uniform 2-qubit superposition
+    QPREP Q0, UNIF           # Uniform 2-qubit superposition
     ILDI R0, 1               # target qubit = 1
     QRESET Q1, Q0, R0       # Q1 = state with qubit 1 guaranteed |0>
 
@@ -405,8 +405,8 @@ normalized quantum state:
 
 QPREPR reads the distribution ID from an integer register at runtime:
 
-    ILDI R0, 2               # dist_id = BELL
-    QPREPR Q0, R0            # Equivalent to QPREP Q0, 2
+    ILDI R0, 2               # dist_id = BELL (value 2)
+    QPREPR Q0, R0            # Equivalent to QPREP Q0, BELL
 
 This enables data-driven state preparation in loops:
 

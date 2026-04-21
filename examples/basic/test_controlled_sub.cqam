@@ -147,7 +147,7 @@ done_msg:
 # Qubit ordering: qubit 0=MSB, qubit 2=LSB. QFLIP mask bits: bit k -> qubit k.
 # mask=4 (bit 2) -> qubit 2 (LSB) -> flips bit position 0 -> state |001>=1
 # ---------------------------------------------------------------------------
-    QPREP Q0, 0                    # Q0 = |000>
+    QPREP Q0, ZERO                    # Q0 = |000>
     ILDI R6, 4                     # mask=4 -> flip qubit 2 (LSB) -> state |001>=1
     QFLIP Q0, Q0, R6
 
@@ -190,7 +190,7 @@ LABEL: ta1_end
 # New state = |1,1,0> = |110> = index 6.
 # Expect: P(5)=0, P(6)=1.0
 # ---------------------------------------------------------------------------
-    QPREP Q0, 0                    # Q0 = |000>
+    QPREP Q0, ZERO                    # Q0 = |000>
     ILDI R6, 5                     # mask=5 = binary 101 -> flip qubit 0 (MSB) and qubit 2 (LSB)
     QFLIP Q0, Q0, R6              # state |101> = index 5
 
@@ -232,7 +232,7 @@ LABEL: ta2_end
 # Expect: P(1) = 1.0 (unchanged)
 # mask=4 (bit 2) -> flip qubit 2 (LSB) -> state |001>=1
 # ---------------------------------------------------------------------------
-    QPREP Q0, 0                    # Q0 = |000>
+    QPREP Q0, ZERO                    # Q0 = |000>
     ILDI R6, 4                     # mask=4 -> flip qubit 2 (LSB) -> |001>=1
     QFLIP Q0, Q0, R6
 
@@ -273,7 +273,7 @@ LABEL: tb1_end
 # d[1] = (-1, 0) phase-flips target |01>. Amplitude becomes -1.
 # Probability is still 1.0. Expect: P(5) = 1.0
 # ---------------------------------------------------------------------------
-    QPREP Q0, 0                    # Q0 = |000>
+    QPREP Q0, ZERO                    # Q0 = |000>
     ILDI R6, 5                     # mask=5 = 101 -> flip qubit 0 + qubit 2 -> |101>=5
     QFLIP Q0, Q0, R6
 

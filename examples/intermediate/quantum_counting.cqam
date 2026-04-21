@@ -58,7 +58,7 @@ res:
 LABEL: count_loop
 
 # --- Prepare fresh uniform state ---
-    QPREP Q0, 1
+    QPREP Q0, UNIF
 
 # --- Apply R5 Grover iterations ---
     ILDI R7, 0           # R7 = inner iteration counter

@@ -573,7 +573,7 @@ amps:
     .qstate 0.0, 0.0, 1.0, 0.0                    # qubit 2: |1>
 
 .code
-    QPREP Q0, 0                # allocate 3-qubit zero state (ZERO = dist_id 0... but use QPREP with count)
+    QPREP Q0, ZERO             # allocate 3-qubit zero state (ZERO = dist_id 0)
     ILDI R0, 500               # CMEM base address
     ILDI R1, 3                 # qubit count
     QPREPSM Q0, R0, R1         # encode product state

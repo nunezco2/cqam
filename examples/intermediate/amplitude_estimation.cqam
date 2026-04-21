@@ -62,7 +62,7 @@ LABEL: shift_loop
 LABEL: shift_done
 
 # --- Prepare fresh state for this precision level ---
-    QPREP Q0, 1          # Uniform superposition
+    QPREP Q0, UNIF          # Uniform superposition
 
 # --- Apply 2^k Grover iterations ---
 LABEL: grover_inner

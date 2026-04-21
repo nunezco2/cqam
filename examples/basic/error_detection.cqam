@@ -49,7 +49,7 @@ res_fmt:
 # ===============================================
 # Step 1: Encode logical |0_L> = |000>
 # ===============================================
-    QPREP Q0, 0          # Q0 = |0...0> (logical zero)
+    QPREP Q0, ZERO          # Q0 = |0...0> (logical zero)
 
 # Runs blind — no mid-step observation (physical realism)
 

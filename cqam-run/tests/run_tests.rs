@@ -428,7 +428,7 @@ fn test_pragma_qubits_applied() {
     use cqam_core::parser::parse_program;
     use cqam_run::runner::run_program_with_config_and_metadata;
 
-    let source = "#! qubits 4\nQPREP Q0, 0\nHALT\n";
+    let source = "#! qubits 4\nQPREP Q0, ZERO\nHALT\n";
     let parsed = parse_program(source).unwrap();
 
     let config = SimConfig {
@@ -464,7 +464,7 @@ fn test_cli_overrides_pragma() {
     use cqam_core::parser::parse_program;
     use cqam_run::runner::run_program_with_config_and_metadata;
 
-    let source = "#! qubits 4\nQPREP Q0, 0\nHALT\n";
+    let source = "#! qubits 4\nQPREP Q0, ZERO\nHALT\n";
     let parsed = parse_program(source).unwrap();
 
     let config = SimConfig {
