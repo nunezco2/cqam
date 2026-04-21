@@ -84,6 +84,7 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         | Instruction::INot { .. }
         | Instruction::IInc { .. }
         | Instruction::IDec { .. }
+        | Instruction::IMov { .. }
         | Instruction::IShl { .. }
         | Instruction::IShr { .. } => ResourceDelta {
             time: 1,
@@ -131,7 +132,8 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         Instruction::FAdd { .. }
         | Instruction::FSub { .. }
         | Instruction::FMul { .. }
-        | Instruction::FDiv { .. } => ResourceDelta {
+        | Instruction::FDiv { .. }
+        | Instruction::FMov { .. } => ResourceDelta {
             time: 1,
             space: 1,
             ..Default::default()
@@ -150,6 +152,13 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         Instruction::FEq { .. }
         | Instruction::FLt { .. }
         | Instruction::FGt { .. } => ResourceDelta {
+            time: 1,
+            space: 1,
+            ..Default::default()
+        },
+
+        // Complex register move: 1 cycle, 1 register write
+        Instruction::ZMov { .. } => ResourceDelta {
             time: 1,
             space: 1,
             ..Default::default()

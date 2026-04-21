@@ -520,6 +520,36 @@ Notation: `sigma' = sigma[field := value]` denotes a state identical to
                                    PC := PC + 1]
 ```
 
+**Integer Register Copy (IMOV):**
+```
+                  v = R[src]
+  -------------------------------------------------------
+  sigma --IMOV(dst, src)--> sigma[R[dst] := v,
+                                   PSW.ZF := (v == 0),
+                                   PSW.SF := (v < 0),
+                                   PC := PC + 1]
+```
+
+**Float Register Copy (FMOV):**
+```
+                  v = F[src]
+  -------------------------------------------------------
+  sigma --FMOV(dst, src)--> sigma[F[dst] := v,
+                                   PC := PC + 1]
+```
+
+PSW is not modified by FMOV.
+
+**Complex Register Copy (ZMOV):**
+```
+                  v = Z[src]
+  -------------------------------------------------------
+  sigma --ZMOV(dst, src)--> sigma[Z[dst] := v,
+                                   PC := PC + 1]
+```
+
+PSW is not modified by ZMOV.
+
 **Unconditional Jump (JMP):**
 ```
                   addr = labels(target)

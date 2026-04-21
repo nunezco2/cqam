@@ -1608,3 +1608,140 @@ fn test_idec_overflow() {
     assert_eq!(ctx.iregs.get(0).unwrap(), i64::MAX);
     assert!(ctx.psw.of);
 }
+
+// ===========================================================================
+// IMOV / FMOV / ZMOV
+// ===========================================================================
+
+#[test]
+fn test_imov_copies_value() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.iregs.set(3, 42).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::IMov { dst: 5, src: 3 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert_eq!(ctx.iregs.get(5).unwrap(), 42);
+    // Source unchanged
+    assert_eq!(ctx.iregs.get(3).unwrap(), 42);
+}
+
+#[test]
+fn test_imov_updates_psw_zf_sf() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Copy zero -> ZF set
+    ctx.iregs.set(0, 0).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::IMov { dst: 1, src: 0 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert!(ctx.psw.zf);
+
+    // Copy negative -> NF set, ZF clear
+    ctx.iregs.set(2, -7).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::IMov { dst: 3, src: 2 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert!(!ctx.psw.zf);
+    assert!(ctx.psw.nf);
+}
+
+#[test]
+fn test_fmov_copies_value() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.fregs.set(1, 3.14).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::FMov { dst: 5, src: 1 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert_eq!(ctx.fregs.get(5).unwrap(), 3.14);
+    // Source unchanged
+    assert_eq!(ctx.fregs.get(1).unwrap(), 3.14);
+}
+
+#[test]
+fn test_fmov_does_not_update_psw() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Set PSW to known state via an integer op
+    ctx.iregs.set(0, 0).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::IMov { dst: 1, src: 0 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert!(ctx.psw.zf); // ZF set from IMOV of zero
+
+    // Now FMOV a non-zero float -- PSW should NOT change
+    ctx.fregs.set(0, 99.0).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::FMov { dst: 1, src: 0 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert!(ctx.psw.zf); // Still set (FMOV doesn't touch PSW)
+}
+
+#[test]
+fn test_zmov_copies_value() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+    ctx.zregs.set(0, (1.0, -2.0)).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::ZMov { dst: 3, src: 0 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert_eq!(ctx.zregs.get(3).unwrap(), (1.0, -2.0));
+    // Source unchanged
+    assert_eq!(ctx.zregs.get(0).unwrap(), (1.0, -2.0));
+}
+
+#[test]
+fn test_zmov_does_not_update_psw() {
+    let mut ctx = ExecutionContext::new(vec![]);
+    let mut fm = ForkManager::new();
+    let mut backend = SimulationBackend::new();
+
+    // Set PSW to known state
+    ctx.iregs.set(0, 0).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::IMov { dst: 1, src: 0 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert!(ctx.psw.zf);
+
+    // ZMOV non-zero complex -- PSW should NOT change
+    ctx.zregs.set(0, (5.0, 3.0)).unwrap();
+    execute_instruction(
+        &mut ctx,
+        &Instruction::ZMov { dst: 1, src: 0 },
+        &mut fm,
+        &mut backend,
+    ).unwrap();
+    assert!(ctx.psw.zf); // Still set
+}

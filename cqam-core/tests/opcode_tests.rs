@@ -1789,3 +1789,67 @@ fn idec_encoded_word() {
     let word = encode(&Instruction::IDec { dst: 1, src: 2 }, &labels).unwrap();
     assert_eq!(word, 0x6112_0000);
 }
+
+// =============================================================================
+// Round-trip tests: IMOV / FMOV / ZMOV (0x62 / 0x63 / 0x64)
+// =============================================================================
+
+#[test]
+fn roundtrip_imov() {
+    let instr = Instruction::IMov { dst: 3, src: 5 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_imov_same_reg() {
+    let instr = Instruction::IMov { dst: 7, src: 7 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_fmov() {
+    let instr = Instruction::FMov { dst: 2, src: 14 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn roundtrip_zmov() {
+    let instr = Instruction::ZMov { dst: 0, src: 7 };
+    assert_eq!(roundtrip(&instr), instr);
+}
+
+#[test]
+fn mnemonic_mov_instructions() {
+    assert_eq!(mnemonic(op::IMOV), Some("IMOV"));
+    assert_eq!(mnemonic(op::FMOV), Some("FMOV"));
+    assert_eq!(mnemonic(op::ZMOV), Some("ZMOV"));
+}
+
+#[test]
+fn mov_opcode_values() {
+    assert_eq!(op::IMOV, 0x62);
+    assert_eq!(op::FMOV, 0x63);
+    assert_eq!(op::ZMOV, 0x64);
+}
+
+#[test]
+fn imov_encoded_word() {
+    // RR-format: [0x62][dst:4][src:4][pad:16]
+    let labels = HashMap::new();
+    let word = encode(&Instruction::IMov { dst: 3, src: 5 }, &labels).unwrap();
+    assert_eq!(word, 0x6235_0000);
+}
+
+#[test]
+fn fmov_encoded_word() {
+    let labels = HashMap::new();
+    let word = encode(&Instruction::FMov { dst: 1, src: 2 }, &labels).unwrap();
+    assert_eq!(word, 0x6312_0000);
+}
+
+#[test]
+fn zmov_encoded_word() {
+    let labels = HashMap::new();
+    let word = encode(&Instruction::ZMov { dst: 0, src: 7 }, &labels).unwrap();
+    assert_eq!(word, 0x6407_0000);
+}

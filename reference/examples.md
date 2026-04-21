@@ -58,6 +58,7 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 | IINC | `IINC R1, R0` | Increment into dst: R1 = R0 + 1 |
 | IDEC | `IDEC R0` | Decrement: R0 = R0 - 1 |
 | IDEC | `IDEC R1, R0` | Decrement into dst: R1 = R0 - 1 |
+| IMOV | `IMOV R1, R0` | Register copy: R1 = R0; ZF/SF updated |
 
 ## Float Instructions
 
@@ -79,6 +80,7 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 | FCOS | `FCOS F1, F0` | Cosine: F1 = cos(F0) |
 | FATAN2 | `FATAN2 F2, F0, F1` | Arctangent: F2 = atan2(F0, F1) (F0=y, F1=x) |
 | FSQRT | `FSQRT F1, F0` | Square root: F1 = sqrt(F0); traps if F0 < 0 |
+| FMOV | `FMOV F1, F0` | Register copy: F1 = F0; no PSW update |
 
 ### Transcendental function example
 
@@ -103,6 +105,7 @@ QPREP Q0, 0          # Prepares a 4-qubit uniform state
 | ZSUB | `ZSUB Z3, Z1, Z0` | Complex subtract |
 | ZMUL | `ZMUL Z4, Z0, Z1` | Complex multiply: (a+bi)(c+di) |
 | ZDIV | `ZDIV Z5, Z1, Z0` | Complex divide |
+| ZMOV | `ZMOV Z1, Z0` | Register copy: Z1 = Z0; no PSW update |
 
 ## Type Conversion Instructions
 

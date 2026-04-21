@@ -2023,3 +2023,55 @@ fn test_parse_iinc_high_reg() {
         Instruction::IInc { dst: 15, src: 15 }
     );
 }
+
+// ===========================================================================
+// IMOV / FMOV / ZMOV
+// ===========================================================================
+
+#[test]
+fn test_parse_imov() {
+    assert_eq!(
+        parse_instruction("IMOV R3, R5").unwrap(),
+        Instruction::IMov { dst: 3, src: 5 }
+    );
+}
+
+#[test]
+fn test_parse_imov_same_reg() {
+    assert_eq!(
+        parse_instruction("IMOV R0, R0").unwrap(),
+        Instruction::IMov { dst: 0, src: 0 }
+    );
+}
+
+#[test]
+fn test_parse_fmov() {
+    assert_eq!(
+        parse_instruction("FMOV F2, F14").unwrap(),
+        Instruction::FMov { dst: 2, src: 14 }
+    );
+}
+
+#[test]
+fn test_parse_zmov() {
+    assert_eq!(
+        parse_instruction("ZMOV Z0, Z7").unwrap(),
+        Instruction::ZMov { dst: 0, src: 7 }
+    );
+}
+
+#[test]
+fn test_parse_imov_wrong_operand_count() {
+    assert!(parse_instruction("IMOV R3").is_err());
+    assert!(parse_instruction("IMOV R3, R5, R7").is_err());
+}
+
+#[test]
+fn test_parse_fmov_wrong_operand_count() {
+    assert!(parse_instruction("FMOV F3").is_err());
+}
+
+#[test]
+fn test_parse_zmov_wrong_operand_count() {
+    assert!(parse_instruction("ZMOV Z0").is_err());
+}

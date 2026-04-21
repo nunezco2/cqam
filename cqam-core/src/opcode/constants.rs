@@ -137,6 +137,11 @@ pub mod op {
     pub const IINC: u8 = 0x60;
     pub const IDEC: u8 = 0x61;
 
+    // -- Register move (0x62-0x64) -------------------------------------------
+    pub const IMOV: u8 = 0x62;
+    pub const FMOV: u8 = 0x63;
+    pub const ZMOV: u8 = 0x64;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;

@@ -52,7 +52,8 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
 
         Instruction::INot { dst, src }
         | Instruction::IInc { dst, src }
-        | Instruction::IDec { dst, src } => {
+        | Instruction::IDec { dst, src }
+        | Instruction::IMov { dst, src } => {
             used.int_regs.insert(*dst);
             used.int_regs.insert(*src);
         }
@@ -126,6 +127,10 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.complex_regs.insert(*rhs);
         }
 
+        Instruction::ZMov { dst, src } => {
+            used.complex_regs.insert(*dst);
+            used.complex_regs.insert(*src);
+        }
         Instruction::ZLdi { dst, .. } => {
             used.complex_regs.insert(*dst);
         }
@@ -334,7 +339,8 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.quantum_regs.insert(*dst);
             used.int_regs.insert(*qubit_count_reg);
         }
-        Instruction::FSin { dst, src }
+        Instruction::FMov { dst, src }
+        | Instruction::FSin { dst, src }
         | Instruction::FCos { dst, src }
         | Instruction::FSqrt { dst, src } => {
             used.float_regs.insert(*dst);

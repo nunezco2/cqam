@@ -131,6 +131,24 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
             ctx.psw.update_from_arithmetic_with_overflow(result, overflowed);
         }
 
+        Instruction::IMov { dst, src } => {
+            let result = ctx.iregs.get(*src)?;
+            ctx.iregs.set(*dst, result)?;
+            ctx.psw.update_from_arithmetic(result);
+        }
+
+        Instruction::FMov { dst, src } => {
+            let result = ctx.fregs.get(*src)?;
+            ctx.fregs.set(*dst, result)?;
+            // FMOV does NOT update PSW
+        }
+
+        Instruction::ZMov { dst, src } => {
+            let result = ctx.zregs.get(*src)?;
+            ctx.zregs.set(*dst, result)?;
+            // ZMOV does NOT update PSW
+        }
+
         Instruction::IShl { dst, src, amt } => {
             let safe_amt = std::cmp::min(*amt, 63) as u32;
             let result = ctx.iregs.get(*src)? << safe_amt;

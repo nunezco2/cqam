@@ -29,6 +29,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::INot { dst, src } => format!("INOT R{}, R{}", dst, src),
         Instruction::IInc { dst, src } => format!("IINC R{}, R{}", dst, src),
         Instruction::IDec { dst, src } => format!("IDEC R{}, R{}", dst, src),
+        Instruction::IMov { dst, src } => format!("IMOV R{}, R{}", dst, src),
         Instruction::IShl { dst, src, amt } => format!("ISHL R{}, R{}, {}", dst, src, amt),
         Instruction::IShr { dst, src, amt } => format!("ISHR R{}, R{}, {}", dst, src, amt),
 
@@ -49,6 +50,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::FDiv { dst, lhs, rhs } => format!("FDIV F{}, F{}, F{}", dst, lhs, rhs),
         Instruction::FLdi { dst, imm } => format!("FLDI F{}, {}", dst, imm),
         Instruction::FLdm { dst, addr } => format!("FLDM F{}, 0x{:04X}", dst, addr),
+        Instruction::FMov { dst, src } => format!("FMOV F{}, F{}", dst, src),
         Instruction::FStr { src, addr } => format!("FSTR F{}, 0x{:04X}", src, addr),
 
         // Float comparison
@@ -67,6 +69,7 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::ZSub { dst, lhs, rhs } => format!("ZSUB Z{}, Z{}, Z{}", dst, lhs, rhs),
         Instruction::ZMul { dst, lhs, rhs } => format!("ZMUL Z{}, Z{}, Z{}", dst, lhs, rhs),
         Instruction::ZDiv { dst, lhs, rhs } => format!("ZDIV Z{}, Z{}, Z{}", dst, lhs, rhs),
+        Instruction::ZMov { dst, src } => format!("ZMOV Z{}, Z{}", dst, src),
         Instruction::ZLdi { dst, imm_re, imm_im } => {
             format!("ZLDI Z{}, ({}, {})", dst, imm_re, imm_im)
         }
@@ -284,6 +287,7 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         | Instruction::FEq { .. }
         | Instruction::FLt { .. }
         | Instruction::FGt { .. }
+        | Instruction::FMov { .. }
         | Instruction::FSin { .. }
         | Instruction::FCos { .. }
         | Instruction::FAtan2 { .. }
@@ -294,6 +298,7 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         | Instruction::ZSub { .. }
         | Instruction::ZMul { .. }
         | Instruction::ZDiv { .. }
+        | Instruction::ZMov { .. }
         | Instruction::ZLdi { .. } => Some("complex"),
 
         _ => None,

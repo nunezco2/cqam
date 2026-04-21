@@ -128,6 +128,9 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                 }),
             }
         }
+        "IMOV" => parse_rr(&ops, |dst, src| Instruction::IMov { dst, src }, "IMOV", line_num),
+        "FMOV" => parse_rr(&ops, |dst, src| Instruction::FMov { dst, src }, "FMOV", line_num),
+        "ZMOV" => parse_rr(&ops, |dst, src| Instruction::ZMov { dst, src }, "ZMOV", line_num),
         "ISHL" => parse_rr_u8(&ops, |dst, src, amt| Instruction::IShl { dst, src, amt }, "ISHL", line_num),
         "ISHR" => parse_rr_u8(&ops, |dst, src, amt| Instruction::IShr { dst, src, amt }, "ISHR", line_num),
 

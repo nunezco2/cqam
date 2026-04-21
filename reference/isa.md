@@ -36,6 +36,7 @@ In text-format source, register names include the prefix (e.g. `R0`, `F3`,
 | `IMOD` | dst, lhs, rhs | R[dst] = R[lhs] % R[rhs]; traps if rhs == 0 | RRR |
 | `IINC` | dst [, src] | R[dst] = R[src] + 1 (src defaults to dst) | RR |
 | `IDEC` | dst [, src] | R[dst] = R[src] - 1 (src defaults to dst) | RR |
+| `IMOV` | dst, src | R[dst] = R[src]; ZF/SF updated | RR |
 
 ### 1.3 Integer bitwise (R-file)
 
@@ -77,6 +78,7 @@ In text-format source, register names include the prefix (e.g. `R0`, `F3`,
 | `FEQ` | dst, lhs, rhs | **R**[dst] = (F[lhs] == F[rhs]) ? 1 : 0 | RRR |
 | `FLT` | dst, lhs, rhs | **R**[dst] = (F[lhs] < F[rhs]) ? 1 : 0 | RRR |
 | `FGT` | dst, lhs, rhs | **R**[dst] = (F[lhs] > F[rhs]) ? 1 : 0 | RRR |
+| `FMOV` | dst, src | F[dst] = F[src]; no PSW update | RR |
 
 Note: float comparison results are written to the **integer** register file.
 
@@ -96,6 +98,7 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | `ZSTR` | src, addr16 | CMEM[addr] = Z[src].re; CMEM[addr+1] = Z[src].im | RA |
 | `ZLDX` | dst, addr_reg | Z[dst] from CMEM[R[addr_reg]] and CMEM[R[addr_reg]+1] | RR |
 | `ZSTRX` | src, addr_reg | CMEM[R[addr_reg]] = Z[src].re; CMEM[R[addr_reg]+1] = Z[src].im | RR |
+| `ZMOV` | dst, src | Z[dst] = Z[src]; no PSW update | RR |
 
 ### 1.7 Type conversion
 
@@ -230,7 +233,9 @@ following formats.
 | 0x4F-0x57 | Mixed-state, partial-trace, reset, and float math |
 | 0x58 | Qubit-count query (IQCFG) |
 | 0x59-0x5C | Thread-identity and atomic section instructions (ICCFG, ITID, HATMS, HATME) |
-| 0x60-0x61 | Integer increment/decrement (IINC, IDEC) |
+| 0x60-0x62 | Integer increment/decrement/move (IINC, IDEC, IMOV) |
+| 0x63 | Float register move (FMOV) |
+| 0x64 | Complex register move (ZMOV) |
 
 ---
 

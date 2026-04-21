@@ -71,6 +71,10 @@ pub enum Instruction {
     /// Two-operand form:    IDEC Rd, Rs
     IDec { dst: u8, src: u8 },
 
+    /// Integer register copy: R[dst] = R[src]
+    /// Updates ZF/SF from the copied value.
+    IMov { dst: u8, src: u8 },
+
     /// Shift left: R[dst] = R[src] << amt
     /// amt is a literal shift amount (0-63).
     IShl { dst: u8, src: u8, amt: u8 },
@@ -128,6 +132,10 @@ pub enum Instruction {
     /// CMEM[addr] = F[src].to_bits() as i64
     FStr { src: u8, addr: u16 },
 
+    /// Float register copy: F[dst] = F[src]
+    /// Does NOT update PSW (no arithmetic).
+    FMov { dst: u8, src: u8 },
+
     /// Float equality (exact): result stored as i64 in R-file.
     /// R[dst] = (F[lhs] == F[rhs]) ? 1 : 0
     ///
@@ -156,6 +164,10 @@ pub enum Instruction {
     /// Complex division: Z[dst] = Z[lhs] / Z[rhs]
     /// Traps if Z[rhs] == (0, 0).
     ZDiv { dst: u8, lhs: u8, rhs: u8 },
+
+    /// Complex register copy: Z[dst] = Z[src]
+    /// Does NOT update PSW (no arithmetic).
+    ZMov { dst: u8, src: u8 },
 
     /// Load complex immediate: Z[dst] = (imm_re as f64, imm_im as f64)
     ZLdi { dst: u8, imm_re: i8, imm_im: i8 },

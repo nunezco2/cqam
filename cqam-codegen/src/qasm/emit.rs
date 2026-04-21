@@ -55,6 +55,18 @@ impl QasmFormat for Instruction {
             Instruction::IDec { dst, src } => {
                 vec![format!("R{} = R{} - 1;", dst, src)]
             }
+            Instruction::IMov { dst, src } => {
+                vec![format!("R{} = R{};", dst, src)]
+            }
+            Instruction::FMov { dst, src } => {
+                vec![format!("F{} = F{};", dst, src)]
+            }
+            Instruction::ZMov { dst, src } => {
+                vec![
+                    format!("Z{}_re = Z{}_re;", dst, src),
+                    format!("Z{}_im = Z{}_im;", dst, src),
+                ]
+            }
             Instruction::IShl { dst, src, amt } => {
                 vec![format!("R{} = R{} << {};", dst, src, amt)]
             }
