@@ -47,7 +47,7 @@ HALT
     let roundtripped = roundtrip_parse(source);
     assert_eq!(roundtripped.len(), original.len());
 
-    assert!(matches!(roundtripped[0], Instruction::QPrep { dst: 0, dist: DistId::Uniform }));
+    assert!(matches!(roundtripped[0], Instruction::QPrep { dst: 0, dist: DistId::Zero }));
     assert!(matches!(roundtripped[1], Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 0, ctx1: 1 }));
     assert!(matches!(roundtripped[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 }));
     assert!(matches!(roundtripped[3], Instruction::Halt));

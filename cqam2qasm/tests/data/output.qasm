@@ -11,7 +11,7 @@ bit[16] H0;
 R0 = 5;
 R1 = R0 + R0;
 reset q0;
-// QPrep: initialize q0 with distribution 'uniform'
+// QPrep: initialize q0 with distribution 'zero'
 H0 = measure q0;
 
 // === End CQAM Generated QASM ===

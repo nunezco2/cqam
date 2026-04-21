@@ -24,7 +24,7 @@ res_fmt:
 
 # --- Encode |0_L> = |000>, inject X error on q1 ---
     ILDI R8, 2               # qubit index 2 / flip mask for q1
-    QPREP Q0, 1              # |000>
+    QPREP Q0, 0              # |000>
     QCNOT Q0, Q0, R14, R15   # CNOT(q0, q1)
     QCNOT Q0, Q0, R14, R8    # CNOT(q0, q2)
     QFLIP Q0, Q0, R8         # X on q1 (mask=0b010): |000>→|010>
@@ -37,7 +37,7 @@ res_fmt:
     IXOR R10, R6, R7         # s2 = q1 XOR q2
 
 # --- Re-prepare with same error for correction ---
-    QPREP Q1, 1
+    QPREP Q1, 0
     QCNOT Q1, Q1, R14, R15
     QCNOT Q1, Q1, R14, R8
     QFLIP Q1, Q1, R8         # re-inject error

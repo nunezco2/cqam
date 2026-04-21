@@ -85,11 +85,11 @@ LABEL: qc_pow2_done
     ISTR R11, 104        # target_qubits = 2 (search register size)
 
 # --- Prepare counting register: m qubits in |+⟩ ---
-    QPREPN Q0, 1, R10   # Q0 = |0⟩^m (zero state, m qubits)
+    QPREPN Q0, 0, R10   # Q0 = |0⟩^m (zero state, m qubits)
     QHADM Q0, Q0, R6    # Hadamard → |+⟩^m
 
 # --- Prepare search register: t qubits in uniform superposition ---
-    QPREPN Q1, 0, R11   # Q1 = |+⟩^t (uniform superposition, 2 qubits)
+    QPREPN Q1, 1, R11   # Q1 = |+⟩^t (uniform superposition, 2 qubits)
 
 # --- Combine ---
     QTENSOR Q2, Q0, Q1   # Q2 = |+⟩^m ⊗ |+⟩^t = (m+t)-qubit register

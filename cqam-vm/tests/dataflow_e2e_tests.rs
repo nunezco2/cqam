@@ -216,7 +216,7 @@ fn test_e2e_qobserve_prob_mode() {
 #[test]
 fn test_e2e_qprepr_dynamic_dist() {
     let instrs = vec![
-        Instruction::ILdi { dst: 0, imm: 1 },  // R0 = ZERO dist_id
+        Instruction::ILdi { dst: 0, imm: 0 },  // R0 = ZERO dist_id
         Instruction::QPrepR { dst: 0, dist_reg: 0 },
         Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,

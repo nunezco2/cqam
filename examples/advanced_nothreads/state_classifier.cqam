@@ -65,7 +65,7 @@ pass_fmt:
 # ============================================
 # Test 1: QPREP ZERO — expect SF=0, EF=0
 # ============================================
-    QPREP Q0, 1
+    QPREP Q0, 0
     CALL read_flags           # R4=SF, R5=EF
     IEQ R6, R4, R14          # SF==0?
     IADD R13, R13, R6
@@ -83,7 +83,7 @@ pass_fmt:
 # ============================================
 # Test 2: QPREP UNIFORM — expect SF=1, EF=0
 # ============================================
-    QPREP Q1, 0
+    QPREP Q1, 1
     CALL read_flags
     IEQ R6, R4, R15          # SF==1?
     IADD R13, R13, R6
@@ -143,7 +143,7 @@ pass_fmt:
     ECALL PRINT_STR
 
 # Test 5: QHADM — expect SF=1, EF=0
-    QPREP Q4, 1
+    QPREP Q4, 0
     ILDI R7, 15              # mask all qubits
     QHADM Q4, Q4, R7         # H on all qubits → SF=1
     CALL read_flags
@@ -161,7 +161,7 @@ pass_fmt:
     ECALL PRINT_STR
 
 # Test 6: QCNOT — expect SF=0, EF=1
-    QPREP Q5, 1
+    QPREP Q5, 0
     QFLIP Q5, Q5, R15        # put q0 in |1> for meaningful CNOT
     QCNOT Q5, Q5, R14, R15   # CNOT(q0, q1) → EF=1
     CALL read_flags

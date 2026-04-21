@@ -78,7 +78,7 @@ LABEL: vqe_print
 # Subroutine: trial_state — F0=theta → F4=<E>
 # ============================================
 LABEL: trial_state
-    QPREP Q0, 0
+    QPREP Q0, 1
     QKERNEL ENTG, Q0, Q0, R14, R14
     FLDI F5, 0
     QKERNELF DROT, Q0, Q0, F0, F5

@@ -61,7 +61,7 @@ done_msg:
 # ===================================================================
 
 # Q0: Hadamard superposition on qubit 0
-    QPREP Q0, 1               # Q0 = |00>
+    QPREP Q0, 0               # Q0 = |00>
     ILDI R6, 1
     QHADM Q0, Q0, R6          # Apply H to qubit 0 -> (|00> + |10>) / sqrt(2)
 

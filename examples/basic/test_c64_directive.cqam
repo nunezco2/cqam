@@ -104,7 +104,7 @@ LABEL: len_done
 # Test 2: Use .c64 data with DIAGONAL_UNITARY
 # ===========================================================================
     IQCFG R8              # R8 = qubit count from config
-    QPREPN Q0, 0, R8     # uniform superposition over R8 qubits
+    QPREPN Q0, 1, R8     # uniform superposition over R8 qubits
 
     # P(|1>) before oracle (should be 0.25)
     ILDI R9, 1

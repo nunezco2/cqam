@@ -35,7 +35,7 @@ res_fmt:
 # ============================================
 LABEL: count_loop
     # Prepare + apply R12 Grover iterations
-    QPREP Q0, 0
+    QPREP Q0, 1
     IADD R8, R12, R15
     ISUB R8, R8, R15             # R8 = depth (inner counter)
 LABEL: grover_inner

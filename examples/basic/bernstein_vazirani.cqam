@@ -61,7 +61,7 @@ LABEL: bv_pow2_done
 # ===============================================
 # Step 1: Prepare |0⟩ then Hadamard → |+⟩^n
 # ===============================================
-    QPREP Q0, 1          # Q0 = |0⟩^N (zero state)
+    QPREP Q0, 0          # Q0 = |0⟩^N (zero state)
     QHADM Q0, Q0, R2     # H^⊗N → uniform superposition |+⟩^N
 
 # ===============================================

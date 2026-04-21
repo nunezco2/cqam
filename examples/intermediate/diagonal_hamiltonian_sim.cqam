@@ -80,7 +80,7 @@ res_fmt:
 # Prepare initial state: uniform superposition (equal weight in all
 # energy eigenstates, like a sudden quench from a different basis)
 # ===========================================================================
-    QPREP Q0, 0          # Q0 = |+>^4 (uniform over 16 levels)
+    QPREP Q0, 1          # Q0 = |+>^4 (uniform over 16 levels)
 
 # ===========================================================================
 # Measure P(ground state) = P(|0>) BEFORE time evolution

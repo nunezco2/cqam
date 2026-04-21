@@ -217,8 +217,8 @@ fn test_qload_qstore_variants() {
 
 #[test]
 fn test_dist_id_constants() {
-    assert_eq!(u8::from(DistId::Uniform), 0);
-    assert_eq!(u8::from(DistId::Zero), 1);
+    assert_eq!(u8::from(DistId::Zero), 0);
+    assert_eq!(u8::from(DistId::Uniform), 1);
     assert_eq!(u8::from(DistId::Bell), 2);
     assert_eq!(u8::from(DistId::Ghz), 3);
 }

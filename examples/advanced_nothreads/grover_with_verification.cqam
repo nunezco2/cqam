@@ -73,7 +73,7 @@ LABEL: pow2_done
 # ============================================
 # Iterative Grover amplification
 # ============================================
-    QPREP Q0, 0                  # uniform superposition
+    QPREP Q0, 1                  # uniform superposition
     ILDI R6, 0                   # iteration counter
     ILDI R14, 0                  # zero ctx
 

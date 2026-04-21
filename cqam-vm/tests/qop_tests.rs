@@ -817,7 +817,7 @@ fn test_e2e_qkernelf_rotate_observe_reduce() {
     // Uniform(0,1,2,3) with p=0.25 each -> MEAN = 1.5
     let source = r#"
 # Prepare uniform 2-qubit state
-QPREP Q0, 0
+QPREP Q0, 1
 # Load theta = 0 into F0 (identity rotation)
 FLDI F0, 0
 FLDI F1, 0
@@ -863,7 +863,7 @@ fn test_e2e_qkernelz_phase_shift_observe() {
     // Diagonal probabilities should be 0.25 each.
     let source = r#"
 # Prepare uniform 2-qubit state
-QPREP Q0, 0
+QPREP Q0, 1
 # Load amplitude = (0, 0) into Z0 (zero amplitude -> identity)
 ZLDI Z0, 0, 0
 ZLDI Z1, 0, 0
@@ -951,8 +951,8 @@ fn test_qkernelz_phase_shift_nonzero_preserves_diag() {
 fn test_qprepr_uniform() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut backend = test_backend();
-    // Set R[0] = 0 (UNIFORM)
-    ctx.iregs.set(0, 0).unwrap();
+    // Set R[0] = 1 (UNIFORM)
+    ctx.iregs.set(0, 1).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 }, &mut backend).unwrap();
 
@@ -1244,20 +1244,22 @@ fn test_qprepr_negative_dist_id_wraps() {
         "Negative dist wraps to 255, error should reflect this, got: {}", err_msg);
 }
 
-/// Large positive value (256) wraps to 0 -> UNIFORM (same as dist_id=0).
+/// Large positive value (256) wraps to 0 -> ZERO (same as dist_id=0).
 #[test]
 fn test_qprepr_large_value_wraps_modulo_256() {
     let mut ctx = ExecutionContext::new(vec![]);
     let mut backend = test_backend();
-    // 256 as u8 = 0 = UNIFORM
+    // 256 as u8 = 0 = ZERO
     ctx.iregs.set(0, 256).unwrap();
 
     execute_qop(&mut ctx, &Instruction::QPrepR { dst: 0, dist_reg: 0 }, &mut backend).unwrap();
     let dm = ctx.qregs[0].as_ref().unwrap();
-    // Should produce uniform (4-state, each prob = 0.25)
+    // Should produce zero state: P(0) = 1.0, all others = 0.0
     let probs = backend.diagonal_probabilities(*dm).unwrap();
-    for &p in &probs {
-        assert!((p - 0.25).abs() < 1e-6, "256 wraps to 0 (UNIFORM), expected 0.25, got {}", p);
+    assert!((probs[0] - 1.0).abs() < 1e-6,
+        "256 wraps to 0 (ZERO), expected P(0)=1.0, got {}", probs[0]);
+    for &p in probs.iter().skip(1) {
+        assert!(p.abs() < 1e-6, "256 wraps to 0 (ZERO), expected P(k)=0 for k>0, got {}", p);
     }
 }
 

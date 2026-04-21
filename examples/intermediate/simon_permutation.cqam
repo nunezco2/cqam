@@ -146,7 +146,7 @@ res_fmt:
 LABEL: simon_round
 
 # Step 1: Prepare |0000>
-    QPREP Q0, 1
+    QPREP Q0, 0
 
 # Step 2: Hadamard on query register (qubits 0,1 = upper 2 qubits)
     QHADM Q0, Q0, R11

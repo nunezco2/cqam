@@ -31,7 +31,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- Walk ---
-    QPREP Q0, 1              # |0...0> (walker at origin)
+    QPREP Q0, 0              # |0...0> (walker at origin)
     ILDI R4, 1               # coin mask (qubit 0 = LSB)
     QHADM Q0, Q0, R4         # initial coin flip
     ILDI R3, 20              # walk steps

@@ -263,7 +263,7 @@ pub enum Instruction {
 
     /// Prepare quantum register with distribution.
     /// Q[dst] = new_qdist(dist)
-    /// dist: 0=uniform, 1=zero, 2=bell, 3=ghz (see dist_id module)
+    /// dist: 0=zero, 1=uniform, 2=bell, 3=ghz (see dist_id module)
     QPrep { dst: u8, dist: DistId },
 
     /// Apply quantum kernel transformation.
@@ -303,7 +303,7 @@ pub enum Instruction {
     /// Q[dst] = new_qdist(R[dist_reg] as u8)
     /// dist_reg: integer register index whose value is interpreted as a dist_id.
     /// At runtime, the value is cast to u8 and dispatched through the same
-    /// dist_id table as QPrep (UNIFORM=0, ZERO=1, BELL=2, GHZ=3).
+    /// dist_id table as QPrep (ZERO=0, UNIFORM=1, BELL=2, GHZ=3).
     QPrepR { dst: u8, dist_reg: u8 },
 
     /// Encode classical register values as quantum state amplitudes.
@@ -397,7 +397,7 @@ pub enum Instruction {
     /// Prepare quantum register with a specified number of qubits.
     ///
     /// Q[dst] = new_qdist(dist, num_qubits=R[qubit_count_reg])
-    /// dist: distribution ID (0=uniform, 1=zero, 2=bell, 3=ghz)
+    /// dist: distribution ID (0=zero, 1=uniform, 2=bell, 3=ghz)
     /// The qubit count is read from R[qubit_count_reg] at runtime.
     QPrepN { dst: u8, dist: DistId, qubit_count_reg: u8 },
 
@@ -562,10 +562,10 @@ impl TrapId {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 #[repr(u8)]
 pub enum DistId {
-    /// Uniform distribution: equal probability over all basis states.
-    Uniform = 0,
     /// Zero state: delta distribution at |0>.
-    Zero = 1,
+    Zero = 0,
+    /// Uniform distribution: equal probability over all basis states.
+    Uniform = 1,
     /// Bell state: correlated pair distribution.
     Bell = 2,
     /// GHZ state: multi-register correlation.
@@ -576,8 +576,8 @@ impl TryFrom<u8> for DistId {
     type Error = CqamError;
     fn try_from(v: u8) -> Result<Self, CqamError> {
         match v {
-            0 => Ok(DistId::Uniform),
-            1 => Ok(DistId::Zero),
+            0 => Ok(DistId::Zero),
+            1 => Ok(DistId::Uniform),
             2 => Ok(DistId::Bell),
             3 => Ok(DistId::Ghz),
             _ => Err(CqamError::InvalidId { domain: "DistId", value: v }),

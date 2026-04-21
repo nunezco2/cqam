@@ -54,7 +54,7 @@ res_fmt:
 LABEL: rng_loop
 
 # Step 1: Prepare uniform superposition (register-level)
-    QPREP Q0, 0
+    QPREP Q0, 1
 
 # Step 2: Projective measurement (collapse to random basis state)
     QOBSERVE H0, Q0, SAMPLE  # H0 = Int(k), a single random outcome

@@ -64,7 +64,7 @@ res_fmt:
 # Step 1: Prepare logical |0_L> via repetition encoding
 # ===============================================
 # Start with |000>
-    QPREP Q0, 1          # Q0 = |000>
+    QPREP Q0, 0          # Q0 = |000>
 
 # Encode: CNOT from data qubit (q0) to ancilla qubits (q1, q2)
 # |psi>|0>|0> -> |psi>|psi>|psi>
@@ -108,7 +108,7 @@ res_fmt:
 
 # First, prepare a fresh encoded state with the error for correction
 # (since QMEAS collapsed the state, re-prepare)
-    QPREP Q1, 1          # |000>
+    QPREP Q1, 0          # |000>
     QCNOT Q1, Q1, R0, R1 # Encode
     QCNOT Q1, Q1, R0, R2
     QFLIP Q1, Q1, R7     # Re-inject same error on q1

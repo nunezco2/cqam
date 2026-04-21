@@ -52,7 +52,7 @@ res_fmt:
     ILDI R4, 1           # R4 = mask 0b01 (coin qubit)
 
 # --- Initialize walker at position |0> ---
-    QPREP Q0, 1          # Q0 = |0...0> (walker starts at origin)
+    QPREP Q0, 0          # Q0 = |0...0> (walker starts at origin)
 
 # --- Apply initial coin flip ---
 # QHADM on the coin qubit creates the initial superposition
@@ -60,7 +60,7 @@ res_fmt:
     QHADM Q0, Q0, R4
 
 # Park initial state in QMEM for variance comparison at end
-    QPREP Q1, 1          # Q1 = |0...0> (reference copy)
+    QPREP Q1, 0          # Q1 = |0...0> (reference copy)
     QHADM Q1, Q1, R4     # Same initial coin flip
     QSTORE Q1, 0         # Teleport reference to QMEM[0] (Q1 consumed, 1 Bell pair)
 

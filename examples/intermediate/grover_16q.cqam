@@ -78,7 +78,7 @@ LABEL: grov_pow2_done
     ILDI R4, 0           # R4 = iteration counter (for statistics)
 
 # --- Prepare uniform superposition ---
-    QPREP Q0, 0          # Q0 = |+>^n (uniform over 2^n states)
+    QPREP Q0, 1          # Q0 = |+>^n (uniform over 2^n states)
 
 # --- Grover iteration loop ---
 LABEL: grover_loop

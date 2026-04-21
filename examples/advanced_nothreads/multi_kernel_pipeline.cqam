@@ -56,7 +56,7 @@ done_msg:
 # ============================================
 # Stage 1: UNIT kernel (should set SF)
 # ============================================
-    QPREP Q0, 0                  # UNIFORM
+    QPREP Q0, 1                  # UNIFORM
     QKERNEL UNIT, Q0, Q0, R14, R14
     JMPF SF, sf_yes
     ILDI R2, 0
@@ -72,7 +72,7 @@ LABEL: sf_print
 # ============================================
 # Stage 2: ENTG kernel (should set EF)
 # ============================================
-    QPREP Q1, 1                  # ZERO
+    QPREP Q1, 0                  # ZERO
     QKERNEL ENTG, Q1, Q1, R14, R14
     JMPF EF, ef_yes
     ILDI R2, 0
@@ -88,7 +88,7 @@ LABEL: ef_print
 # ============================================
 # Stage 3: QFFT + DIFF + QIFT (Fourier round-trip)
 # ============================================
-    QPREP Q2, 1
+    QPREP Q2, 0
     QKERNEL QFFT, Q2, Q2, R14, R14
     QKERNEL DIFF, Q2, Q2, R14, R14
     QKERNEL QIFT, Q2, Q2, R14, R14
@@ -96,7 +96,7 @@ LABEL: ef_print
 # ============================================
 # Stage 4: GROV (Grover iteration)
 # ============================================
-    QPREP Q3, 0
+    QPREP Q3, 1
     ILDI R5, 5                   # target state
     QKERNEL GROV, Q3, Q3, R5, R14
     QKERNEL GROV, Q3, Q3, R5, R14
@@ -112,7 +112,7 @@ LABEL: ef_print
 # ============================================
 # Stage 5: DROT via QKERNELF
 # ============================================
-    QPREP Q4, 1
+    QPREP Q4, 0
     FLDI F0, 1                   # theta = 1.0
     FLDI F1, 0
     QKERNELF DROT, Q4, Q4, F0, F1
@@ -126,7 +126,7 @@ LABEL: ef_print
 # ============================================
 # Stage 6: PHSH via QKERNELZ
 # ============================================
-    QPREP Q5, 1
+    QPREP Q5, 0
     ZLDI Z0, 1, 1                # z = 1+i
     ZLDI Z1, 0, 0
     QKERNELZ PHSH, Q5, Q5, Z0, Z1
@@ -135,7 +135,7 @@ LABEL: ef_print
 # ============================================
 # Stage 7: CTLU (controlled-U)
 # ============================================
-    QPREP Q6, 1
+    QPREP Q6, 0
     # CTLU: R[ctx0]=control_qubit, R[ctx1]=CMEM base of 5-cell param block
     # Block: [sub_kernel_id, power, param_re_bits, param_im_bits, target_qubits]
     ILDI R3, 500
@@ -157,13 +157,13 @@ LABEL: ef_print
 # ============================================
 # Stage 8: DIAG + PERM (uses QMEM pipeline buffer)
 # ============================================
-    QPREP Q7, 0
+    QPREP Q7, 1
     ILDI R3, @diag_data
     ILDI R4, @diag_data.len
     QKERNEL DIAG, Q7, Q7, R3, R4
     QSTORE Q7, 0                 # Park DIAG result in QMEM[0] (Q7 consumed, 1 Bell pair)
 
-    QPREP Q0, 0                  # reuse Q0 for PERM while DIAG result is parked
+    QPREP Q0, 1                  # reuse Q0 for PERM while DIAG result is parked
     ILDI R3, @perm_table
     ILDI R4, @perm_table.len
     QKERNEL PERM, Q0, Q0, R3, R4
@@ -181,7 +181,7 @@ LABEL: ef_print
 # ============================================
 # Masked gate ops: QHADM, QFLIP, QPHASE
 # ============================================
-    QPREP Q2, 1                  # |0000>
+    QPREP Q2, 0                  # |0000>
     ILDI R5, 5                   # mask 0b0101 (qubits 0, 2)
     QHADM Q2, Q2, R5
     ILDI R6, 10                  # mask 0b1010 (qubits 1, 3)
@@ -207,7 +207,7 @@ LABEL: qf_ok
 # ============================================
 # EXPCT: expectation value with eigenvalues
 # ============================================
-    QPREP Q0, 0
+    QPREP Q0, 1
     QOBSERVE H0, Q0
     ILDI R2, @eigenvalues
     HREDUCE EXPCT, H0, F2

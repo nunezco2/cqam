@@ -176,7 +176,7 @@ res_fmt:
 # Prepare |1>: start from |0000>, flip qubit 3 (LSB).
 # In CQAM qubit 0 = MSB. For 4 qubits, QFLIP mask=8 flips qubit 3 (LSB),
 # producing state index 1 in the computational basis.
-    QPREP Q0, 1          # Q0 = |0000> = state index 0
+    QPREP Q0, 0          # Q0 = |0000> = state index 0
     ILDI R6, 8            # mask = bit 3 -> qubit 3 (LSB) -> state index 1
     QFLIP Q0, Q0, R6     # Q0 = |0001> = state index 1
 
@@ -321,7 +321,7 @@ LABEL: t1_end
     ILDI R7, 300          # R7 = base address of U^2 permutation
 
 # Prepare |1>
-    QPREP Q1, 1
+    QPREP Q1, 0
     ILDI R6, 8
     QFLIP Q1, Q1, R6     # Q1 = |0001> = state index 1
 

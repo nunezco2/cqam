@@ -57,7 +57,7 @@ res_fmt:
 # ===============================================
 # Step 1: Prepare the state to teleport |psi>
 # ===============================================
-    QPREP Q0, 1          # Q0 = |0...0>
+    QPREP Q0, 0          # Q0 = |0...0>
     FLDI F0, 2           # F0 = rotation angle (creates non-trivial state)
     FLDI F1, 0           # F1 = unused
     QKERNELF DROT, Q0, Q0, F0, F1  # Q0 = Rotate(|0>, theta=2) = |psi>

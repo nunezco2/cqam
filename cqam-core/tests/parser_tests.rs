@@ -575,7 +575,7 @@ fn test_parse_label() {
 fn test_parse_qprep() {
     assert_eq!(
         parse_instruction("QPREP Q0, 0").unwrap(),
-        Instruction::QPrep { dst: 0, dist: DistId::Uniform }
+        Instruction::QPrep { dst: 0, dist: DistId::Zero }
     );
 }
 
@@ -700,7 +700,7 @@ fn test_parse_max_complex_register() {
 fn test_parse_max_quantum_register() {
     assert_eq!(
         parse_instruction("QPREP Q7, 0").unwrap(),
-        Instruction::QPrep { dst: 7, dist: DistId::Uniform }
+        Instruction::QPrep { dst: 7, dist: DistId::Zero }
     );
 }
 
@@ -824,7 +824,7 @@ HALT
 ";
     let program = parse_program(source).unwrap().instructions;
     assert_eq!(program.len(), 5);
-    assert_eq!(program[0], Instruction::QPrep { dst: 0, dist: DistId::Uniform });
+    assert_eq!(program[0], Instruction::QPrep { dst: 0, dist: DistId::Zero });
     assert_eq!(program[1], Instruction::QKernel { dst: 1, src: 0, kernel: KernelId::Entangle, ctx0: 0, ctx1: 1 });
     assert_eq!(program[2], Instruction::QObserve { dst_h: 0, src_q: 1, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 });
     assert_eq!(program[3], Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::Argmax });
@@ -1490,7 +1490,7 @@ fn test_parse_qmixed_error() {
 fn test_parse_qprepn() {
     assert_eq!(
         parse_instruction("QPREPN Q0, 1, R2").unwrap(),
-        Instruction::QPrepN { dst: 0, dist: DistId::Zero, qubit_count_reg: 2 }
+        Instruction::QPrepN { dst: 0, dist: DistId::Uniform, qubit_count_reg: 2 }
     );
 }
 

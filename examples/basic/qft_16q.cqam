@@ -47,7 +47,7 @@ res_fmt:
     ILDI R2, 0           # R2 = unused ctx
 
 # --- Stage 1: Prepare zero state and entangle ---
-    QPREP Q0, 1          # Q0 = |0...0> (zero state)
+    QPREP Q0, 0          # Q0 = |0...0> (zero state)
     QKERNEL ENTG, Q0, Q0, R0, R2   # Apply entangle kernel
 
 # --- Stage 2: Apply QFT ---

@@ -39,7 +39,7 @@ res_fmt:
     ECALL PRINT_STR
 
     ILDI R11, 3              # optimal iterations for 4 qubits: floor(pi/4 * sqrt(16)) = 3
-    QPREP Q0, 0              # uniform superposition
+    QPREP Q0, 1              # uniform superposition
 
 LABEL: grover_loop
     QKERNEL GROV, Q0, Q0, R10, R14

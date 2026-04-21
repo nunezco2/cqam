@@ -88,11 +88,11 @@ LABEL: hhl_pow2_done
     ISTR R3, 104         # target_qubits = 1
 
 # --- Prepare eigenstate register: 1 qubit in |1⟩ ---
-    QPREPN Q1, 1, R3     # Q1 = |0⟩ (1 qubit)
+    QPREPN Q1, 0, R3     # Q1 = |0⟩ (1 qubit)
     QFLIP Q1, Q1, R3     # Q1 = |1⟩ (eigenstate of ROTATE with eigenvalue exp(i*0.5))
 
 # --- Prepare counting register: m qubits in |+⟩ ---
-    QPREPN Q0, 1, R10    # Q0 = |0⟩^m (m qubits)
+    QPREPN Q0, 0, R10    # Q0 = |0⟩^m (m qubits)
     QHADM Q0, Q0, R6     # Hadamard → |+⟩^m
 
 # --- Combine registers ---

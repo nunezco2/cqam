@@ -1,0 +1,14 @@
+#! qubits 4
+.code
+    QPREP Q0, 0
+    QOBSERVE H0, Q0
+    ILDI R0, 0
+    ILDI R1, 0
+    ECALL PRINT_HIST
+
+    QPREP Q1, 1
+    QOBSERVE H1, Q1
+    ILDI R0, 1
+    ILDI R1, 0
+    ECALL PRINT_HIST
+    HALT

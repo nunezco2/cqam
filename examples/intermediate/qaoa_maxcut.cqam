@@ -136,7 +136,7 @@ cut_fmt:
 # ===========================================================================
 # Step 1: Prepare uniform superposition |+>^4
 # ===========================================================================
-    QPREP Q0, 0          # Q0 = uniform superposition over 16 states
+    QPREP Q0, 1          # Q0 = uniform superposition over 16 states
 
 # ===========================================================================
 # Step 2: Cost layer -- apply exp(-i*gamma*C) via DIAGONAL_UNITARY

@@ -83,7 +83,7 @@ res_fmt:
 LABEL: tomo_z_loop
 
 # Prepare the unknown state
-    QPREP Q0, 1          # |0...0>
+    QPREP Q0, 0          # |0...0>
     QKERNELF DROT, Q0, Q0, F3, F4  # Rotate to create |psi> (register-level)
 
 # Z basis: no rotation needed, measure directly
@@ -114,7 +114,7 @@ LABEL: tomo_z_loop
 LABEL: tomo_x_loop
 
 # Prepare the unknown state
-    QPREP Q0, 1
+    QPREP Q0, 0
     QKERNELF DROT, Q0, Q0, F3, F4  # Create |psi>
 
 # X basis rotation: Ry(-pi/2) on target qubit
@@ -145,7 +145,7 @@ LABEL: tomo_x_loop
 LABEL: tomo_y_loop
 
 # Prepare the unknown state
-    QPREP Q0, 1
+    QPREP Q0, 0
     QKERNELF DROT, Q0, Q0, F3, F4  # Create |psi>
 
 # Y basis rotation: Rx(pi/2) on target qubit

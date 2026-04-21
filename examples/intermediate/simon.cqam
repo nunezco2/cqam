@@ -75,7 +75,7 @@ LABEL: simon_pow2_done
 LABEL: simon_round
 
 # Step 1: Prepare zero state
-    QPREP Q0, 1          # |0...0>
+    QPREP Q0, 0          # |0...0>
 
 # Step 2: Superpose query register (lower 8 qubits only).
 # QHADM with partial mask — no register-level alternative.

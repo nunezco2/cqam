@@ -53,8 +53,8 @@ res_fmt:
 # ===============================================
 # Test 1: Same state — overlap should be 1.0
 # ===============================================
-    QPREP Q0, 0          # Q0 = uniform superposition
-    QPREP Q1, 0          # Q1 = uniform superposition (identical)
+    QPREP Q0, 1          # Q0 = uniform superposition
+    QPREP Q1, 1          # Q1 = uniform superposition (identical)
 
 # Observe both distributions (destructive)
     QOBSERVE H4, Q0
@@ -82,8 +82,8 @@ res_fmt:
 # ===============================================
 # Test 2: Different states — overlap should be < 1
 # ===============================================
-    QPREP Q2, 0          # Q2 = uniform
-    QPREP Q3, 1          # Q3 = zero state (very different!)
+    QPREP Q2, 1          # Q2 = uniform
+    QPREP Q3, 0          # Q3 = zero state (very different!)
 
 # Observe both (destructive)
     QOBSERVE H4, Q2
@@ -102,12 +102,12 @@ res_fmt:
 # ===============================================
 # Test 3: Parameterized states — vary overlap continuously
 # ===============================================
-    QPREP Q4, 0          # Start uniform
+    QPREP Q4, 1          # Start uniform
     FLDI F11, 1          # theta = 1
     FLDI F12, 0          # unused
     QKERNELF DROT, Q4, Q4, F11, F12  # Rotate by theta=1
 
-    QPREP Q5, 0          # Start uniform
+    QPREP Q5, 1          # Start uniform
     FLDI F13, 2          # theta = 2 (different rotation)
     QKERNELF DROT, Q5, Q5, F13, F12  # Rotate by theta=2
 

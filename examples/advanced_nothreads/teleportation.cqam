@@ -31,7 +31,7 @@ res_fmt:
     ECALL PRINT_STR
 
 # --- Prepare message |1> on qubit 0 ---
-    QPREP Q0, 1              # |000>
+    QPREP Q0, 0              # |000>
     QFLIP Q0, Q0, R15        # X on q0 (mask=0b001): |100>
 
 # --- Create Bell pair on qubits 1,2 ---
