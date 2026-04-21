@@ -310,11 +310,10 @@ impl QasmFormat for Instruction {
                     dst, kname, src, zctx0, zctx1
                 )]
             }
-            Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1 } => {
+            Instruction::QObserve { dst_h, src_q, mode, ctx0, ctx1: _ } => {
                 match *mode {
                     ObserveMode::Dist => vec![format!("H{} = measure q{};", dst_h, src_q)],
                     ObserveMode::Prob => vec![format!("// @cqam.observe_prob H{} = prob(q{}, R{});", dst_h, src_q, ctx0)],
-                    ObserveMode::Amp => vec![format!("// @cqam.observe_amp H{} = amp(q{}, R{}, R{});", dst_h, src_q, ctx0, ctx1)],
                     ObserveMode::Sample => vec![format!("// @cqam.observe H{} = observe(q{}, mode={});", dst_h, src_q, mode)],
                 }
             }

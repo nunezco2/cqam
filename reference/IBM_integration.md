@@ -913,8 +913,10 @@ for hardware compatibility. The key migration patterns applied were:
   prep for states with product structure (e.g., |+>, |0>, |1> per-qubit states).
 - **QPTRACE → full-register observation**: Partial trace (simulation-only) replaced
   by direct observation of the full register.
-- **QOBSERVE AMP → QOBSERVE DIST + HREDUCE**: Complex amplitude extraction
-  replaced by distribution-mode observation with statistical post-processing.
+- **QOBSERVE AMP (removed) → QOBSERVE DIST + HREDUCE**: The AMP observe mode
+  was removed from the ISA (density matrix element extraction is not physically
+  realizable on hardware). Programs previously using AMP have been rewritten
+  using DIST or PROB mode with appropriate post-processing.
 
 Programs in the audit that are RED (noise-dominated or infeasible on current
 hardware) are documented in `design/analysis/ADVANCED_EXAMPLES_AUDIT.md`.

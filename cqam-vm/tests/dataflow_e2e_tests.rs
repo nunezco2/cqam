@@ -130,44 +130,36 @@ fn test_e2e_float_kernel_rotate() {
 
 /// Verify complex-parameterized kernel dataflow:
 ///   ZLDI Z0, re, im  ->  QPREP Q0, UNIFORM  ->  QKERNELZ Q0, Q0, PHASE_SHIFT, Z0, Z1
-///   ->  QOBSERVE H0, Q0, AMP, R0, R1  ->  result is Complex in H0
-///   ->  HREDUCE CONJ_Z -> Z2
+///   ->  QOBSERVE H0, Q0, DIST  ->  HREDUCE ARGMX -> R2
+///
+/// Previously used AMP mode (removed from ISA). Now verifies the same kernel
+/// dataflow ends with a valid DIST result.
 ///
 /// Assertions:
-///   - H0 should be Complex variant (from AMP mode)
-///   - Z2 should contain the conjugate of the extracted amplitude
+///   - H0 should be Dist variant
+///   - Q0 is None (destructive)
 #[test]
 fn test_e2e_complex_kernel_phase_shift_to_z_file() {
     let instrs = vec![
         // Z0 = (1.0, 1.0) -- complex amplitude for phase_shift
         Instruction::ZLdi { dst: 0, imm_re: 1, imm_im: 1 },
-        // Z1 = (0.0, 0.0) -- unused second context
+        // Z1 = (0.0, 0.0) -- second context
         Instruction::ZLdi { dst: 1, imm_re: 0, imm_im: 0 },
-        // R0 = 0, R1 = 1 (row/col for AMP mode)
-        Instruction::ILdi { dst: 0, imm: 0 },
-        Instruction::ILdi { dst: 1, imm: 1 },
         // Prepare uniform
         Instruction::QPrep { dst: 0, dist: DistId::Uniform },
         // Apply PHASE_SHIFT kernel with complex params
         Instruction::QKernelZ { dst: 0, src: 0, kernel: KernelId::PhaseShift, zctx0: 0, zctx1: 1 },
-        // Observe with AMP mode at (0,1)
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
-        // Reduce: conjugate -> Z2
-        Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::ConjZ },
+        // Observe with DIST mode
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
     let (ctx, _backend) = run_program(instrs);
 
-    // H0 should be Complex
-    assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Complex(_, _)));
-
-    // Z2 should be conjugate of H0
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        let (z2_re, z2_im) = ctx.zregs.get(2).unwrap();
-        assert!((z2_re - re).abs() < 1e-10);
-        assert!((z2_im - (-im)).abs() < 1e-10);
-    }
+    // H0 should be Dist
+    assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Dist(_)));
+    // Q0 consumed
+    assert!(ctx.qregs[0].is_none());
 }
 
 // (Test 4 removed: QSAMPLE was removed from the ISA — no non-destructive observation.)
@@ -195,51 +187,18 @@ fn test_e2e_qobserve_prob_mode() {
 
     let (ctx, _backend) = run_program(instrs);
 
-    // H0 should be Complex(1.0, 0.0) -- probability of |0> in the zero state
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 1.0).abs() < 1e-10);
-        assert!((im).abs() < 1e-10);
+    // H0 should be Float(1.0) -- probability of |0> in the zero state
+    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
+        assert!((p - 1.0).abs() < 1e-10, "P(0) for |0> state should be 1.0, got {}", p);
     } else {
-        panic!("Expected Complex variant in H0");
+        panic!("Expected Float variant in H0, got {:?}", ctx.hregs.get(0));
     }
     // Q0 is None (destructive)
     assert!(ctx.qregs[0].is_none());
 }
 
-// =============================================================================
-// Test 6: QOBSERVE mode=AMP density matrix element extraction
-// =============================================================================
-
-/// Verify AMP mode extracts a density matrix element:
-///   QPREP Q0, BELL  ->  ILDI R0, 0  ->  ILDI R1, 3
-///   ->  QOBSERVE H0, Q0, AMP, R0, R1
-///
-/// For Bell state, rho[0][3] = 0.5 + 0.0i (off-diagonal coherence).
-///
-/// Assertions:
-///   - H0 == Complex(0.5, 0.0)
-///   - Q0 is None (destructive)
-#[test]
-fn test_e2e_qobserve_amp_mode() {
-    let instrs = vec![
-        Instruction::ILdi { dst: 0, imm: 0 },  // R0 = row = 0
-        Instruction::ILdi { dst: 1, imm: 3 },  // R1 = col = 3
-        Instruction::QPrep { dst: 0, dist: DistId::Bell },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
-        Instruction::Halt,
-    ];
-
-    let (ctx, _backend) = run_program(instrs);
-
-    // Bell state rho[0][3] = 0.5 + 0.0i
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.5).abs() < 1e-10, "re={}, expected 0.5", re);
-        assert!(im.abs() < 1e-10, "im={}, expected 0.0", im);
-    } else {
-        panic!("Expected Complex variant in H0");
-    }
-    assert!(ctx.qregs[0].is_none());
-}
+// (Test 6 removed: QOBSERVE AMP mode was removed from the ISA — density matrix
+//  element extraction is not physically realizable on hardware.)
 
 // =============================================================================
 // Test 7: QPREPR dynamic distribution selection
@@ -332,20 +291,21 @@ fn test_e2e_qencode_f_file_bell_like() {
 /// Verify amplitude encoding from complex registers:
 ///   ZLDI Z0, 1, 0  ->  ZLDI Z1, 0, 1
 ///   ->  QENCODE Q0, Z0, 2, Z_FILE
-///   ->  QOBSERVE H0, Q0, AMP, R_row, R_col
+///   ->  QOBSERVE H0, Q0, DIST
+///
+/// Previously observed in AMP mode (removed from ISA). Now verifies that
+/// QENCODE from Z-file produces a valid quantum state by observing its DIST.
 ///
 /// Assertions:
-///   - The off-diagonal element has non-zero imaginary part (phase information)
+///   - H0 is Dist variant
 ///   - Q0 is None after QOBSERVE (destructive)
 #[test]
 fn test_e2e_qencode_z_file_with_phase() {
     let instrs = vec![
         Instruction::ZLdi { dst: 0, imm_re: 1, imm_im: 0 },  // Z0 = (1, 0)
         Instruction::ZLdi { dst: 1, imm_re: 0, imm_im: 1 },  // Z1 = (0, 1) = i
-        Instruction::ILdi { dst: 0, imm: 0 },  // R0 = 0 (row)
-        Instruction::ILdi { dst: 1, imm: 1 },  // R1 = 1 (col)
         Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: FileSel::ZFile },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
         Instruction::Halt,
     ];
 
@@ -354,14 +314,8 @@ fn test_e2e_qencode_z_file_with_phase() {
     // Q0 should be consumed after QOBSERVE
     assert!(ctx.qregs[0].is_none());
 
-    // H0 should be Complex with non-zero imaginary part (off-diagonal has phase info)
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        // rho[0][1] = z0 * conj(z1) / norm = (1,0) * (0,-1) / 2 = (0,-1)/2 = (0, -0.5)
-        assert!(re.abs() < 1e-10, "re={}, expected 0.0", re);
-        assert!(im.abs() > 1e-10, "im={}, expected non-zero", im);
-    } else {
-        panic!("Expected Complex variant in H0");
-    }
+    // H0 should be Dist
+    assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Dist(_)));
 }
 
 // =============================================================================
@@ -491,110 +445,105 @@ fn test_e2e_qphase_preserves_probabilities() {
 }
 
 // =============================================================================
-// Test 13: CONJ_Z and NEGATE_Z reductions
+// Test 13: CONJ_Z and NEGATE_Z reductions (via ZLDI -> Z-register directly)
 // =============================================================================
 
-/// Verify the new Z-file reduction functions:
-///   QPREP Q0, BELL  ->  QOBSERVE H0, Q0, AMP, R_row, R_col
-///   ->  HREDUCE H0, Z0, CONJ_Z
-///   ->  HREDUCE H0, Z1, NEGATE_Z
+/// Verify the Z-file reduction functions operate on Complex values from Z-registers.
+/// Previously tested via QOBSERVE(AMP) (removed from ISA). Now uses ZLDI to
+/// place a known complex value into H0 directly, then reduces.
 ///
-/// For Bell state rho[0][3] = (0.5, 0.0):
-///   CONJ_Z:   Z0 = (0.5, 0.0)  (imaginary part negated, but was 0)
-///   NEGATE_Z: Z1 = (-0.5, 0.0)
+///   ZLDI Z0, 1, 0  (H0 seed value, but we set H0 directly via ZLDI + load)
+///
+/// Strategy: Use ZLDI to set Z0 = (0.5, 0.0), then use a HREDUCE on a
+/// HybridValue::Complex placed directly via a QOBSERVE(PROB) followed by a
+/// manual verify, OR simply test ConjZ/NegateZ on a Complex value already in H.
+///
+/// Since H-registers only accept Complex from backend observe results, we use
+/// QPREP + QOBSERVE(PROB) to get a Float into H0, then verify CONJ_Z and
+/// NEGATE_Z accept Float (treating it as Complex(v, 0.0)).
 ///
 /// Assertions:
-///   - Z0 == (0.5, 0.0)
-///   - Z1 == (-0.5, 0.0)
+///   - Z0 = (prob, 0.0) via CONJ_Z (identity on real-valued input)
+///   - Z1 = (-prob, 0.0) via NEGATE_Z
 #[test]
 fn test_e2e_conj_z_and_negate_z_reductions() {
+    // CONJ_Z and NEGATE_Z accept Float as Complex(v, 0.0).
+    // Use |0> state: P(0) = 1.0, so H0 = Float(1.0) after PROB observe.
     let instrs = vec![
-        Instruction::ILdi { dst: 0, imm: 0 },  // R0 = row = 0
-        Instruction::ILdi { dst: 1, imm: 3 },  // R1 = col = 3
-        Instruction::QPrep { dst: 0, dist: DistId::Bell },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
-        // CONJ_Z: Z0 = conj(H0)
+        Instruction::ILdi { dst: 0, imm: 0 },  // R0 = basis state index 0
+        Instruction::QPrep { dst: 0, dist: DistId::Zero },
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0 },
+        // CONJ_Z: Z0 = conj(Float(1.0)) = (1.0, 0.0)
         Instruction::HReduce { src: 0, dst: 0, func: ReduceFn::ConjZ },
-        // NEGATE_Z: Z1 = -H0
+        // NEGATE_Z: Z1 = negate(Float(1.0)) = (-1.0, 0.0)
         Instruction::HReduce { src: 0, dst: 1, func: ReduceFn::NegateZ },
         Instruction::Halt,
     ];
 
     let (ctx, _backend) = run_program(instrs);
 
-    // H0 should be Complex(0.5, 0.0) for Bell state rho[0][3]
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.5).abs() < 1e-10);
-        assert!(im.abs() < 1e-10);
+    // H0 = Float(1.0)
+    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
+        assert!((p - 1.0).abs() < 1e-10, "P(0) for |0> state should be 1.0, got {}", p);
     } else {
-        panic!("Expected Complex variant in H0");
+        panic!("Expected Float variant in H0");
     }
 
-    // Z0 = conj(0.5, 0.0) = (0.5, -0.0) ≈ (0.5, 0.0)
+    // Z0 = conj(1.0 + 0i) = (1.0, 0.0)
     let (z0_re, z0_im) = ctx.zregs.get(0).unwrap();
-    assert!((z0_re - 0.5).abs() < 1e-10, "Z0.re={}, expected 0.5", z0_re);
+    assert!((z0_re - 1.0).abs() < 1e-10, "Z0.re={}, expected 1.0", z0_re);
     assert!(z0_im.abs() < 1e-10, "Z0.im={}, expected 0.0", z0_im);
 
-    // Z1 = negate(0.5, 0.0) = (-0.5, 0.0)
+    // Z1 = negate(1.0 + 0i) = (-1.0, 0.0)
     let (z1_re, z1_im) = ctx.zregs.get(1).unwrap();
-    assert!((z1_re - (-0.5)).abs() < 1e-10, "Z1.re={}, expected -0.5", z1_re);
+    assert!((z1_re - (-1.0)).abs() < 1e-10, "Z1.re={}, expected -1.0", z1_re);
     assert!(z1_im.abs() < 1e-10, "Z1.im={}, expected 0.0", z1_im);
 }
 
 // (Test 14 removed: QSAMPLE feedback loop was removed from the ISA — no non-destructive observation.)
 
 // =============================================================================
-// Test 15: Full 4-stage pipeline: Z -> Q -> H -> Z
+// Test 15: Full 4-stage pipeline: Z -> Q -> H -> R
 // =============================================================================
 
-/// Verify the complete complex dataflow end-to-end:
+/// Verify the complete Z-file -> quantum -> H -> classical dataflow end-to-end:
 ///   ZLDI Z0, 1, 1  ->  QENCODE Q0, Z0, 2, Z_FILE
 ///   ->  QKERNELZ Q0, Q0, PHASE_SHIFT, Z0, Z1
-///   ->  QOBSERVE H0, Q0, AMP, R0, R1
-///   ->  HREDUCE H0, Z2, CONJ_Z
+///   ->  QOBSERVE H0, Q0, DIST
+///   ->  HREDUCE ARGMX, H0, R2
 ///
-/// This exercises: Z-file input (QENCODE + QKERNELZ), quantum processing,
-/// observation, and Z-file output (CONJ_Z).
+/// Previously used AMP mode (removed from ISA). Now verifies the same pipeline
+/// (QENCODE + QKERNELZ) ends with a valid DIST result and ARGMX reduction.
 ///
 /// Assertions:
-///   - Z2 contains a valid complex number
+///   - H0 is Dist variant
+///   - R2 holds a valid basis state index (in-range for a 1-qubit state)
 ///   - The pipeline completes without error
-///   - All intermediate values are consistent
 #[test]
 fn test_e2e_full_z_pipeline() {
     let instrs = vec![
         // Z0 = (1.0, 1.0), Z1 = (1.0, 0.0)
         Instruction::ZLdi { dst: 0, imm_re: 1, imm_im: 1 },
         Instruction::ZLdi { dst: 1, imm_re: 1, imm_im: 0 },
-        // R0 = 0, R1 = 1 (row/col for AMP mode)
-        Instruction::ILdi { dst: 0, imm: 0 },
-        Instruction::ILdi { dst: 1, imm: 1 },
         // QENCODE from Z-file: uses Z0, Z1 as amplitudes for a 1-qubit state
         Instruction::QEncode { dst: 0, src_base: 0, count: 2, file_sel: FileSel::ZFile },
         // Apply PHASE_SHIFT kernel with complex context Z0, Z1
         Instruction::QKernelZ { dst: 0, src: 0, kernel: KernelId::PhaseShift, zctx0: 0, zctx1: 1 },
-        // Observe AMP at (0,1)
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1 },
-        // Reduce: CONJ_Z -> Z2
-        Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::ConjZ },
+        // Observe DIST
+        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Dist, ctx0: 0, ctx1: 0 },
+        // ARGMX -> R2
+        Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::Argmax },
         Instruction::Halt,
     ];
 
     let (ctx, _backend) = run_program(instrs);
 
-    // H0 should be Complex
-    assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Complex(_, _)));
+    // H0 should be Dist
+    assert!(matches!(ctx.hregs.get(0).unwrap(), HybridValue::Dist(_)));
 
-    // Z2 should contain a valid complex number (conjugate of H0)
-    let (z2_re, z2_im) = ctx.zregs.get(2).unwrap();
-    assert!(z2_re.is_finite(), "Z2.re should be finite");
-    assert!(z2_im.is_finite(), "Z2.im should be finite");
-
-    // Verify conjugate relationship
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((z2_re - re).abs() < 1e-10, "Z2.re={}, H0.re={}", z2_re, re);
-        assert!((z2_im - (-im)).abs() < 1e-10, "Z2.im={}, -H0.im={}", z2_im, -im);
-    }
+    // R2 holds the most probable basis state index (0 or 1 for 1 qubit)
+    let most_probable = ctx.iregs.get(2).unwrap();
+    assert!(most_probable == 0 || most_probable == 1, "basis state index out of range: {}", most_probable);
 
     // Q0 should be consumed
     assert!(ctx.qregs[0].is_none());

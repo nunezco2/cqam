@@ -450,7 +450,7 @@ impl SimulationBackend {
         qr: &QuantumRegister,
         mode: ObserveMode,
         ctx0: usize,
-        ctx1: usize,
+        _ctx1: usize,
         rng: Option<&mut ChaCha8Rng>,
     ) -> Result<ObserveResult, CqamError> {
         match mode {
@@ -481,18 +481,6 @@ impl SimulationBackend {
                 }
                 let prob = qr.get_element(ctx0, ctx0).0;
                 Ok(ObserveResult::Prob(prob))
-            }
-            ObserveMode::Amp => {
-                let dim = qr.dimension();
-                if ctx0 >= dim || ctx1 >= dim {
-                    return Err(CqamError::QuantumIndexOutOfRange {
-                        instruction: "QOBSERVE/AMP".to_string(),
-                        index: ctx0.max(ctx1),
-                        limit: dim,
-                    });
-                }
-                let elem = qr.get_element(ctx0, ctx1);
-                Ok(ObserveResult::Amp(elem))
             }
             ObserveMode::Sample => {
                 let mut probs = qr.diagonal_probabilities();

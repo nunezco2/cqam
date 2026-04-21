@@ -101,40 +101,9 @@ fn cx_gate() -> [C64; 16] {
     ]
 }
 
-// =============================================================================
-// Test 1: AMP observe mode rejected by CircuitBackend
-// =============================================================================
-
-/// `CircuitBackend::observe` with `ObserveMode::Amp` returns
-/// `CqamError::QpuUnsupportedOperation { operation: "QOBSERVE/AMP", .. }`.
-#[test]
-fn test_amp_mode_returns_unsupported() {
-    let mut cb = make_test_backend(8);
-    let (h, _) = cb.prep(DistId::Zero, 2, false).unwrap();
-    let err = cb.observe(h, ObserveMode::Amp, 0, 0);
-    assert!(
-        matches!(err, Err(CqamError::QpuUnsupportedOperation { ref operation, .. })
-            if operation == "QOBSERVE/AMP"),
-        "Expected QpuUnsupportedOperation(QOBSERVE/AMP), got: {:?}", err
-    );
-}
-
-/// Runner-level: QPREP followed by QOBSERVE(AMP) returns
-/// `CqamError::QpuUnsupportedOperation`.
-#[test]
-fn test_amp_mode_via_runner_returns_unsupported() {
-    let program = vec![
-        Instruction::QPrep { dst: 0, dist: DistId::Zero },
-        Instruction::QObserve { dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 0 },
-        Instruction::Halt,
-    ];
-    let err = run_program_with_config(program, &mock_qpu_config());
-    assert!(
-        matches!(err, Err(CqamError::QpuUnsupportedOperation { .. })),
-        "Runner: expected QpuUnsupportedOperation for AMP mode, got: {:?}",
-        err.err()
-    );
-}
+// (Tests 1a/1b removed: AMP observe mode (ObserveMode::Amp) was removed from
+//  the ISA entirely. Density matrix element extraction is not physically
+//  realizable on hardware. There is nothing left to reject.)
 
 // =============================================================================
 // Test 2: PROB observe mode rejected by CircuitBackend

@@ -7,7 +7,6 @@
 //!   does not support classical feedback. Programs that branch on QMEAS results
 //!   will behave incorrectly. This is deferred to Phase 5 (dynamic circuits).
 //! - `ObserveMode::Prob` is approximated from shot counts.
-//! - `ObserveMode::Amp` is unsupported (requires statevector access).
 //! - Partial trace is unsupported.
 //! - State inspection methods (purity, diagonal_probs, etc.) are unsupported.
 
@@ -519,12 +518,6 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
         ctx1: usize,
     ) -> Result<ObserveResult, CqamError> {
         match mode {
-            ObserveMode::Amp => {
-                return Err(CqamError::QpuUnsupportedOperation {
-                    operation: "QOBSERVE/AMP".to_string(),
-                    detail: "amplitude access not available in circuit mode; use DIST, PROB, or SAMPLE".to_string(),
-                });
-            }
             ObserveMode::Dist | ObserveMode::Sample | ObserveMode::Prob => {}
         }
 
@@ -605,7 +598,6 @@ impl<Q: QpuBackend> QuantumBackend for CircuitBackend<Q> {
                 };
                 ObserveResult::Sample(chosen as i64)
             }
-            ObserveMode::Amp => unreachable!(), // rejected above
         };
 
         // Clean up handle
@@ -1021,13 +1013,7 @@ mod tests {
         }
     }
 
-    #[test]
-    fn test_observe_amp_returns_error() {
-        let mut cb = make_backend();
-        let (h, _) = cb.prep(DistId::Zero, 1, false).unwrap();
-        let err = cb.observe(h, ObserveMode::Amp, 0, 0);
-        assert!(err.is_err());
-    }
+    // (test_observe_amp_returns_error removed: AMP mode was removed from the ISA.)
 
     #[test]
     fn test_handle_lifecycle_double_observe() {

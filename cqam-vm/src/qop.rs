@@ -272,7 +272,6 @@ pub fn execute_qop<B: QuantumBackend + ?Sized>(
                 let hval = match obs_result {
                     ObserveResult::Dist(pairs) => HybridValue::Dist(pairs),
                     ObserveResult::Prob(p) => HybridValue::Float(p),
-                    ObserveResult::Amp(c) => HybridValue::Complex(c.0, c.1),
                     ObserveResult::Sample(k) => {
                         ctx.psw.zf = k == 0;
                         HybridValue::Int(k)

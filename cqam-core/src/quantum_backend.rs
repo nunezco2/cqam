@@ -56,8 +56,6 @@ pub enum ObserveResult {
     Dist(Vec<(u32, f64)>),
     /// Single probability value (for PROB mode).
     Prob(f64),
-    /// Complex amplitude (for AMP mode).
-    Amp(C64),
     /// Sampled measurement outcome (for SAMPLE mode).
     Sample(i64),
 }

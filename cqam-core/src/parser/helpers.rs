@@ -290,14 +290,16 @@ pub(crate) fn parse_rot_axis(token: &str) -> Option<crate::instruction::RotAxis>
     }
 }
 
-/// Parse an observe mode token: numeric (0-3) or named (DIST, PROB, AMP, SAMPLE).
+/// Parse an observe mode token: numeric (0, 1, 3) or named (DIST, PROB, SAMPLE).
+///
+/// Note: mode 2 (AMP) has been removed from the ISA. Numeric value 2 and the
+/// token "AMP"/"amp" are rejected.
 pub(crate) fn parse_observe_mode(token: &str) -> Option<crate::instruction::ObserveMode> {
     use crate::instruction::ObserveMode;
     let token = token.trim();
     match token {
         "DIST" | "dist" => Some(ObserveMode::Dist),
         "PROB" | "prob" => Some(ObserveMode::Prob),
-        "AMP" | "amp" => Some(ObserveMode::Amp),
         "SAMPLE" | "sample" => Some(ObserveMode::Sample),
         _ => parse_u8(token).and_then(|v| ObserveMode::try_from(v).ok()),
     }
@@ -309,7 +311,7 @@ pub(crate) fn parse_observe_mode(token: &str) -> Option<crate::instruction::Obse
 ///   QOBSERVE H0, Q0              -> mode=0, ctx0=0, ctx1=0 (backward compat)
 ///   QOBSERVE H0, Q0, PROB        -> mode=1, ctx0=0, ctx1=0
 ///   QOBSERVE H0, Q0, PROB, R3    -> mode=1, ctx0=3, ctx1=0
-///   QOBSERVE H0, Q0, AMP, R3, R4 -> mode=2, ctx0=3, ctx1=4
+///   QOBSERVE H0, Q0, SAMPLE      -> mode=3
 pub(crate) fn parse_qobserve(ops: &[&str], name: &str, line_num: usize) -> ParseResult {
     if ops.len() < 2 || ops.len() > 5 {
         return Err(CqamError::ParseError {

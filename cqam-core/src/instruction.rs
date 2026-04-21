@@ -253,8 +253,8 @@ pub enum Instruction {
     /// Destructively observe (measure) a quantum register.
     /// H[dst_h] = measure(Q[src_q])
     /// The quantum register Q[src_q] is consumed (set to None).
-    /// mode: 0=DIST (full distribution), 1=PROB (single probability), 2=AMP (amplitude)
-    /// ctx0, ctx1: integer register indices providing classical context for PROB/AMP modes
+    /// mode: 0=DIST (full distribution), 1=PROB (single probability), 3=SAMPLE (projective)
+    /// ctx0, ctx1: integer register indices providing classical context for PROB mode
     QObserve { dst_h: u8, src_q: u8, mode: ObserveMode, ctx0: u8, ctx1: u8 },
 
     /// Load quantum distribution from QMEM into quantum register.
@@ -818,8 +818,8 @@ pub enum ObserveMode {
     Dist = 0,
     /// Probability of basis state at index R[ctx0].
     Prob = 1,
-    /// Amplitude dm.get(row, col) where row=R[ctx0], col=R[ctx1].
-    Amp = 2,
+    // 2 is reserved (was AMP — removed: density matrix element access is not
+    // physically realizable on hardware).
     /// Projective measurement sample.
     Sample = 3,
 }
@@ -830,7 +830,7 @@ impl TryFrom<u8> for ObserveMode {
         match v {
             0 => Ok(ObserveMode::Dist),
             1 => Ok(ObserveMode::Prob),
-            2 => Ok(ObserveMode::Amp),
+            2 => Err(CqamError::InvalidId { domain: "ObserveMode", value: v }),  // reserved (was AMP, removed)
             3 => Ok(ObserveMode::Sample),
             _ => Err(CqamError::InvalidId { domain: "ObserveMode", value: v }),
         }
@@ -853,7 +853,6 @@ impl ObserveMode {
         match self {
             ObserveMode::Dist => "dist",
             ObserveMode::Prob => "prob",
-            ObserveMode::Amp => "amp",
             ObserveMode::Sample => "sample",
         }
     }

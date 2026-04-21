@@ -785,8 +785,10 @@ fn test_hreduce_negate_z() {
 
 #[test]
 fn test_hreduce_conj_z_type_mismatch() {
+    // CONJ_Z accepts Complex and Float (Float treated as Complex(v, 0.0)).
+    // It should fail on Dist and Int.
     let mut ctx = ExecutionContext::new(vec![]);
-    ctx.hregs.set(0, HybridValue::Float(1.0)).unwrap();
+    ctx.hregs.set(0, HybridValue::Int(42)).unwrap();
 
     let mut fm = ForkManager::new();
     let mut backend = SimulationBackend::new();
@@ -796,7 +798,7 @@ fn test_hreduce_conj_z_type_mismatch() {
         &mut fm,
         &mut backend,
     );
-    assert!(result.is_err(), "CONJ_Z on Float should fail");
+    assert!(result.is_err(), "CONJ_Z on Int should fail");
 }
 
 #[test]
@@ -965,47 +967,7 @@ fn test_hreduce_all_six_dist_fallback_skewed() {
     }
 }
 
-/// End-to-end pipeline: QPREP -> QOBSERVE(AMP) -> HREDUCE(NEGATE_Z) -> verify Z register.
-#[test]
-fn test_e2e_observe_amp_then_negate_z() {
-    use cqam_vm::qop::execute_qop;
-
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = SimulationBackend::new();
-
-    // Bell state: rho[3][0] = 0.5 + 0i
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Bell }, &mut backend).unwrap();
-
-    // Query rho[3][0]: row=3, col=0
-    ctx.iregs.set(0, 3).unwrap();
-    ctx.iregs.set(1, 0).unwrap();
-
-    execute_qop(&mut ctx, &Instruction::QObserve {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // H[0] = Complex(0.5, 0.0)
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.5).abs() < 1e-10);
-        assert!(im.abs() < 1e-10);
-    } else {
-        panic!("Expected HybridValue::Complex");
-    }
-
-    // HREDUCE NEGATE_Z: Z[3] = (-0.5, -0.0)
-    let mut fm = ForkManager::new();
-    let mut backend = SimulationBackend::new();
-    execute_hybrid(
-        &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 3, func: ReduceFn::NegateZ },
-        &mut fm,
-        &mut backend,
-    ).unwrap();
-
-    let (re, im) = ctx.zregs.get(3).unwrap();
-    assert!((re - (-0.5)).abs() < 1e-10, "Z[3].re should be -0.5, got {}", re);
-    assert!(im.abs() < 1e-10, "Z[3].im should be ~0.0, got {}", im);
-}
+// (test_e2e_observe_amp_then_negate_z removed: AMP mode was removed from the ISA.)
 
 /// End-to-end pipeline via text assembly:
 /// QPREP -> QOBSERVE(PROB) -> HREDUCE(ROUND) -> verify R register.
@@ -1037,38 +999,7 @@ HALT
     assert_eq!(ctx.iregs.get(1).unwrap(), 0, "round(0.25) should be 0");
 }
 
-/// End-to-end pipeline via text assembly:
-/// QPREP -> QOBSERVE(AMP) -> HREDUCE(CONJ_Z) -> verify Z register.
-#[test]
-fn test_e2e_text_observe_amp_conj_z_pipeline() {
-    use cqam_core::parser::parse_program;
-    use cqam_vm::fork::ForkManager;
-    use cqam_vm::executor::run_program;
-
-    let source = r#"
-# Prepare Bell state: rho[0][3] = 0.5 + 0i
-QPREP Q0, 2
-# Set R0 = 0 (row), R1 = 3 (col) for amplitude query
-ILDI R0, 0
-ILDI R1, 3
-# QOBSERVE in AMP mode: H0 = rho[0][3] = Complex(0.5, 0.0)
-QOBSERVE H0, Q0, AMP, R0, R1
-# Conjugate: Z2 = conj(0.5 + 0i) = (0.5, -0.0)
-HREDUCE CONJZ, H0, Z2
-HALT
-"#;
-
-    let program = parse_program(source).expect("Failed to parse").instructions;
-    let mut ctx = ExecutionContext::new(program);
-    let mut fm = ForkManager::new();
-    let mut backend = SimulationBackend::new();
-    run_program(&mut ctx, &mut fm, &mut backend).expect("Program failed");
-
-    assert!(ctx.psw.trap_halt);
-    let (re, im) = ctx.zregs.get(2).unwrap();
-    assert!((re - 0.5).abs() < 1e-10, "Z[2].re should be 0.5, got {}", re);
-    assert!(im.abs() < 1e-10, "Z[2].im should be ~0.0, got {}", im);
-}
+// (test_e2e_text_observe_amp_conj_z_pipeline removed: AMP mode was removed from the ISA.)
 
 // =============================================================================
 // HREDUCE/EXPECT — expectation value reduction

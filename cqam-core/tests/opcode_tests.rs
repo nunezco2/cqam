@@ -564,11 +564,7 @@ fn roundtrip_qobserve_mode_prob() {
     assert_eq!(roundtrip(&instr), instr);
 }
 
-#[test]
-fn roundtrip_qobserve_mode_amp() {
-    let instr = Instruction::QObserve { dst_h: 2, src_q: 4, mode: ObserveMode::Amp, ctx0: 5, ctx1: 7 };
-    assert_eq!(roundtrip(&instr), instr);
-}
+// (roundtrip_qobserve_mode_amp removed: AMP mode was removed from the ISA.)
 
 #[test]
 fn roundtrip_qobserve_backward_compat() {
@@ -579,8 +575,8 @@ fn roundtrip_qobserve_backward_compat() {
 
 #[test]
 fn roundtrip_qobserve_mode_max_ctx() {
-    // Max ctx0/ctx1 values (4 bits each = 15)
-    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Amp, ctx0: 15, ctx1: 15 };
+    // Max ctx0/ctx1 values (4 bits each = 15) — uses PROB (mode=1) now that AMP is removed.
+    let instr = Instruction::QObserve { dst_h: 7, src_q: 7, mode: ObserveMode::Prob, ctx0: 15, ctx1: 15 };
     assert_eq!(roundtrip(&instr), instr);
 }
 

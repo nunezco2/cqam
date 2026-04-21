@@ -518,42 +518,17 @@ fn test_qobserve_mode_prob() {
     // Should be destructive
     assert!(ctx.qregs[0].is_none(), "Q[0] should be consumed after QOBSERVE/PROB");
 
-    // H[0] should hold Complex(1.0, 0.0) -- probability of |0> in zero state
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 1.0).abs() < 1e-10, "p(|0>) in zero state should be 1.0, got {}", re);
-        assert!((im).abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
+    // H[0] should hold Float(1.0) -- probability of |0> in zero state
+    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
+        assert!((p - 1.0).abs() < 1e-10, "p(|0>) in zero state should be 1.0, got {}", p);
     } else {
-        panic!("Expected HybridValue::Complex after QOBSERVE/PROB");
+        panic!("Expected HybridValue::Float after QOBSERVE/PROB, got {:?}", ctx.hregs.get(0));
     }
 }
 
-#[test]
-fn test_qobserve_mode_amp() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
+// (test_qobserve_mode_amp removed: AMP mode was removed from the ISA.)
 
-    // Prepare zero state: rho[0][0] = 1.0
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Zero }, &mut backend).unwrap();
-
-    // Set ctx0 = 0 (row), ctx1 = 0 (col) -> rho[0][0]
-    ctx.iregs.set(0, 0).unwrap();
-    ctx.iregs.set(1, 0).unwrap();
-
-    execute_qop(&mut ctx, &Instruction::QObserve {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // Should be destructive
-    assert!(ctx.qregs[0].is_none(), "Q[0] should be consumed after QOBSERVE/AMP");
-
-    // H[0] should hold Complex(1.0, 0.0) -- rho[0][0] of zero state
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 1.0).abs() < 1e-10, "re(rho[0][0]) should be 1.0, got {}", re);
-        assert!(im.abs() < 1e-10, "im(rho[0][0]) should be 0.0, got {}", im);
-    } else {
-        panic!("Expected HybridValue::Complex after QOBSERVE/AMP");
-    }
-}
+// (test_qobserve_mode_amp_out_of_range removed: AMP mode was removed from the ISA.)
 
 #[test]
 fn test_qobserve_mode_prob_out_of_range() {
@@ -570,74 +545,13 @@ fn test_qobserve_mode_prob_out_of_range() {
     assert!(result.is_err(), "QOBSERVE/PROB with out-of-range index should error");
 }
 
-#[test]
-fn test_qobserve_mode_amp_out_of_range() {
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // 2 qubits -> dimension 4; row=5 is out of range
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Uniform }, &mut backend).unwrap();
-    ctx.iregs.set(0, 5).unwrap();
-    ctx.iregs.set(1, 0).unwrap();
-
-    let result = execute_qop(&mut ctx, &Instruction::QObserve {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend);
-    assert!(result.is_err(), "QOBSERVE/AMP with out-of-range row should error");
-}
+// (test_qobserve_mode_amp_out_of_range removed: AMP mode was removed from the ISA.)
 
 // =============================================================================
 // End-to-end pipeline tests (QPREP -> QOBSERVE -> HREDUCE)
 // =============================================================================
 
-/// QPREP -> QOBSERVE(AMP) -> HREDUCE(CONJ_Z) -> verify Z register.
-///
-/// Pipeline: prepare a Bell state, extract rho[0][3] as a complex amplitude,
-/// then conjugate it into the Z register file.
-#[test]
-fn test_e2e_observe_amp_then_conj_z() {
-    use cqam_vm::fork::ForkManager;
-    use cqam_vm::hybrid::execute_hybrid;
-
-    let mut ctx = ExecutionContext::new(vec![]);
-    let mut backend = test_backend();
-
-    // Bell state: rho[0][3] = 0.5 + 0i
-    execute_qop(&mut ctx, &Instruction::QPrep { dst: 0, dist: DistId::Bell }, &mut backend).unwrap();
-
-    // Set ctx0=0 (row), ctx1=R1 where R1=3 (col)
-    ctx.iregs.set(0, 0).unwrap();
-    ctx.iregs.set(1, 3).unwrap();
-
-    // QOBSERVE in AMP mode: H[0] = rho[0][3] = Complex(0.5, 0.0)
-    execute_qop(&mut ctx, &Instruction::QObserve {
-        dst_h: 0, src_q: 0, mode: ObserveMode::Amp, ctx0: 0, ctx1: 1,
-    }, &mut backend).unwrap();
-
-    // Q[0] consumed
-    assert!(ctx.qregs[0].is_none());
-
-    // H[0] should be Complex(0.5, 0.0)
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.5).abs() < 1e-10);
-        assert!(im.abs() < 1e-10);
-    } else {
-        panic!("Expected HybridValue::Complex after QOBSERVE/AMP");
-    }
-
-    // HREDUCE with CONJ_Z: Z[2] = conj(0.5 + 0i) = (0.5, -0.0)
-    let mut fm = ForkManager::new();
-    let mut backend = test_backend();
-    execute_hybrid(
-        &mut ctx,
-        &Instruction::HReduce { src: 0, dst: 2, func: ReduceFn::ConjZ },
-        &mut fm, &mut backend).unwrap();
-
-    let (re, im) = ctx.zregs.get(2).unwrap();
-    assert!((re - 0.5).abs() < 1e-10, "Z[2].re should be 0.5, got {}", re);
-    // conj of 0.0 is -0.0 which equals 0.0 in floating point comparison
-    assert!(im.abs() < 1e-10, "Z[2].im should be ~0.0, got {}", im);
-}
+// (test_e2e_observe_amp_then_conj_z removed: AMP mode was removed from the ISA.)
 
 /// QPREP -> QOBSERVE(PROB) -> HREDUCE(ROUND) -> verify R register.
 ///
@@ -657,7 +571,7 @@ fn test_e2e_observe_prob_then_round() {
     // ctx0 = R0 = 2 (query probability of basis state 2)
     ctx.iregs.set(0, 2).unwrap();
 
-    // QOBSERVE in PROB mode: H[0] = Complex(0.25, 0.0)
+    // QOBSERVE in PROB mode: H[0] = Float(0.25)
     execute_qop(&mut ctx, &Instruction::QObserve {
         dst_h: 0, src_q: 0, mode: ObserveMode::Prob, ctx0: 0, ctx1: 0,
     }, &mut backend).unwrap();
@@ -665,11 +579,10 @@ fn test_e2e_observe_prob_then_round() {
     // Q[0] consumed
     assert!(ctx.qregs[0].is_none());
 
-    if let HybridValue::Complex(re, im) = ctx.hregs.get(0).unwrap() {
-        assert!((re - 0.25).abs() < 1e-10, "prob should be 0.25, got {}", re);
-        assert!((im).abs() < 1e-10, "imaginary part should be 0.0, got {}", im);
+    if let HybridValue::Float(p) = ctx.hregs.get(0).unwrap() {
+        assert!((p - 0.25).abs() < 1e-10, "prob should be 0.25, got {}", p);
     } else {
-        panic!("Expected HybridValue::Complex after QOBSERVE/PROB");
+        panic!("Expected HybridValue::Float after QOBSERVE/PROB, got {:?}", ctx.hregs.get(0));
     }
 
     // HREDUCE with ROUND: R[3] = round(0.25) = 0
