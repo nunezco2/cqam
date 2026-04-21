@@ -17,6 +17,7 @@
 //! 2. GET `/backends/{backend}/characterizations/{uuid}` → `CharacterizationResponse`.
 
 use std::collections::{BTreeMap, HashMap};
+use std::fmt;
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -237,13 +238,24 @@ pub struct CharTiming {
 ///
 /// Uses API-key authentication: every request includes the header
 /// `Authorization: apiKey <key>`. No token exchange is required.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct IonQRestClient {
     api_key: String,
     backend: String,
     pub(crate) base_url: String,
     http: reqwest::blocking::Client,
     poll_timeout_secs: u64,
+}
+
+impl fmt::Debug for IonQRestClient {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("IonQRestClient")
+            .field("api_key", &"***")
+            .field("backend", &self.backend)
+            .field("base_url", &self.base_url)
+            .field("poll_timeout_secs", &self.poll_timeout_secs)
+            .finish()
+    }
 }
 
 impl IonQRestClient {

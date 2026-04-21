@@ -229,6 +229,12 @@ impl QpuBackend for IonQQpuBackend {
         convergence: &ConvergenceCriterion,
         shot_budget: u32,
     ) -> Result<RawResults, CqamError> {
+        if shot_budget == 0 {
+            return Err(CqamError::QpuSubmissionFailed {
+                provider: "IonQ".to_string(),
+                detail: "shot_budget must be > 0".to_string(),
+            });
+        }
         if circuit.num_physical_qubits > self.num_qubits {
             return Err(CqamError::QpuQubitAllocationFailed {
                 required: circuit.num_physical_qubits,
@@ -621,6 +627,19 @@ mod tests {
         assert!(
             (backend.calibration().unwrap().t1(0) - 50.0).abs() < 1e-9,
             "T1 should update to 50.0 after refresh"
+        );
+    }
+
+    #[test]
+    fn test_submit_zero_shot_budget_returns_error() {
+        let mut b = make_backend();
+        let c = Circuit::new(1);
+        let convergence = ConvergenceCriterion::default();
+        let err = b.submit(&c, &convergence, 0).unwrap_err();
+        let msg = format!("{err}");
+        assert!(
+            msg.contains("shot_budget"),
+            "error should mention shot_budget, got: {msg}"
         );
     }
 }
