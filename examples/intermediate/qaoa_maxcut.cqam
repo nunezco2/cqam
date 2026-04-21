@@ -115,20 +115,17 @@ cut_fmt:
 
 .code
 
-# --- Helpers ---
-    ILDI R15, 1          # constant 1
-
 # ===========================================================================
 # Print banner and inputs
 # ===========================================================================
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count (= nodes) from config
     ILDI R3, 4           # edges
     ECALL PRINT_STR
@@ -192,7 +189,7 @@ cut_fmt:
 # ===========================================================================
     ILDI R0, @cut_fmt
     ILDI R1, @cut_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0           # best state
     FLDI F1, 0           # placeholder (P(max cut) not available without QSAMPLE)
     ECALL PRINT_STR

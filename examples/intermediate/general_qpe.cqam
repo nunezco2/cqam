@@ -44,20 +44,17 @@ res:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     IQCFG R10            # R10 = N (total qubits from pragma)
     # m = N - 1 counting qubits (last qubit is the eigenstate target)
-    ISUB R10, R10, R15   # R10 = m = N - 1
+    IDEC R10  # R10 = m = N - 1
 
     ILDI R0, @inp
     ILDI R1, @inp.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    ILDI R2, 0
-    IADD R2, R10, R2
+    IDEC R1
+    IMOV R2, R10
     ECALL PRINT_STR
 
 # --- Parametric setup ---
@@ -70,10 +67,10 @@ LABEL: qpe_pow2
     IEQ R14, R9, R10
     JIF R14, qpe_pow2_done
     IADD R8, R8, R8
-    IADD R9, R9, R3
+    IINC R9
     JMP qpe_pow2
 LABEL: qpe_pow2_done
-    ISUB R6, R8, R3      # R6 = 2^m - 1
+    IDEC R6, R8  # R6 = 2^m - 1
 
 # --- Constants ---
     ILDI R1, 100         # R1 = CMEM base for C-U params
@@ -102,14 +99,13 @@ LABEL: qpe_pow2_done
 
 # --- QPE: Apply C-U^{2^k} ---
     ILDI R2, 0
-    ILDI R11, 0
-    IADD R4, R10, R11
+    IMOV R4, R10
 
 LABEL: qpe_cu_loop
     ISTR R2, 101
     QKERNEL CTLU, Q2, Q2, R2, R1
-    IADD R2, R2, R3
-    ISUB R4, R4, R3
+    IINC R2
+    IDEC R4
     JIF R4, qpe_cu_loop
 
 # --- Inverse QFT on full register ---
@@ -138,8 +134,7 @@ LABEL: qpe_cu_loop
     FLDM F1, 1
     ILDI R0, @res
     ILDI R1, @res.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

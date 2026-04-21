@@ -41,21 +41,19 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     IQCFG R2                 # R2 = N (qubit count) for %d
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # --- Parametric setup: derive m and mask from pragma ---
     IQCFG R10            # R10 = N total qubits
     ILDI R3, 1           # R3 = constant 1
-    ISUB R10, R10, R3    # R10 = m = N - 1 counting qubits (last qubit is eigenstate)
+    IDEC R10  # R10 = m = N - 1 counting qubits (last qubit is eigenstate)
 
     # Compute 2^m - 1 = counting mask
     ILDI R8, 1
@@ -64,10 +62,10 @@ LABEL: hhl_pow2
     IEQ R14, R9, R10
     JIF R14, hhl_pow2_done
     IADD R8, R8, R8
-    IADD R9, R9, R3
+    IINC R9
     JMP hhl_pow2
 LABEL: hhl_pow2_done
-    ISUB R6, R8, R3      # R6 = 2^m - 1 = Hadamard mask
+    IDEC R6, R8  # R6 = 2^m - 1 = Hadamard mask
 
 # --- Constants ---
     ILDI R0, 0           # R0 = qubit 0
@@ -100,14 +98,13 @@ LABEL: hhl_pow2_done
 
 # === Phase 1: QPE forward ===
     ILDI R2, 0            # R2 = k
-    ILDI R12, 0
-    IADD R4, R10, R12     # R4 = m
+    IMOV R4, R10  # R4 = m
 
 LABEL: hhl_qpe_fwd
     ISTR R2, 101          # power = k
     QKERNEL CTLU, Q2, Q2, R2, R1   # C-U^{2^k}
-    IADD R2, R2, R3
-    ISUB R4, R4, R3
+    IINC R2
+    IDEC R4
     JIF R4, hhl_qpe_fwd
 
 # --- Inverse QFT on full (m+1)-qubit register ---
@@ -144,8 +141,7 @@ LABEL: hhl_qpe_fwd
     ILDM R2, 0               # R2 = CMEM[0] = argmax
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

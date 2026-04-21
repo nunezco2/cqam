@@ -66,19 +66,17 @@ kern_fmt:
 
 .code
 
-    ILDI R15, 1          # constant 1
-
 # ===========================================================================
 # Print banner and inputs
 # ===========================================================================
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -97,7 +95,7 @@ kern_fmt:
 
     ILDI R0, @enc1_fmt
     ILDI R1, @enc1_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ===========================================================================
@@ -115,7 +113,7 @@ kern_fmt:
 
     ILDI R0, @enc2_fmt
     ILDI R1, @enc2_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # ===========================================================================
@@ -144,7 +142,7 @@ kern_fmt:
 
     ILDI R0, @kern_fmt
     ILDI R1, @kern_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

@@ -33,14 +33,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 15
     ILDI R3, 7
     IQCFG R4              # R4 = qubit count from config
@@ -122,7 +120,7 @@ LABEL: shor_pow2
     IEQ R15, R11, R14
     JIF R15, shor_pow2_done
     IADD R12, R12, R12
-    IADD R11, R11, R3
+    IINC R11
     JMP shor_pow2
 LABEL: shor_pow2_done
     # R12 = 2^n (Hilbert space dimension)
@@ -150,8 +148,8 @@ LABEL: compute_factors
     IMUL R15, R1, R1     # R15 = a^2 (first step of exponentiation)
 
 # Candidate factors
-    IADD R8, R15, R3     # R8 = a^2 + 1
-    ISUB R9, R15, R3     # R9 = a^2 - 1
+    IINC R8, R15         # R8 = a^2 + 1
+    IDEC R9, R15  # R9 = a^2 - 1
     IMOD R10, R8, R0     # R10 = (a^2 + 1) mod N
     IMOD R11, R9, R0     # R11 = (a^2 - 1) mod N
 
@@ -169,8 +167,7 @@ LABEL: store_results
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0            # CMEM[0] = period
     ILDM R3, 1            # CMEM[1] = factor1
     ILDM R4, 2            # CMEM[2] = factor2

@@ -36,14 +36,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 13
     IQCFG R3              # R3 = qubit count from config
     ECALL PRINT_STR
@@ -66,10 +64,10 @@ LABEL: simon_pow2
     IEQ R15, R14, R13
     JIF R15, simon_pow2_done
     IADD R6, R6, R6
-    IADD R14, R14, R3     # R3 = 1
+    IINC R14  # R3 = 1
     JMP simon_pow2
 LABEL: simon_pow2_done
-    ISUB R6, R6, R3       # R6 = 2^n - 1 = lower n bits mask
+    IDEC R6  # R6 = 2^n - 1 = lower n bits mask
 
 # === Query rounds ===
 LABEL: simon_round
@@ -106,7 +104,7 @@ LABEL: simon_round
 
 # Step 6: Store y value
     ISTRX R7, R5         # CMEM[R5] = y
-    IADD R5, R5, R3      # R5++ advance pointer
+    IINC R5  # R5++ advance pointer
 
 # --- Classical verification: check y . s = 0 (mod 2) ---
     IAND R9, R7, R0      # R9 = y AND s
@@ -119,26 +117,26 @@ LABEL: simon_popcount
     IAND R12, R9, R3      # R12 = least significant bit
     IADD R10, R10, R12    # accumulate
     ISHR R9, R9, 1        # shift right
-    ISUB R11, R11, R3     # n--
+    IDEC R11  # n--
     JIF R11, simon_popcount
 # R10 = popcount of (y AND s) — should be even for y . s = 0 mod 2
     ILDI R13, 2
     IMOD R12, R10, R13   # R12 = popcount mod 2 — should be 0
 
 # --- Advance round ---
-    IADD R4, R4, R3
-    ISUB R2, R2, R3
+    IINC R4
+    IDEC R2
     JIF R2, simon_round
 
 # === Classical post-processing ===
 # Load collected y values (Gaussian elimination over GF(2) in full version)
     ILDI R14, 100
     ILDX R7, R14         # Load y_0
-    IADD R14, R14, R3
+    IINC R14
     ILDX R8, R14         # Load y_1
-    IADD R14, R14, R3
+    IINC R14
     ILDX R9, R14         # Load y_2
-    IADD R14, R14, R3
+    IINC R14
     ILDX R10, R14        # Load y_3
 
 # Simple XOR-based recovery attempt: s = y_0 XOR y_1 (heuristic)
@@ -156,8 +154,7 @@ LABEL: simon_popcount
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0            # CMEM[0] = recovered period
     ILDM R3, 1            # CMEM[1] = secret
     ILDM R4, 2            # CMEM[2] = verified

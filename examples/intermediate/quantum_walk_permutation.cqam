@@ -54,14 +54,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ILDI R3, 16              # positions (2^4)
     ILDI R4, 10              # steps
@@ -191,21 +189,19 @@ LABEL: walk_step
 
 # Update step counter
     ILDM R5, 101           # R5 = step counter
-    ILDI R15, 1
-    IADD R5, R5, R15       # step++
+    IINC R5  # step++
     ISTR R5, 101
 
 # Print step info (uses R0=addr, R1=len, R2=step_num, F1=mean, F2=var)
     ILDI R0, @step_fmt
     ILDI R1, @step_fmt.len
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 101           # R2 = current step number
     ECALL PRINT_STR
 
 # Decrement remaining steps
     ILDM R5, 100
-    ILDI R15, 1
-    ISUB R5, R5, R15
+    IDEC R5
     ISTR R5, 100
 
 # Continue if steps remain
@@ -221,11 +217,10 @@ LABEL: walk_step
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
-    IADD R2, R7, R3        # R2 = most probable state
+    IDEC R1
+    IMOV R2, R7             # R2 = most probable state
     FLDI F0, 0
-    FADD F1, F3, F0        # F1 = final variance (copy F3 to F1)
+    FMOV F1, F3  # F1 = final variance (copy F3 to F1)
     ECALL PRINT_STR
 
     HALT

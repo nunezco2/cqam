@@ -53,14 +53,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -118,8 +116,8 @@ LABEL: walk_step
 # Runs blind — no mid-step observation (physical realism)
 
 # Advance step counter
-    IADD R2, R2, R1
-    ISUB R0, R0, R1
+    IINC R2
+    IDEC R0
     JIF R0, walk_step
 
 # === Final measurement ===
@@ -155,8 +153,7 @@ LABEL: store_walk_results
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 403             # most probable state
     ECALL PRINT_STR
 

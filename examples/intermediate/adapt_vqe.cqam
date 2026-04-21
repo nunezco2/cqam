@@ -38,14 +38,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -169,20 +167,20 @@ LABEL: adapt_evaluate
 
 LABEL: adapt_update_best
     FLDI F14, 0
-    FADD F3, F13, F14         # best = current (F3 = F13 + 0)
+    FMOV F3, F13  # best = current (F3 = F13)
 
 LABEL: adapt_check_convergence
 # Check if gradients are small enough (convergence)
     FADD F15, F10, F12        # F15 = |grad_0|^2 + |grad_1|^2 (gradient norm^2)
 
 # Store iteration results
-    IADD R2, R2, R1           # iteration++
+    IINC R2  # iteration++
     FSTR F13, 0               # CMEM[0] = current energy
     FSTR F1, 1                # CMEM[1] = current theta
     FSTR F15, 2               # CMEM[2] = gradient norm^2
 
 # Continue if more ADAPT iterations remain
-    ISUB R0, R0, R1
+    IDEC R0
     JIF R0, adapt_loop
 
 # === Final measurement at optimized parameters ===
@@ -212,8 +210,7 @@ LABEL: adapt_check_convergence
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 15               # iterations
     ILDM R3, 14               # ground state candidate
     ECALL PRINT_STR
