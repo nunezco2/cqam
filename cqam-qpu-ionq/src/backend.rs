@@ -318,7 +318,10 @@ impl QpuBackend for IonQQpuBackend {
             _ => return Ok(None),
         }
 
-        let job_shots = job.shots.unwrap_or(1024);
+        let job_shots = job.shots.unwrap_or_else(|| {
+            tracing::warn!(job_id, "completed job response missing shots field; defaulting to 1024");
+            1024
+        });
         let (counts, total_shots) = match job.results.and_then(|r| r.probabilities) {
             Some(probs_url) => self
                 .rest
