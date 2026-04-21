@@ -22,6 +22,7 @@ fn sim_config_3q() -> SimConfig {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     }
 }
 
@@ -148,6 +149,7 @@ amps:
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
     let result = run_program_with_data(
         parsed.instructions,
@@ -207,6 +209,7 @@ amps:
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
     let result = run_program_with_data(
         parsed.instructions,

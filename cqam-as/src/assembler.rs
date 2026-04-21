@@ -13,6 +13,7 @@ use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::opcode;
 use cqam_core::parser;
+use cqam_core::parser::ProgramMetadata;
 
 // =============================================================================
 // Public types
@@ -57,6 +58,21 @@ pub struct AssemblyResult {
     /// When assembled with stripping: always 0 (labels are removed, so the
     /// first word is always a non-label instruction).
     pub entry_point: u16,
+
+    /// Pre-loaded data cells from the `.data` section (empty if none).
+    pub data_cells: Vec<i64>,
+
+    /// Program metadata from `#!` pragma directives.
+    pub metadata: ProgramMetadata,
+
+    /// Pre-loaded data cells from the `.shared` section (empty if none).
+    pub shared_cells: Vec<i64>,
+
+    /// Base address of the shared section in CMEM.
+    pub shared_base: u16,
+
+    /// Per-thread private memory size in cells (0 if no `.private` section).
+    pub private_size: u16,
 }
 
 /// Options controlling assembler behavior.
@@ -183,19 +199,34 @@ pub fn assemble_with_options(
         labels,
         debug_symbols,
         entry_point,
+        data_cells: Vec::new(),
+        metadata: ProgramMetadata::default(),
+        shared_cells: Vec::new(),
+        shared_base: 0,
+        private_size: 0,
     })
 }
 
 /// Convenience: parse source text and assemble with options.
 ///
 /// Equivalent to calling `parser::parse_program(source)` followed by
-/// `assemble_with_options(&instructions, options)`.
+/// `assemble_with_options(&instructions, options)`, then carrying the
+/// parsed data sections and metadata through to the result.
 pub fn assemble_source_with_options(
     source: &str,
     options: &AssemblyOptions,
 ) -> Result<AssemblyResult, CqamError> {
     let parsed = parser::parse_program(source)?;
-    assemble_with_options(&parsed.instructions, options)
+    let mut result = assemble_with_options(&parsed.instructions, options)?;
+
+    // Carry through sections that the instruction assembler does not touch.
+    result.data_cells = parsed.data_section.cells;
+    result.metadata = parsed.metadata;
+    result.shared_cells = parsed.shared_section.cells;
+    result.shared_base = parsed.shared_section.base;
+    result.private_size = parsed.private_section.size;
+
+    Ok(result)
 }
 
 /// Assemble a sequence of parsed instructions into binary.

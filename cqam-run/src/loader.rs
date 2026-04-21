@@ -11,7 +11,7 @@ use cqam_as::binary::read_cqb_file;
 use cqam_core::error::CqamError;
 use cqam_core::instruction::Instruction;
 use cqam_core::opcode;
-use cqam_core::parser::{ParsedProgram, ProgramMetadata};
+use cqam_core::parser::{DataSection, ParsedProgram, PrivateSection, SharedSection};
 
 /// Load a CQAM program from a text (`.cqam`) or binary (`.cqb`) file.
 ///
@@ -74,10 +74,19 @@ fn load_binary(path: &str) -> Result<ParsedProgram, CqamError> {
 
     Ok(ParsedProgram {
         instructions,
-        metadata: ProgramMetadata::default(),
-        data_section: Default::default(),
-        shared_section: Default::default(),
-        private_section: Default::default(),
+        metadata: image.metadata,
+        data_section: DataSection {
+            cells: image.data_cells,
+            labels: HashMap::new(), // labels are resolved at assembly time
+        },
+        shared_section: SharedSection {
+            base: image.shared_base,
+            cells: image.shared_cells,
+            labels: HashMap::new(), // labels are resolved at assembly time
+        },
+        private_section: PrivateSection {
+            size: image.private_size,
+        },
     })
 }
 

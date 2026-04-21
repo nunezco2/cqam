@@ -19,7 +19,7 @@ fn test_roundtrip_minimal_program() {
     write_cqb(&mut buf, &result, false).unwrap();
 
     let image = read_cqb(&mut Cursor::new(&buf)).unwrap();
-    assert_eq!(image.version, 1);
+    assert_eq!(image.version, 2);
     assert_eq!(image.entry_point, result.entry_point);
     assert_eq!(image.code, result.code);
     assert!(image.debug_symbols.is_none());
@@ -185,7 +185,7 @@ HALT
 
     // Verify header bytes directly
     assert_eq!(&buf[0..4], b"CQAM");
-    assert_eq!(u16::from_le_bytes([buf[4], buf[5]]), 1);       // version
+    assert_eq!(u16::from_le_bytes([buf[4], buf[5]]), 2);       // version
     assert_eq!(u16::from_le_bytes([buf[6], buf[7]]), 1);       // entry_point
     assert_eq!(
         u32::from_le_bytes([buf[8], buf[9], buf[10], buf[11]]),
@@ -202,8 +202,8 @@ fn test_binary_size_no_debug() {
     let result = assemble_source("HALT\n").unwrap();
     let mut buf = Vec::new();
     write_cqb(&mut buf, &result, false).unwrap();
-    // Header (12) + 1 word (4) = 16 bytes
-    assert_eq!(buf.len(), 16);
+    // Header (12) + 1 word (4) + CQMD magic (4) + qubits (1) + threads (2) = 23 bytes
+    assert_eq!(buf.len(), 23);
 }
 
 #[test]
@@ -212,7 +212,7 @@ fn test_binary_size_with_debug() {
     let result = assemble_source(source).unwrap();
     let mut buf = Vec::new();
     write_cqb(&mut buf, &result, true).unwrap();
-    // Header (12) + 2 words (8) + debug_magic (4) + num_entries (2)
-    //   + entry: id (2) + len (2) + "x" (1) = 12 + 8 + 4 + 2 + 5 = 31 bytes
-    assert_eq!(buf.len(), 31);
+    // Header (12) + 2 words (8) + CQMD (4+1+2=7) + CQDB magic (4) + num_entries (2)
+    //   + entry: id (2) + len (2) + "x" (1) = 12 + 8 + 7 + 4 + 2 + 5 = 38 bytes
+    assert_eq!(buf.len(), 38);
 }

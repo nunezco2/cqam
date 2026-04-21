@@ -35,6 +35,7 @@ fn test_config() -> SimConfig {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     }
 }
 

@@ -85,6 +85,6 @@ fn test_binary_cqb_header_valid() {
     write_cqb(&mut buf, &result, false).unwrap();
     let image = read_cqb(&mut Cursor::new(&buf)).unwrap();
 
-    assert_eq!(image.version, 1);
+    assert_eq!(image.version, 2);
     assert!((image.entry_point as usize) < image.code.len() || image.code.is_empty());
 }

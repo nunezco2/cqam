@@ -152,6 +152,7 @@ fn test_max_cycles_enforcement() {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -188,6 +189,7 @@ fn test_max_cycles_allows_short_programs() {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -282,6 +284,7 @@ fn test_maskable_trap_ignored_when_interrupts_disabled() {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -336,6 +339,7 @@ fn test_fidelity_threshold_wiring() {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
 
     let result = run_program_with_config(program, &config).unwrap();
@@ -442,6 +446,7 @@ fn test_pragma_qubits_applied() {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
 
     let result = run_program_with_config_and_metadata(
@@ -477,6 +482,7 @@ fn test_cli_overrides_pragma() {
         backend: None,
         ibm_token: None,
         ibm_optimization_level: None,
+        qpu_timeout: None,
     };
 
     let result = run_program_with_config_and_metadata(
