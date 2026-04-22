@@ -212,6 +212,7 @@ impl Default for ForkManager {
 
 // Compile-time assertions: ExecutionContext and CqamError must be Send.
 const _: () = {
+    #[allow(dead_code)]
     fn assert_send<T: Send>() {}
     fn _assert_bounds() {
         assert_send::<ExecutionContext>();
