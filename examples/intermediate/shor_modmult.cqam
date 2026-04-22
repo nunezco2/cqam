@@ -280,8 +280,8 @@ res_fmt:
     QOBSERVE H0, Q0
     HREDUCE ARGMX, H0, R10
     ILDI R11, 1
-    IEQ R10, R10, R11
-    JIF R10, t1_pass
+    ICMP R10, R11
+    JEQ t1_pass
     ILDI R0, @t1_fail
     ILDI R1, @t1_fail.len
     IDEC R1
@@ -359,8 +359,8 @@ LABEL: t1_end
     QOBSERVE H0, Q1
     HREDUCE ARGMX, H0, R10
     ILDI R11, 1
-    IEQ R10, R10, R11
-    JIF R10, t2_pass
+    ICMP R10, R11
+    JEQ t2_pass
     ILDI R0, @t2_fail
     ILDI R1, @t2_fail.len
     IDEC R1

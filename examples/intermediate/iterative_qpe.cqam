@@ -100,8 +100,8 @@ LABEL: iter_loop
 # --- Decrement k ---
     IDEC R2
     ILDI R9, 0
-    ILT R9, R9, R2       # R9 = (0 < R2)? → continue if k > 0
-    JIF R9, iter_loop
+    ICMP R9, R2           # compare 0 with R2 → continue if k > 0
+    JLT iter_loop
 
 # --- One more iteration for k=0 ---
     ISTR R2, 101

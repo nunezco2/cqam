@@ -52,8 +52,8 @@ LABEL: ae_outer_loop
     ILDI R5, 1
     ILDI R6, 0           # R6 = shift counter
 LABEL: shift_loop
-    IEQ R7, R6, R4       # R7 = (R6 == R4)
-    JIF R7, shift_done
+    ICMP R6, R4           # compare R6 with R4
+    JEQ shift_done
     IADD R5, R5, R5      # R5 *= 2
     IINC R6  # R6++
     JMP shift_loop

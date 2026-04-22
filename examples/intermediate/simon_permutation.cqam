@@ -236,28 +236,28 @@ LABEL: simon_round
 
 # If XOR of all y's is 0, try using a single nonzero y
     ILDI R15, 0
-    IEQ R10, R14, R15
-    JIF R10, try_single_y
+    ICMP R14, R15
+    JEQ try_single_y
     JMP have_candidate
 
 LABEL: try_single_y
 # Use the first nonzero y value
     ILDI R5, 110
     ILDX R14, R5          # try y_0
-    IEQ R10, R14, R15
-    JIF R10, try_y1
+    ICMP R14, R15
+    JEQ try_y1
     JMP have_candidate
 LABEL: try_y1
     ILDI R5, 111
     ILDX R14, R5          # try y_1
-    IEQ R10, R14, R15
-    JIF R10, try_y2
+    ICMP R14, R15
+    JEQ try_y2
     JMP have_candidate
 LABEL: try_y2
     ILDI R5, 112
     ILDX R14, R5          # try y_2
-    IEQ R10, R14, R15
-    JIF R10, try_y3
+    ICMP R14, R15
+    JEQ try_y3
     JMP have_candidate
 LABEL: try_y3
     ILDI R5, 113

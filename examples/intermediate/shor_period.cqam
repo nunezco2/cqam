@@ -106,8 +106,8 @@ res_fmt:
 # In full Shor's: s/2^n ~ j/r, so r ~ 2^n / s (when s != 0)
 
 # Avoid division by zero
-    IEQ R11, R9, R2      # R11 = (s == 0)
-    JIF R11, handle_zero
+    ICMP R9, R2           # compare s with 0
+    JEQ handle_zero
 
 # r_est = approximate period: r ~ 2^n / s
     CVTIF F5, R9         # F5 = measured s as float
@@ -117,8 +117,8 @@ res_fmt:
     ILDI R12, 1           # R12 = accumulator for 2^n
     ILDI R11, 0           # R11 = loop counter
 LABEL: shor_pow2
-    IEQ R15, R11, R14
-    JIF R15, shor_pow2_done
+    ICMP R11, R14
+    JEQ shor_pow2_done
     IADD R12, R12, R12
     IINC R11
     JMP shor_pow2

@@ -61,8 +61,8 @@ res_fmt:
     ILDI R6, 1            # R6 = accumulator for 2^n
     ILDI R14, 0           # R14 = loop counter
 LABEL: simon_pow2
-    IEQ R15, R14, R13
-    JIF R15, simon_pow2_done
+    ICMP R14, R13
+    JEQ simon_pow2_done
     IADD R6, R6, R6
     IINC R14  # R3 = 1
     JMP simon_pow2

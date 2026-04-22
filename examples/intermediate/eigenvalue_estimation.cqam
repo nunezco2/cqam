@@ -58,8 +58,8 @@ res:
     ILDI R8, 1           # R8 = accumulator for 2^m
     ILDI R9, 0           # R9 = loop counter
 LABEL: eig_pow2
-    IEQ R14, R9, R10
-    JIF R14, eig_pow2_done
+    ICMP R9, R10
+    JEQ eig_pow2_done
     IADD R8, R8, R8
     IINC R9
     JMP eig_pow2

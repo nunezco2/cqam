@@ -59,8 +59,8 @@ res_fmt:
     ILDI R8, 1
     ILDI R9, 0
 LABEL: hhl_pow2
-    IEQ R14, R9, R10
-    JIF R14, hhl_pow2_done
+    ICMP R9, R10
+    JEQ hhl_pow2_done
     IADD R8, R8, R8
     IINC R9
     JMP hhl_pow2

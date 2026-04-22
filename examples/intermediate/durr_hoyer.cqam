@@ -14,7 +14,7 @@
 #
 # In CQAM, the "function" is approximated by the Grover oracle: the target
 # state encodes the current threshold, and QMEAS provides the adaptive
-# feedback. Grover iterations with JIF-based conditional updates implement
+# feedback. Grover iterations with conditional jump updates implement
 # the threshold tightening.
 #
 # The key insight is that each successful Grover search reduces the search
@@ -76,8 +76,8 @@ LABEL: dh_loop
 LABEL: dh_grover_inner
     QKERNEL GROV, Q0, Q0, R0, R1   # Grover iteration targeting R0
     IINC R8  # R8++
-    ILT R9, R8, R5              # R9 = (R8 < iterations_per_round)
-    JIF R9, dh_grover_inner
+    ICMP R8, R5                  # compare R8 with iterations_per_round
+    JLT dh_grover_inner
 
 # --- Step 3: Measure qubit 0 to get search outcome ---
 # QMEAS provides non-destructive single-qubit measurement
@@ -88,12 +88,12 @@ LABEL: dh_grover_inner
 # Use the QMEAS result and current threshold as candidate
     IMOV R11, R10  # R11 = measurement outcome as candidate
 
-# --- Step 5: Threshold update via JIF ---
+# --- Step 5: Threshold update via conditional jump ---
 # If measured state is different from current threshold, it may be better
 # In the abstract Durr-Hoyer, we check f(x) < y
 # Here we use: if candidate < current_best, update
-    ILT R12, R11, R6     # R12 = (candidate < current_best)
-    JIF R12, dh_update_threshold
+    ICMP R11, R6          # compare candidate with current_best
+    JLT dh_update_threshold
     JMP dh_no_update
 
 LABEL: dh_update_threshold

@@ -18,7 +18,7 @@
 #   - QCNOT is required for encoding (spreading logical qubit to physical)
 #   - QMEAS is required for syndrome extraction (per-qubit measurement)
 #   - QFLIP is required for targeted error injection and correction
-#   - JIF implements classical syndrome decoding logic
+#   - JIF/conditional jumps implement classical syndrome decoding logic
 #
 #! qubits 3
 
@@ -96,7 +96,7 @@ res_fmt:
     IXOR R13, R10, R11  # R13 = s2 = q1 XOR q2
 
 # ===============================================
-# Step 4: Syndrome decoding and correction via JIF
+# Step 4: Syndrome decoding and correction via conditional jumps
 # ===============================================
 # Syndrome lookup table:
 #   s1=0, s2=0 -> no error

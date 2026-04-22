@@ -63,8 +63,8 @@ LABEL: count_loop
 LABEL: grover_count_inner
     QKERNEL GROV, Q0, Q0, R0, R1   # Grover iteration
     IINC R7
-    ILT R8, R7, R5      # R8 = (R7 < R5)
-    JIF R8, grover_count_inner
+    ICMP R7, R5          # compare R7 with R5
+    JLT grover_count_inner
 
 # --- Apply QFT to extract phase ---
     QKERNEL QFFT, Q1, Q0, R1, R1   # Q1 = QFT(Grover^k state)

@@ -66,8 +66,8 @@ LABEL: count_outer
 LABEL: grover_inner_count
     QKERNEL GROV, Q0, Q0, R0, R1   # One Grover iteration (kernel 4)
     IINC R7  # R7++
-    ILT R8, R7, R5              # R8 = (R7 < 2^k)
-    JIF R8, grover_inner_count
+    ICMP R7, R5                  # compare R7 with 2^k
+    JLT grover_inner_count
 
 # --- Apply inverse QFT to extract phase ---
     QKERNEL QIFT, Q1, Q0, R1, R1   # Q1 = IQFT(Grover^{2^k} |+>) (kernel 7)
@@ -123,8 +123,8 @@ LABEL: grover_inner_count
     ILDI R11, 1                 # R11 = accumulator for 2^N
     ILDI R13, 0                 # R13 = loop counter
 LABEL: qac_pow2
-    IEQ R14, R13, R12
-    JIF R14, qac_pow2_done
+    ICMP R13, R12
+    JEQ qac_pow2_done
     IADD R11, R11, R11
     IINC R13
     JMP qac_pow2
