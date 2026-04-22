@@ -1765,8 +1765,8 @@ mod tests {
         assert_eq!(clone.rest.poll_timeout_secs, 999, "clone poll timeout must be 999");
         assert_eq!(
             original.rest.poll_timeout_secs,
-            1800,
-            "original poll timeout must remain 1800 (default)"
+            14400,
+            "original poll timeout must remain 14400 (default)"
         );
     }
 
