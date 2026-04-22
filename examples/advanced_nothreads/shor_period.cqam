@@ -54,8 +54,8 @@ res_fmt:
     HREDUCE ARGMX, H0, R5           # R5 = s (peak frequency)
 
 # --- Classical: r ≈ 2^n / s ---
-    IEQ R6, R5, R14
-    JIF R6, zero_case
+    ICMP R5, R14
+    JEQ zero_case
 
     IQCFG R0                 # R0 = n (exponent for pow2)
     CALL pow2                # R1 = 2^n
@@ -99,8 +99,8 @@ LABEL: pow2
     IADD R2, R0, R15
     ISUB R2, R2, R15
 LABEL: pow2_loop
-    IEQ R3, R2, R14
-    JIF R3, pow2_done
+    ICMP R2, R14
+    JEQ pow2_done
     IADD R1, R1, R1
     ISUB R2, R2, R15
     JMP pow2_loop

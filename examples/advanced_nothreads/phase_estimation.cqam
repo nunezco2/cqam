@@ -87,8 +87,8 @@ LABEL: pow2
     IADD R2, R0, R15
     ISUB R2, R2, R15
 LABEL: pow2_loop
-    IEQ R3, R2, R14
-    JIF R3, pow2_done
+    ICMP R2, R14
+    JEQ pow2_done
     IADD R1, R1, R1
     ISUB R2, R2, R15
     JMP pow2_loop

@@ -187,7 +187,7 @@ pass_fmt:
     ECALL PRINT_STR
 
     QOBSERVE H0, Q0
-    JMPF CF, cf_obs_set
+    JCOL cf_obs_set
     ILDI R4, 0
     JMP cf_obs_done
 LABEL: cf_obs_set
@@ -201,7 +201,7 @@ LABEL: cf_obs_done
     ECALL PRINT_STR
 
     HREDUCE MODEV, H0, R11   # CF cleared by HREDUCE
-    JMPF CF, cf_red_set
+    JCOL cf_red_set
     ILDI R4, 0
     JMP cf_red_done
 LABEL: cf_red_set
@@ -236,13 +236,13 @@ LABEL: cf_red_done
 # Subroutine: read_flags → R4=SF, R5=EF
 # ============================================
 LABEL: read_flags
-    JMPF SF, rf_sf_set
+    JSUP rf_sf_set
     ILDI R4, 0
     JMP rf_sf_done
 LABEL: rf_sf_set
     ILDI R4, 1
 LABEL: rf_sf_done
-    JMPF EF, rf_ef_set
+    JENT rf_ef_set
     ILDI R5, 0
     JMP rf_ef_done
 LABEL: rf_ef_set

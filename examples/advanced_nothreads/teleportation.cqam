@@ -37,7 +37,7 @@ res_fmt:
 # --- Create Bell pair on qubits 1,2 ---
     QHADM Q0, Q0, R8         # H on qubit 1 → SF=1 (superposition intent)
     # Snapshot SF before QCNOT overwrites it
-    JMPF SF, sf_bell
+    JSUP sf_bell
     ILDI R4, 0
     JMP sf_bell_done
 LABEL: sf_bell
@@ -45,7 +45,7 @@ LABEL: sf_bell
 LABEL: sf_bell_done
 
     QCNOT Q0, Q0, R15, R8    # CNOT(ctrl=q1, tgt=q2) → EF=1 (entanglement intent)
-    JMPF EF, ef_bell
+    JENT ef_bell
     ILDI R5, 0
     JMP ef_bell_done
 LABEL: ef_bell
@@ -68,7 +68,7 @@ LABEL: ef_bell_done
     QMEAS R7, Q0, R15        # measure qubit 1 → R7
 
     # Verify collapse flag
-    JMPF CF, cf_meas
+    JCOL cf_meas
     ILDI R10, 0
     JMP cf_meas_done
 LABEL: cf_meas
