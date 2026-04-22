@@ -244,7 +244,7 @@ pub struct IonQRestClient {
     backend: String,
     pub(crate) base_url: String,
     http: reqwest::blocking::Client,
-    poll_timeout_secs: u64,
+    pub(crate) poll_timeout_secs: u64,
 }
 
 impl fmt::Debug for IonQRestClient {
@@ -352,6 +352,12 @@ impl IonQRestClient {
     /// Returns `Err(IonQError::Timeout)` if the job does not complete within
     /// the configured timeout.
     ///
+    /// **Timeout overshoot**: the deadline is checked *after* each sleep, so the
+    /// actual elapsed wall-clock time when `Timeout` is returned can exceed the
+    /// configured deadline by up to `MAX_INTERVAL_SECS` (30 seconds). This is
+    /// intentional: checking before sleep would require an extra network round-trip
+    /// on every iteration.
+    ///
     /// Valid v0.4 terminal statuses: `completed`, `canceled`, `failed`.
     pub fn poll_until_done(
         &self,
@@ -438,7 +444,7 @@ impl IonQRestClient {
         url: &str,
         total_shots: u32,
     ) -> Result<(BTreeMap<u64, u32>, u32), IonQError> {
-        let full_url = resolve_url(&self.base_url, url);
+        let full_url = resolve_url(&self.base_url, url)?;
 
         let resp = self
             .authed_get(&full_url)
@@ -531,9 +537,21 @@ impl IonQRestClient {
 ///   → `"https://api.ionq.co/v0.4/jobs/abc/results/probabilities"`
 /// - `base_url = "http://127.0.0.1:9090"`, `url = "/v0.4/jobs/abc/results/probabilities"`
 ///   → `"http://127.0.0.1:9090/v0.4/jobs/abc/results/probabilities"`
-fn resolve_url(base_url: &str, url: &str) -> String {
+fn resolve_url(base_url: &str, url: &str) -> Result<String, IonQError> {
+    if url.starts_with("http://") || url.starts_with("https://") {
+        return Err(IonQError::RestError {
+            detail: format!(
+                "probabilities URL must be a relative path starting with '/' \
+                 (got absolute URL); refusing to follow to prevent credential leakage"
+            ),
+        });
+    }
     if !url.starts_with('/') {
-        return url.to_string();
+        return Err(IonQError::RestError {
+            detail: format!(
+                "probabilities URL must start with '/' (got {url:?})"
+            ),
+        });
     }
     // Extract origin = scheme + "://" + host[:port] by finding the first path
     // slash that follows the authority (i.e., the part after "://").
@@ -546,7 +564,7 @@ fn resolve_url(base_url: &str, url: &str) -> String {
     } else {
         base_url.trim_end_matches('/')
     };
-    format!("{}{}", origin, url)
+    Ok(format!("{}{}", origin, url))
 }
 
 // ---------------------------------------------------------------------------
@@ -630,6 +648,92 @@ mod tests {
     }
 
     #[test]
+    fn test_histogram_to_counts_single_bitstring() {
+        // Single outcome with probability 1.0 → all shots go to one key.
+        let mut probs = HashMap::new();
+        probs.insert("7".to_string(), 1.0);
+        let (counts, total) = histogram_to_counts(&probs, 500);
+        assert_eq!(total, 500);
+        assert_eq!(counts.len(), 1);
+        assert_eq!(counts[&7], 500);
+    }
+
+    #[test]
+    fn test_histogram_to_counts_max_u32_shots_no_overflow() {
+        // u32::MAX shots × 0.5 probability must not overflow.
+        // f64 can represent all u32 values exactly (53-bit mantissa > 32 bits).
+        let mut probs = HashMap::new();
+        probs.insert("0".to_string(), 0.5);
+        probs.insert("1".to_string(), 0.5);
+        let (counts, total) = histogram_to_counts(&probs, u32::MAX);
+        assert_eq!(total, u32::MAX);
+        // 0.5 × 4294967295 = 2147483647.5 → rounds to 2147483648, well within u32
+        assert!(counts[&0] > 0);
+        assert!(counts[&1] > 0);
+        // Both halves together should be close to MAX (rounding may leave 1 off)
+        let count_sum = counts[&0] as u64 + counts[&1] as u64;
+        assert!((count_sum as i64 - u32::MAX as i64).abs() <= 1);
+    }
+
+    #[test]
+    fn test_histogram_to_counts_tiny_probability_rounds_to_zero() {
+        // A probability so small it rounds to 0 counts must be omitted.
+        let mut probs = HashMap::new();
+        probs.insert("0".to_string(), 1e-20); // rounds to 0 for any reasonable shot count
+        probs.insert("1".to_string(), 1.0);
+        let (counts, total) = histogram_to_counts(&probs, 1000);
+        assert_eq!(total, 1000);
+        assert!(!counts.contains_key(&0), "1e-20 probability must produce zero count");
+        assert_eq!(counts[&1], 1000);
+    }
+
+    #[test]
+    fn test_histogram_to_counts_probability_over_1_produces_overcount() {
+        // Malformed API response with probability > 1.0: code faithfully multiplies,
+        // so counts can exceed total_shots. Documents the no-clamp behavior.
+        let mut probs = HashMap::new();
+        probs.insert("5".to_string(), 1.5); // 150% — physically impossible but allowed
+        let (counts, total) = histogram_to_counts(&probs, 100);
+        assert_eq!(total, 100, "total_shots is unchanged");
+        assert_eq!(counts[&5], 150, "over-probability produces over-count");
+    }
+
+    #[test]
+    fn test_histogram_to_counts_negative_probability_produces_zero() {
+        // Negative probability rounds to a negative integer; Rust's saturating f64→u32
+        // cast (added in 1.45) returns 0. The entry is skipped by the count > 0 guard.
+        let mut probs = HashMap::new();
+        probs.insert("0".to_string(), -0.5);
+        probs.insert("1".to_string(), 1.0);
+        let (counts, _) = histogram_to_counts(&probs, 100);
+        assert!(!counts.contains_key(&0), "negative probability must produce zero count");
+        assert_eq!(counts[&1], 100);
+    }
+
+    #[test]
+    fn test_histogram_to_counts_leading_zero_bitstring_keys() {
+        // "00" and "03" are decimal-encoded, parse identically to "0" and "3".
+        let mut probs = HashMap::new();
+        probs.insert("00".to_string(), 0.5);
+        probs.insert("03".to_string(), 0.5);
+        let (counts, _) = histogram_to_counts(&probs, 100);
+        assert_eq!(counts[&0], 50, "key '00' should parse to integer 0");
+        assert_eq!(counts[&3], 50, "key '03' should parse to integer 3");
+    }
+
+    #[test]
+    fn test_histogram_to_counts_incomplete_distribution_undercounts() {
+        // Probabilities summing to < 1.0 → counts sum < total_shots. Not normalized.
+        let mut probs = HashMap::new();
+        probs.insert("0".to_string(), 0.4);
+        probs.insert("1".to_string(), 0.4); // sum = 0.8, 20% missing
+        let (counts, total) = histogram_to_counts(&probs, 100);
+        assert_eq!(total, 100, "total_shots unchanged");
+        let count_sum: u32 = counts.values().sum();
+        assert!(count_sum < total, "partial distribution: sum={count_sum} must be < total={total}");
+    }
+
+    #[test]
     fn test_histogram_skips_zero_counts() {
         let mut probs = HashMap::new();
         probs.insert("0".to_string(), 0.0);
@@ -659,24 +763,61 @@ mod tests {
             "/v0.4/jobs/abc-123/results/probabilities",
         );
         assert_eq!(
-            result,
+            result.unwrap(),
             "https://api.ionq.co/v0.4/jobs/abc-123/results/probabilities"
         );
     }
 
     #[test]
-    fn test_resolve_url_absolute_unchanged() {
+    fn test_resolve_url_absolute_https_rejected() {
+        // Absolute HTTPS URLs must be rejected to prevent credential leakage.
         let result = resolve_url(
             "https://api.ionq.co/v0.4",
             "https://other.host.com/path",
         );
-        assert_eq!(result, "https://other.host.com/path");
+        assert!(result.is_err(), "absolute https URL must be rejected");
+        let msg = result.unwrap_err().to_string();
+        assert!(msg.contains("relative"), "error must explain the requirement: {msg}");
+    }
+
+    #[test]
+    fn test_resolve_url_absolute_http_rejected() {
+        // Absolute HTTP URLs must also be rejected.
+        let result = resolve_url(
+            "https://api.ionq.co/v0.4",
+            "http://attacker.evil.com/steal",
+        );
+        assert!(result.is_err(), "absolute http URL must be rejected");
     }
 
     #[test]
     fn test_resolve_url_trailing_slash_in_base() {
         let result = resolve_url("https://api.ionq.co/v0.4/", "/v0.4/jobs/x");
-        assert_eq!(result, "https://api.ionq.co/v0.4/jobs/x");
+        assert_eq!(result.unwrap(), "https://api.ionq.co/v0.4/jobs/x");
+    }
+
+    #[test]
+    fn test_resolve_url_query_string_preserved() {
+        // Query string in a relative URL must be preserved verbatim.
+        let result = resolve_url(
+            "https://api.ionq.co/v0.4",
+            "/v0.4/jobs/abc/results?format=json",
+        );
+        assert_eq!(result.unwrap(), "https://api.ionq.co/v0.4/jobs/abc/results?format=json");
+    }
+
+    #[test]
+    fn test_resolve_url_base_without_scheme() {
+        // Base URL with no "://" — falls through to the else branch.
+        let result = resolve_url("not-a-url", "/v0.4/jobs/abc");
+        assert_eq!(result.unwrap(), "not-a-url/v0.4/jobs/abc");
+    }
+
+    #[test]
+    fn test_resolve_url_empty_path_rejected() {
+        // Empty URL string doesn't start with '/', so it must be rejected.
+        let result = resolve_url("https://api.ionq.co/v0.4", "");
+        assert!(result.is_err(), "empty URL must be rejected");
     }
 
     #[test]
@@ -686,7 +827,7 @@ mod tests {
             "http://127.0.0.1:9090",
             "/v0.4/jobs/abc/results/probabilities",
         );
-        assert_eq!(result, "http://127.0.0.1:9090/v0.4/jobs/abc/results/probabilities");
+        assert_eq!(result.unwrap(), "http://127.0.0.1:9090/v0.4/jobs/abc/results/probabilities");
     }
 
     // ---- JobSubmitPayload serialization ------------------------------------
@@ -819,6 +960,66 @@ mod tests {
     }
 
     // ---- BackendInfo deserialization (real shapes) -------------------------
+
+    #[test]
+    fn test_job_failure_null_code_with_message() {
+        // "code": null, "message": "..."  — code is explicitly null but message is present.
+        let raw = r#"{"code": null, "message": "something went wrong"}"#;
+        let f: JobFailure = serde_json::from_str(raw).unwrap();
+        assert!(f.code.is_none(), "null code should deserialize as None");
+        assert_eq!(f.message.as_deref(), Some("something went wrong"));
+    }
+
+    #[test]
+    fn test_job_failure_both_null() {
+        // Both fields explicitly null — must not panic; both should be None.
+        let raw = r#"{"code": null, "message": null}"#;
+        let f: JobFailure = serde_json::from_str(raw).unwrap();
+        assert!(f.code.is_none());
+        assert!(f.message.is_none());
+    }
+
+    #[test]
+    fn test_backend_info_degraded_true_parses() {
+        // Real API returns "degraded": true for impaired backends.
+        let raw = r#"{
+            "backend": "qpu.forte-1",
+            "status": "available",
+            "degraded": true,
+            "qubits": 36
+        }"#;
+        let info: BackendInfo = serde_json::from_str(raw).unwrap();
+        assert_eq!(info.degraded, Some(true));
+    }
+
+    #[test]
+    fn test_backend_info_status_null() {
+        // "status": null — should deserialize as None, not fail.
+        let raw = r#"{"backend": "qpu.forte-1", "status": null, "qubits": 36}"#;
+        let info: BackendInfo = serde_json::from_str(raw).unwrap();
+        assert!(info.status.is_none());
+    }
+
+    #[test]
+    fn test_char_fidelity_missing_1q_and_2q_fields() {
+        // Only "spam" present; single_qubit and two_qubit must default to None.
+        let raw = r#"{"spam": {"median": 0.999}}"#;
+        let fid: CharFidelity = serde_json::from_str(raw).unwrap();
+        assert!(fid.spam.is_some());
+        assert!(fid.single_qubit.is_none(), "missing 1q field → None");
+        assert!(fid.two_qubit.is_none(), "missing 2q field → None");
+    }
+
+    #[test]
+    fn test_char_timing_missing_t1_and_t2() {
+        // Only gate-time fields; T1/T2 must default to None.
+        let raw = r#"{"1q": 1.5e-4, "2q": 2.5e-4, "readout": 0, "reset": 0}"#;
+        let timing: CharTiming = serde_json::from_str(raw).unwrap();
+        assert!(timing.t1.is_none(), "missing t1 → None");
+        assert!(timing.t2.is_none(), "missing t2 → None");
+        assert!((timing.single_qubit.unwrap() - 1.5e-4).abs() < 1e-15);
+        assert!((timing.two_qubit.unwrap() - 2.5e-4).abs() < 1e-15);
+    }
 
     #[test]
     fn test_backend_info_real_simulator_shape() {
@@ -970,6 +1171,14 @@ mod tests {
     fn test_auth_header_format() {
         let client = IonQRestClient::new("my_api_key", "simulator");
         assert_eq!(client.auth_header(), "apiKey my_api_key");
+    }
+
+    #[test]
+    fn test_debug_redacts_api_key() {
+        let client = IonQRestClient::new("real_secret_key", "simulator");
+        let debug = format!("{:?}", client);
+        assert!(debug.contains("***"), "debug output must redact the API key");
+        assert!(!debug.contains("real_secret_key"), "debug output must not expose the raw API key");
     }
 
     #[test]
@@ -1344,6 +1553,239 @@ mod tests {
             let client = IonQRestClient::with_base_url("key", "simulator", server.url());
             let result = client.submit_job(serde_json::json!({}), 100);
             assert!(result.is_err());
+        }
+
+        #[test]
+        fn test_mock_poll_until_done_timeout() {
+            // Server always returns "submitted" — polling should time out.
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("GET", "/jobs/slow-job")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"id": "slow-job", "status": "submitted", "failure": null}"#)
+                .expect_at_least(1)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url())
+                .with_poll_timeout(1); // 1-second max timeout
+
+            let err = client
+                .poll_until_done(
+                    "slow-job",
+                    Some(Duration::from_millis(10)), // very short poll interval
+                    Some(Duration::from_millis(50)), // time out after 50ms
+                )
+                .unwrap_err();
+
+            match err {
+                IonQError::Timeout { job_id, .. } => {
+                    assert_eq!(job_id, "slow-job");
+                }
+                other => panic!("expected Timeout, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_mock_get_probabilities_http_error() {
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("GET", "/v0.4/jobs/gone-job/results/probabilities")
+                .with_status(404)
+                .with_body(r#"{"error": "not found"}"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url());
+            let err = client
+                .get_probabilities_with_shots(
+                    "/v0.4/jobs/gone-job/results/probabilities",
+                    1024,
+                )
+                .unwrap_err();
+
+            match err {
+                IonQError::RestError { detail } => assert!(detail.contains("404")),
+                other => panic!("expected RestError, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_mock_poll_until_done_started_intermediate_status() {
+            // "started" is a documented in-progress status — must keep polling, not error.
+            let mut server = mockito::Server::new();
+            let _started = server
+                .mock("GET", "/jobs/start-job")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"id": "start-job", "status": "started", "failure": null}"#)
+                .expect(1)
+                .create();
+            let _completed = server
+                .mock("GET", "/jobs/start-job")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{
+                    "id": "start-job",
+                    "status": "completed",
+                    "failure": null,
+                    "results": {"probabilities": {"url": "/v0.4/jobs/start-job/results/probabilities"}}
+                }"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url())
+                .with_poll_timeout(10);
+            let result = client
+                .poll_until_done("start-job", Some(Duration::from_millis(1)), None)
+                .unwrap();
+            assert_eq!(result.status, "completed");
+        }
+
+        #[test]
+        fn test_mock_poll_until_done_ready_intermediate_status() {
+            // "ready" is a documented in-progress status — must keep polling, not error.
+            let mut server = mockito::Server::new();
+            let _ready = server
+                .mock("GET", "/jobs/ready-job")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"id": "ready-job", "status": "ready", "failure": null}"#)
+                .expect(1)
+                .create();
+            let _completed = server
+                .mock("GET", "/jobs/ready-job")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{
+                    "id": "ready-job",
+                    "status": "completed",
+                    "failure": null
+                }"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url())
+                .with_poll_timeout(10);
+            let result = client
+                .poll_until_done("ready-job", Some(Duration::from_millis(1)), None)
+                .unwrap();
+            assert_eq!(result.status, "completed");
+        }
+
+        #[test]
+        fn test_mock_list_backends_returns_object_not_array() {
+            // API returns a JSON object instead of an array — must produce a parse error,
+            // not panic or return empty results.
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("GET", "/backends")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"backends": [], "error": "wrong shape"}"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url());
+            let err = client.list_backends().unwrap_err();
+            match err {
+                IonQError::CalibrationError { detail } => {
+                    assert!(!detail.is_empty(), "error detail must be non-empty");
+                }
+                other => panic!("expected CalibrationError, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_mock_get_probabilities_non_json_response() {
+            // Probabilities endpoint returns non-JSON (e.g., HTML error page).
+            // Must return an error, not panic.
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("GET", "/v0.4/jobs/html-job/results/probabilities")
+                .with_status(200)
+                .with_header("content-type", "text/html")
+                .with_body("<html><body>Error</body></html>")
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url());
+            let err = client
+                .get_probabilities_with_shots(
+                    "/v0.4/jobs/html-job/results/probabilities",
+                    1024,
+                )
+                .unwrap_err();
+            assert!(
+                matches!(err, IonQError::HttpError(_)),
+                "non-JSON response must produce HttpError, got {:?}", err
+            );
+        }
+
+        #[test]
+        fn test_mock_submit_job_5xx_server_error() {
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("POST", "/jobs")
+                .with_status(500)
+                .with_body(r#"{"error": "internal server error"}"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "simulator", server.url());
+            let err = client.submit_job(serde_json::json!({}), 100).unwrap_err();
+            match err {
+                IonQError::RestError { detail } => assert!(detail.contains("500")),
+                other => panic!("expected RestError, got {:?}", other),
+            }
+        }
+
+        #[test]
+        fn test_mock_auth_header_on_submit_job() {
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("POST", "/jobs")
+                .match_header("Authorization", "apiKey submit-key-xyz")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"id": "auth-submit-job", "status": "submitted"}"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("submit-key-xyz", "simulator", server.url());
+            let job_id = client
+                .submit_job(serde_json::json!({"gateset": "qis", "qubits": 1, "circuit": []}), 100)
+                .unwrap();
+            assert_eq!(job_id, "auth-submit-job");
+        }
+
+        #[test]
+        fn test_mock_auth_header_on_get_job() {
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("GET", "/jobs/auth-get-job")
+                .match_header("Authorization", "apiKey get-key-abc")
+                .with_status(200)
+                .with_header("content-type", "application/json")
+                .with_body(r#"{"id": "auth-get-job", "status": "submitted", "failure": null}"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("get-key-abc", "simulator", server.url());
+            let job = client.get_job("auth-get-job").unwrap();
+            assert_eq!(job.status, "submitted");
+        }
+
+        #[test]
+        fn test_mock_get_characterization_http_error() {
+            let mut server = mockito::Server::new();
+            let _mock = server
+                .mock("GET", "/backends/qpu.forte-1/characterizations/bad-id")
+                .with_status(403)
+                .with_body(r#"{"error": "Forbidden"}"#)
+                .create();
+
+            let client = IonQRestClient::with_base_url("key", "qpu.forte-1", server.url());
+            let err = client
+                .get_characterization("qpu.forte-1", "bad-id")
+                .unwrap_err();
+
+            match err {
+                IonQError::CalibrationError { detail } => assert!(detail.contains("403")),
+                other => panic!("expected CalibrationError, got {:?}", other),
+            }
         }
     }
 }

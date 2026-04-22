@@ -52,6 +52,14 @@ pub fn circuit_to_ionq_json(circuit: &Circuit) -> Result<Value, IonQError> {
                         gates.push(json!({"gate": "x", "target": q}));
                     }
                     NativeGate1::Rz(theta) => {
+                        if !theta.is_finite() {
+                            return Err(IonQError::ConversionError {
+                                detail: format!(
+                                    "Rz rotation angle must be finite (got {theta}); \
+                                     NaN and Infinity serialize as JSON null and are rejected by the IonQ API"
+                                ),
+                            });
+                        }
                         gates.push(json!({"gate": "rz", "target": q, "rotation": theta}));
                     }
                     // Identity gates are no-ops; omit them from the circuit body.
@@ -286,6 +294,90 @@ mod tests {
         assert!(s.contains("\"gateset\""));
         assert!(s.contains("\"qis\""));
         assert!(s.contains("\"circuit\""));
+    }
+
+    #[test]
+    fn test_rz_nan_angle_returns_conversion_error() {
+        // f64::NAN serializes as JSON null via serde_json, which IonQ rejects.
+        // circuit_to_ionq_json must catch this before it reaches the API.
+        let mut c = Circuit::new(1);
+        c.ops.push(gate1(0, NativeGate1::Rz(f64::NAN)));
+        let err = circuit_to_ionq_json(&c).unwrap_err();
+        match err {
+            IonQError::ConversionError { ref detail } => {
+                assert!(detail.contains("finite"), "error must say 'finite': {detail}");
+            }
+            other => panic!("expected ConversionError, got {:?}", other),
+        }
+    }
+
+    #[test]
+    fn test_rz_positive_infinity_returns_conversion_error() {
+        let mut c = Circuit::new(1);
+        c.ops.push(gate1(0, NativeGate1::Rz(f64::INFINITY)));
+        assert!(
+            circuit_to_ionq_json(&c).is_err(),
+            "Rz(+∞) must return ConversionError — serializes as null without this guard"
+        );
+    }
+
+    #[test]
+    fn test_rz_negative_infinity_returns_conversion_error() {
+        let mut c = Circuit::new(1);
+        c.ops.push(gate1(0, NativeGate1::Rz(f64::NEG_INFINITY)));
+        assert!(
+            circuit_to_ionq_json(&c).is_err(),
+            "Rz(-∞) must return ConversionError"
+        );
+    }
+
+    #[test]
+    fn test_rz_non_finite_gate_does_not_poison_preceding_gates() {
+        // Ensure that valid gates before the NaN gate are NOT emitted —
+        // the function must fail fast, not return a partial circuit.
+        let mut c = Circuit::new(1);
+        c.ops.push(gate1(0, NativeGate1::X));          // valid
+        c.ops.push(gate1(0, NativeGate1::Rz(f64::NAN))); // invalid
+        assert!(
+            circuit_to_ionq_json(&c).is_err(),
+            "a NaN gate after valid gates must still fail the whole circuit"
+        );
+    }
+
+    #[test]
+    fn test_rz_two_pi_serializes_faithfully() {
+        // 2π should round-trip exactly; code must NOT reduce angles modulo 2π.
+        let angle = 2.0 * std::f64::consts::PI;
+        let mut c = Circuit::new(1);
+        c.ops.push(gate1(0, NativeGate1::Rz(angle)));
+        let v = circuit_to_ionq_json(&c).unwrap();
+        let rot = v["circuit"][0]["rotation"].as_f64().unwrap();
+        assert!((rot - angle).abs() < 1e-12, "2π angle must round-trip: {rot}");
+    }
+
+    #[test]
+    fn test_rz_very_small_angle_precision() {
+        // A near-zero angle (1e-15) must serialize without being rounded to 0.
+        let angle = 1e-15_f64;
+        let mut c = Circuit::new(1);
+        c.ops.push(gate1(0, NativeGate1::Rz(angle)));
+        let v = circuit_to_ionq_json(&c).unwrap();
+        let rot = v["circuit"][0]["rotation"].as_f64().unwrap();
+        assert!((rot - angle).abs() < 1e-25, "tiny angle must round-trip exactly: {rot}");
+    }
+
+    #[test]
+    fn test_circuit_all_identity_gates_produces_empty_gate_array() {
+        // A circuit with nothing but identity gates (all skipped) must produce an
+        // empty gate array — it should NOT include any gate objects.
+        let mut c = Circuit::new(3);
+        c.ops.push(gate1(0, NativeGate1::Id));
+        c.ops.push(gate1(1, NativeGate1::Id));
+        c.ops.push(gate1(2, NativeGate1::Id));
+        let v = circuit_to_ionq_json(&c).unwrap();
+        let gates = v["circuit"].as_array().unwrap();
+        assert!(gates.is_empty(), "all-identity circuit must produce zero gate ops");
+        assert_eq!(v["qubits"], 3, "qubit count must still be reported");
     }
 
     #[test]

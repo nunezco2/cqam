@@ -54,7 +54,7 @@ impl IonQCalibrationData {
     pub fn synthetic(num_qubits: u32) -> Self {
         Self {
             num_qubits,
-            t1_mean: 100.0,          // ~100 seconds for trapped-ion
+            t1_mean: 1000.0,         // ~1000 seconds for trapped-ion (IonQ Forte)
             t2_mean: 1.0,            // ~1 second
             single_gate_error: 6e-4, // 99.94% 1Q fidelity
             two_gate_error: 6e-3,    // 99.4% 2Q fidelity (MS gate)
@@ -74,8 +74,9 @@ impl IonQCalibrationData {
         let timing = char_resp.timing.as_ref();
         let fidelity = char_resp.fidelity.as_ref();
 
-        let t1_mean = timing.and_then(|t| t.t1).unwrap_or(100.0);
-        let t2_mean = timing.and_then(|t| t.t2).unwrap_or(1.0);
+        // Treat non-positive T1/T2 as absent (same guard as gate times).
+        let t1_mean = timing.and_then(|t| t.t1).filter(|&v| v > 0.0).unwrap_or(1000.0);
+        let t2_mean = timing.and_then(|t| t.t2).filter(|&v| v > 0.0).unwrap_or(1.0);
 
         // Gate times are sometimes 0 in the API response; treat 0 as absent.
         let single_gate_time_s = timing
@@ -342,7 +343,7 @@ mod tests {
             timing: None, // no timing — all defaults
         };
         let cal = IonQCalibrationData::from_characterization_response(&char_resp);
-        assert!((cal.t1_mean - 100.0).abs() < 1e-9); // default
+        assert!((cal.t1_mean - 1000.0).abs() < 1e-9); // default
         assert!((cal.t2_mean - 1.0).abs() < 1e-9); // default
         assert!((cal.readout_error - 0.002).abs() < 1e-9);
         assert!((cal.single_gate_error - 0.0001).abs() < 1e-9);
@@ -362,7 +363,7 @@ mod tests {
             timing: None,
         };
         let cal = IonQCalibrationData::from_characterization_response(&char_resp);
-        assert!((cal.t1_mean - 100.0).abs() < 1e-9);
+        assert!((cal.t1_mean - 1000.0).abs() < 1e-9);
         assert!((cal.t2_mean - 1.0).abs() < 1e-9);
         assert!((cal.readout_error - 3e-3).abs() < 1e-9);
         assert!((cal.single_gate_error - 6e-4).abs() < 1e-9);
@@ -391,5 +392,205 @@ mod tests {
         assert_eq!(cal.t1(0), cal.t1(35));
         assert_eq!(cal.t2(0), cal.t2(35));
         assert_eq!(cal.readout_error(0), cal.readout_error(35));
+    }
+
+    #[test]
+    fn test_single_gate_time_trait_method() {
+        let cal = IonQCalibrationData::synthetic(36);
+        // Forte published value: 135 µs.
+        assert!((cal.single_gate_time() - 1.35e-4).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_two_gate_time_trait_method() {
+        let cal = IonQCalibrationData::synthetic(36);
+        // Forte published value: 210 µs.
+        assert!((cal.two_gate_time() - 2.1e-4).abs() < 1e-15);
+    }
+
+    #[test]
+    fn test_readout_error_trait_method() {
+        let cal = IonQCalibrationData::synthetic(36);
+        // Forte published SPAM error: 3e-3.
+        assert!((cal.readout_error(0) - 3e-3).abs() < 1e-12);
+        // Uniform — every qubit returns the same value.
+        assert_eq!(cal.readout_error(0), cal.readout_error(20));
+    }
+
+    #[test]
+    fn test_from_characterization_negative_t1_t2_use_defaults() {
+        // Negative T1/T2 from a malformed API response must fall back to defaults,
+        // not propagate physically impossible values into the calibration model.
+        use crate::rest::{CharTiming, CharacterizationResponse};
+        let char_resp = CharacterizationResponse {
+            id: "neg-t1".into(),
+            date: None,
+            backend: "test".into(),
+            qubits: 10,
+            fidelity: None,
+            timing: Some(CharTiming {
+                t1: Some(-5.0),
+                t2: Some(-0.5),
+                single_qubit: None,
+                two_qubit: None,
+            }),
+        };
+        let cal = IonQCalibrationData::from_characterization_response(&char_resp);
+        assert!(
+            (cal.t1(0) - 1000.0).abs() < 1e-9,
+            "negative T1 must fall back to default 1000s, got {}",
+            cal.t1(0)
+        );
+        assert!(
+            (cal.t2(0) - 1.0).abs() < 1e-9,
+            "negative T2 must fall back to default 1s, got {}",
+            cal.t2(0)
+        );
+    }
+
+    #[test]
+    fn test_from_characterization_zero_t1_t2_use_defaults() {
+        // Zero T1/T2 (treated as absent, same as zero gate times) → use defaults.
+        use crate::rest::{CharTiming, CharacterizationResponse};
+        let char_resp = CharacterizationResponse {
+            id: "zero-t".into(),
+            date: None,
+            backend: "test".into(),
+            qubits: 10,
+            fidelity: None,
+            timing: Some(CharTiming {
+                t1: Some(0.0),
+                t2: Some(0.0),
+                single_qubit: None,
+                two_qubit: None,
+            }),
+        };
+        let cal = IonQCalibrationData::from_characterization_response(&char_resp);
+        assert!((cal.t1(0) - 1000.0).abs() < 1e-9, "zero T1 → default 1000s");
+        assert!((cal.t2(0) - 1.0).abs() < 1e-9, "zero T2 → default 1s");
+    }
+
+    #[test]
+    fn test_from_characterization_perfect_fidelity_gives_zero_error() {
+        // fidelity=1.0 → error=0.0 → estimate_circuit_fidelity remains 1.0 for any ops.
+        use crate::rest::{CharFidelity, CharacterizationResponse, GateFidelity};
+        let char_resp = CharacterizationResponse {
+            id: "perfect".into(),
+            date: None,
+            backend: "test".into(),
+            qubits: 4,
+            fidelity: Some(CharFidelity {
+                spam: Some(GateFidelity { median: Some(1.0) }),
+                single_qubit: Some(GateFidelity { median: Some(1.0) }),
+                two_qubit: Some(GateFidelity { median: Some(1.0) }),
+            }),
+            timing: None,
+        };
+        let cal = IonQCalibrationData::from_characterization_response(&char_resp);
+        assert_eq!(cal.single_gate_error(0), 0.0);
+        assert_eq!(cal.readout_error(0), 0.0);
+        assert_eq!(cal.two_gate_error(0, 1), 0.0);
+
+        // With zero error, fidelity of a non-trivial circuit must still be 1.0.
+        use cqam_core::native_ir::ApplyGate2q;
+        let mut c = Circuit::new(2);
+        c.ops.push(Op::Gate1q(ApplyGate1q { qubit: PhysicalQubit(0), gate: NativeGate1::X }));
+        c.ops.push(Op::Gate2q(ApplyGate2q {
+            qubit_a: PhysicalQubit(0),
+            qubit_b: PhysicalQubit(1),
+            gate: cqam_core::native_ir::NativeGate2::Cx,
+        }));
+        c.ops.push(Op::Measure(Observe { qubit: PhysicalQubit(0), clbit: 0 }));
+        assert_eq!(cal.estimate_circuit_fidelity(&c), 1.0);
+    }
+
+    #[test]
+    fn test_estimate_circuit_fidelity_all_op_types_combined() {
+        // A circuit with every Op variant: only Gate1q, Gate2q, and Measure reduce
+        // fidelity; Reset and Barrier must be transparent.
+        use cqam_core::native_ir::{ApplyGate2q, Barrier, NativeGate2, QubitReset};
+        let cal = IonQCalibrationData::synthetic(4);
+        let mut c = Circuit::new(4);
+        c.ops.push(Op::Reset(QubitReset { qubit: PhysicalQubit(0) }));          // no cost
+        c.ops.push(Op::Gate1q(ApplyGate1q { qubit: PhysicalQubit(0), gate: NativeGate1::X }));
+        c.ops.push(Op::Barrier(Barrier { qubits: vec![PhysicalQubit(0), PhysicalQubit(1)] })); // no cost
+        c.ops.push(Op::Gate2q(ApplyGate2q {
+            qubit_a: PhysicalQubit(0),
+            qubit_b: PhysicalQubit(1),
+            gate: NativeGate2::Cx,
+        }));
+        c.ops.push(Op::Measure(Observe { qubit: PhysicalQubit(0), clbit: 0 }));
+        c.ops.push(Op::Reset(QubitReset { qubit: PhysicalQubit(1) }));          // no cost
+
+        let f = cal.estimate_circuit_fidelity(&c);
+        let expected = (1.0 - cal.single_gate_error(0))
+            * (1.0 - cal.two_gate_error(0, 1))
+            * (1.0 - cal.readout_error(0));
+        assert!(
+            (f - expected).abs() < 1e-12,
+            "fidelity={f}, expected={expected}"
+        );
+    }
+
+    #[test]
+    fn test_from_characterization_fidelity_present_null_medians_uses_defaults() {
+        // Fidelity block present but each median field is absent → all defaults.
+        use crate::rest::{CharFidelity, CharacterizationResponse, GateFidelity};
+        let char_resp = CharacterizationResponse {
+            id: "null-med".into(),
+            date: None,
+            backend: "test".into(),
+            qubits: 10,
+            fidelity: Some(CharFidelity {
+                spam:         Some(GateFidelity { median: None }),
+                single_qubit: Some(GateFidelity { median: None }),
+                two_qubit:    Some(GateFidelity { median: None }),
+            }),
+            timing: None,
+        };
+        let cal = IonQCalibrationData::from_characterization_response(&char_resp);
+        assert!((cal.readout_error(0) - 3e-3).abs() < 1e-12, "null spam median → default");
+        assert!((cal.single_gate_error(0) - 6e-4).abs() < 1e-12, "null 1q median → default");
+        assert!((cal.two_gate_error(0, 1) - 6e-3).abs() < 1e-12, "null 2q median → default");
+    }
+
+    #[test]
+    fn test_fidelity_reset_and_barrier_contribute_zero() {
+        use cqam_core::native_ir::{Barrier, QubitReset};
+        let cal = IonQCalibrationData::synthetic(4);
+        let mut c = Circuit::new(4);
+        c.ops.push(Op::Reset(QubitReset { qubit: PhysicalQubit(0) }));
+        c.ops.push(Op::Barrier(Barrier { qubits: vec![PhysicalQubit(0), PhysicalQubit(1)] }));
+        c.ops.push(Op::Reset(QubitReset { qubit: PhysicalQubit(2) }));
+        let f = cal.estimate_circuit_fidelity(&c);
+        assert_eq!(f, 1.0, "reset and barrier ops must not reduce fidelity");
+    }
+
+    #[test]
+    fn test_gate_times_from_characterization_nonzero() {
+        // Verify that non-zero gate times from the API are respected.
+        use crate::rest::{CharFidelity, CharTiming, CharacterizationResponse, GateFidelity};
+        let char_resp = CharacterizationResponse {
+            id: "x".to_string(),
+            date: None,
+            backend: "qpu.test".to_string(),
+            qubits: 10,
+            fidelity: Some(CharFidelity {
+                spam: Some(GateFidelity { median: Some(0.998) }),
+                single_qubit: Some(GateFidelity { median: Some(0.9999) }),
+                two_qubit: Some(GateFidelity { median: Some(0.994) }),
+            }),
+            timing: Some(CharTiming {
+                t1: Some(90.0),
+                t2: Some(0.8),
+                single_qubit: Some(1.5e-4), // non-zero: should be used as-is
+                two_qubit: Some(2.5e-4),    // non-zero: should be used as-is
+            }),
+        };
+        let cal = IonQCalibrationData::from_characterization_response(&char_resp);
+        assert!((cal.single_gate_time() - 1.5e-4).abs() < 1e-15,
+            "non-zero 1q gate time should come from API, got {}", cal.single_gate_time());
+        assert!((cal.two_gate_time() - 2.5e-4).abs() < 1e-15,
+            "non-zero 2q gate time should come from API, got {}", cal.two_gate_time());
     }
 }
