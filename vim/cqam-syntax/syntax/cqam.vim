@@ -65,12 +65,25 @@ syn keyword cqamCmpxOp    ZMOV
 syn keyword cqamConvOp    CVTIF CVTFI CVTFZ CVTZF
 
 " =============================================================================
+" Integer comparison (flag-setting, no destination)
+" =============================================================================
+syn keyword cqamIntOp     ICMP ICMPI
+
+" =============================================================================
 " Control flow
 " =============================================================================
-syn keyword cqamControl   JMP JIF JMPF CALL RET
+syn keyword cqamControl   JMP JIF JMPF JMPFN CALL RET
+syn keyword cqamControl   JGT JLE
 syn keyword cqamControl   HALT NOP
 syn keyword cqamControl   SETIV RETI
 syn keyword cqamControl   HFORK HMERGE HATMS HATME
+
+" =============================================================================
+" Conditional jump aliases (assembler sugar)
+" =============================================================================
+syn keyword cqamControl   JEQ JNE JLT JGE
+syn keyword cqamControl   JZ JNZ JOV JNO
+syn keyword cqamControl   JQACT JSUP JENT JINF JCOL JDEC JNRM
 
 " =============================================================================
 " Quantum state preparation
@@ -144,10 +157,10 @@ syn keyword cqamReduceFn  EXPCT
 syn match   cqamAxis      "\<[XYZ]\>" contained
 
 " =============================================================================
-" PSW flag IDs (for JMPF)
+" PSW flag IDs (for JMPF/JMPFN)
 " =============================================================================
 syn keyword cqamFlag      ZF SF CF DF EF QF INF OF NF
-syn keyword cqamFlag      FK MG IF AF
+syn keyword cqamFlag      FK MG IF AF NW
 
 " =============================================================================
 " Registers
