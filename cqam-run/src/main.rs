@@ -58,7 +58,7 @@ fn print_help() {
     eprintln!("  --ibm-token <TOKEN>               IBM Quantum API token");
     eprintln!("  --ibm-optimization-level <N>      Qiskit transpiler optimization level (0-3) [default: 1]");
     eprintln!("  --ionq-api-key <KEY>              IonQ Cloud API key (or set IONQ_API_KEY env var)");
-    eprintln!("  --qpu-timeout <secs>  Job polling timeout in seconds (default: 1800)");
+    eprintln!("  --qpu-timeout <secs>  Job polling timeout in seconds (default: 14400)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");

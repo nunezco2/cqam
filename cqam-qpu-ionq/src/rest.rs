@@ -31,7 +31,7 @@ use crate::error::IonQError;
 const IONQ_API_BASE: &str = "https://api.ionq.co/v0.4";
 
 const DEFAULT_POLL_INTERVAL_MS: u64 = 2_000;
-const DEFAULT_TIMEOUT_SECS: u64 = 1800;
+const DEFAULT_TIMEOUT_SECS: u64 = 14_400; // 4 hours — hardware queues can be long
 
 // ---------------------------------------------------------------------------
 // REST data types — Job submission

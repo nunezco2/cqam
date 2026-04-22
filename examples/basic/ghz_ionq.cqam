@@ -1,0 +1,143 @@
+# examples/basic/ghz_ionq.cqam
+# N-Qubit GHZ State on IonQ — All-to-All Connectivity Showcase
+#
+# Prepares |GHZ_N> = (|0...0> + |1...1>) / sqrt(2) for N=5 qubits
+# using the entanglement kernel.
+#
+# IonQ trapped-ion advantage:
+#   All qubits are directly connected — the GHZ circuit compiles to
+#   exactly 1 Hadamard + (N-1) CNOT gates with ZERO SWAP gates inserted
+#   by the cqam-micro routing stage.
+#   A superconducting QPU with ring or grid connectivity would require
+#   additional SWAP gates for the fan-out CNOTs, increasing depth and
+#   error accumulation.
+#
+# Expected output:
+#   Only |00000> (state 0) and |11111> (state 31) appear.
+#   All other 30 states should have probability ~0%.
+#
+#   mode     = 0 or 31      (the two GHZ poles, equally likely)
+#   mean     ≈ 15.50        (midpoint of 0 and 31)
+#   variance ≈ 240.25       (bimodal distribution at extremes)
+#
+# Interpreting deviations from ideal on real hardware:
+#   mean < 15.5  → |0...0> outcome is more common (readout bias toward |0>)
+#   mean > 15.5  → |1...1> outcome is more common (unlikely, indicates error)
+#   extra states → gate errors or decoherence leaking into wrong basis states
+#
+# Parametric: change #! qubits to scale up or down.
+# At N=5 this is a cheap, fast benchmark — ideal for verifying
+# end-to-end IonQ connectivity before running heavier circuits.
+#
+# Run on IonQ simulator (free):
+#   cargo run --bin cqam-run -- examples/basic/ghz_ionq.cqam \
+#       --backend ionq --qpu-device simulator \
+#       --ionq-api-key $IONQ_API_KEY --qpu-shots 1000
+#
+# Run on real IonQ Forte hardware:
+#   cargo run --bin cqam-run -- examples/basic/ghz_ionq.cqam \
+#       --backend ionq --qpu-device qpu.forte-1 \
+#       --ionq-api-key $IONQ_API_KEY --qpu-shots 2000
+#
+#! qubits 5
+
+.data
+    .org 1000
+banner:
+    .ascii "=== GHZ State on IonQ (N=5) ===\n"
+info:
+    .ascii "Circuit: H(q0) + 4 CNOTs, 0 SWAPs (all-to-all connectivity)\n"
+expect:
+    .ascii "Ideal: only |00000> and |11111> -- all other states at 0%\n"
+res_fmt:
+    .ascii "Results: mode=%d, mean=%f, variance=%f\n"
+ideal_fmt:
+    .ascii "Ideal:   mode=0 or 31, mean=15.500000, variance=240.250000\n"
+bias_fmt:
+    .ascii "Readout bias: mean - ideal = %f (negative = |0> favored)\n"
+
+.code
+
+# --- Print banner and circuit info ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    IDEC R1
+    ECALL PRINT_STR
+
+    ILDI R0, @info
+    ILDI R1, @info.len
+    IDEC R1
+    ECALL PRINT_STR
+
+    ILDI R0, @expect
+    ILDI R1, @expect.len
+    IDEC R1
+    ECALL PRINT_STR
+
+# --- Compute 2^N - 1 = |1...1> state index (parametric on qubit count) ---
+    IQCFG R10                        # R10 = N (qubit count from pragma)
+    ILDI R11, 1                      # R11 = accumulator (2^N)
+    ILDI R12, 0                      # R12 = loop counter
+LABEL: ghz_pow2
+    IEQ R13, R12, R10
+    JIF R13, ghz_pow2_done
+    IADD R11, R11, R11               # R11 *= 2
+    IINC R12
+    JMP ghz_pow2
+LABEL: ghz_pow2_done
+    IDEC R14, R11                    # R14 = 2^N - 1 = index of |1...1>
+
+# --- Prepare GHZ state = (|0...0> + |1...1>) / sqrt(2) ---
+    QPREP Q0, GHZS                   # Q0 = (|0...0> + |1...1>) / sqrt(2)
+
+# --- Measure: only state 0 and state (2^N - 1) should appear ---
+    QOBSERVE H0, Q0
+
+# --- Top-4 histogram: ideal shows 2 entries; errors appear as 3rd/4th ---
+    ILDI R0, 0                       # H0
+    ILDI R1, 3                       # mode 3: top-K
+    ILDI R2, 4                       # show top 4 outcomes
+    ECALL PRINT_HIST
+
+# --- Statistics ---
+    HREDUCE MODEV, H0, R5            # R5 = most-seen state (should be 0 or 2^N-1)
+    HREDUCE MEANT, H0, F1            # F1 = empirical mean (ideal: (2^N-1)/2 = 15.5)
+    HREDUCE VARNC, H0, F2            # F2 = variance (ideal: ~240.25)
+
+# --- Compute ideal mean = (2^N - 1) / 2.0 ---
+    CVTIF F3, R14                    # F3 = (2^N - 1) as float
+    FLDI F4, 2                       # F4 = 2.0
+    FDIV F5, F3, F4                  # F5 = ideal mean = 15.5
+
+# --- Compute readout bias = empirical mean - ideal mean ---
+    FSUB F6, F1, F5                  # F6 = bias (negative = |0> favored)
+
+# --- Store results ---
+    ISTR R5, 0
+    FSTR F1, 1
+    FSTR F2, 2
+    FSTR F6, 3
+
+# --- Print measured results ---
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    IDEC R1
+    ILDM R2, 0                       # mode (%d)
+    FLDM F1, 1                       # mean (%f)
+    FLDM F2, 2                       # variance (%f)
+    ECALL PRINT_STR
+
+# --- Print ideal reference ---
+    ILDI R0, @ideal_fmt
+    ILDI R1, @ideal_fmt.len
+    IDEC R1
+    ECALL PRINT_STR
+
+# --- Print readout bias ---
+    ILDI R0, @bias_fmt
+    ILDI R1, @bias_fmt.len
+    IDEC R1
+    FLDM F1, 3                       # bias (%f)
+    ECALL PRINT_STR
+
+    HALT
