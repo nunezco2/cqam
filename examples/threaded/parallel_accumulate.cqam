@@ -38,8 +38,7 @@ res_fmt:
 # --- Print banner ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # --- Fork into 4 threads ---
@@ -73,8 +72,7 @@ res_fmt:
     ILDM R2, 4                 # R2 = shared[4] = sum
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
     HALT
