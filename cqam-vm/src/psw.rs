@@ -205,6 +205,7 @@ impl ProgramStateWord {
             11 => self.merged,
             12 => self.inf,
             13 => self.af,
+            14 => self.norm_warn,
             _ => false,
         }
     }

@@ -61,6 +61,8 @@ In text-format source, register names include the prefix (e.g. `R0`, `F3`,
 | `IEQ` | dst, lhs, rhs | R[dst] = (R[lhs] == R[rhs]) ? 1 : 0 | RRR |
 | `ILT` | dst, lhs, rhs | R[dst] = (R[lhs] < R[rhs]) ? 1 : 0 | RRR |
 | `IGT` | dst, lhs, rhs | R[dst] = (R[lhs] > R[rhs]) ? 1 : 0 | RRR |
+| `ICMP` | ra, rb | PSW ← flags(R[ra] - R[rb]); no dst written | RR |
+| `ICMPI` | ra, imm16 | PSW ← flags(R[ra] - sign_extend(imm16)); no dst written | RI |
 
 ### 1.5 Float arithmetic and memory (F-file: 16 x f64)
 
@@ -116,9 +118,48 @@ consecutive CMEM cells (addr and addr+1 for re and im respectively).
 | `JMP` | target | PC = address_of(target) | J |
 | `JIF` | pred, target | if R[pred] != 0: PC = address_of(target) | JR |
 | `JMPF` | flag_name, target | if PSW.flag[flag_name]: PC = address_of(target) | JR |
+| `JMPFN` | flag_name, target | if !PSW.flag[flag_name]: PC = address_of(target) | JR |
+| `JGT` | target | if ZF=0 AND NF==OF: PC = address_of(target) | J |
+| `JLE` | target | if ZF=1 OR NF!=OF: PC = address_of(target) | J |
 | `CALL` | target | push PC+1; PC = address_of(target) | J |
 | `RET` | — | pop call stack; PC = saved address (HALT if empty) | N |
 | `HALT` | — | Sets trap_halt in PSW; terminates execution | N |
+
+Note: JGT and JLE test the compound signed-comparison condition produced by ICMP or ICMPI. They differ from single-flag branches (JMPF/JMPFN) in that they inspect the NF==OF relationship, which handles signed overflow correctly.
+
+### 1.8a Assembler jump aliases (no new opcodes)
+
+The following aliases are resolved by the assembler at parse time. They produce the existing instructions shown in the expansion column and do not introduce additional opcodes.
+
+**Signed comparison aliases (require preceding ICMP/ICMPI):**
+
+| Alias | Expands to | Condition |
+|-------|-----------|-----------|
+| `JEQ target` | `JMPF ZF, target` | Equal (ZF=1) |
+| `JNE target` | `JMPFN ZF, target` | Not equal (ZF=0) |
+| `JLT target` | `JMPF NF, target` | Less than (NF=1, assumes OF=0) |
+| `JGE target` | `JMPFN NF, target` | Greater or equal (NF=0, assumes OF=0) |
+
+**Zero and overflow aliases:**
+
+| Alias | Expands to | Condition |
+|-------|-----------|-----------|
+| `JZ target` | `JMPF ZF, target` | Zero |
+| `JNZ target` | `JMPFN ZF, target` | Non-zero |
+| `JOV target` | `JMPF OF, target` | Overflow |
+| `JNO target` | `JMPFN OF, target` | No overflow |
+
+**Quantum intent aliases:**
+
+| Alias | Expands to | Condition |
+|-------|-----------|-----------|
+| `JQACT target` | `JMPF QF, target` | Quantum section active |
+| `JSUP target` | `JMPF SF, target` | Superposition |
+| `JENT target` | `JMPF EF, target` | Entanglement |
+| `JINF target` | `JMPF IF, target` | Interference |
+| `JCOL target` | `JMPF CF, target` | Collapsed |
+| `JDEC target` | `JMPF DF, target` | Decohered |
+| `JNRM target` | `JMPF NW, target` | Norm warning |
 
 ### 1.9 Quantum operations (Q-file: 8 x DensityMatrix)
 
@@ -239,6 +280,11 @@ following formats.
 | 0x63 | Float register move (FMOV) |
 | 0x64 | Complex register move (ZMOV) |
 | 0x65 | Quantum register handle exchange (QXCH) |
+| 0x66 | Integer compare register-register (ICMP) |
+| 0x67 | Integer compare register-immediate (ICMPI) |
+| 0x68 | Flag-conditional jump, negated sense (JMPFN) |
+| 0x69 | Signed greater-than jump (JGT) |
+| 0x6A | Signed less-or-equal jump (JLE) |
 
 ---
 
@@ -291,6 +337,7 @@ operation applied, not by dynamic state inspection.
 | `HF` | 7 | `psw.hf` | HFORK/HMERGE | Hybrid mode: inside an HFORK/HMERGE block |
 | `IF` | 12 | `psw.if_flag` | QKERNEL intent | Interference: set by kernels that exploit interference (QFFT, QIFT, DIFF, GROV) |
 | `AF` | 13 | `psw.af` | HATMS/HATME | Atomic section: set on the elected leader thread between HATMS and HATME |
+| `NW` | 14 | `psw.norm_warn` | QPREPS/QPREPSM | Normalization warning: set when auto-correction was applied; cleared at the start of each QPREPS/QPREPSM call |
 
 ### 4.4 Trap IDs (`trap_id` module, used by `SETIV`)
 

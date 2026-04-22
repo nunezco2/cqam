@@ -123,9 +123,57 @@ QPREP Q0, UNIF       # Prepares a 4-qubit uniform state
 | LABEL | `LABEL: my_label` | Define a jump target |
 | JMP | `JMP my_label` | Unconditional jump |
 | JIF | `JIF R0, my_label` | Conditional jump if R0 != 0 |
+| JMPF | `JMPF ZF, my_label` | Jump if PSW flag is set |
+| JMPFN | `JMPFN ZF, my_label` | Jump if PSW flag is NOT set |
+| ICMP | `ICMP R0, R1` | Compare R0 and R1; set ZF/NF/OF; no dst |
+| ICMPI | `ICMPI R0, 42` | Compare R0 with 42; set ZF/NF/OF; no dst |
+| JGT | `JGT greater` | Jump if signed greater than (ZF=0 AND NF==OF) |
+| JLE | `JLE le_or_eq` | Jump if signed less or equal (ZF=1 OR NF!=OF) |
 | CALL | `CALL subroutine` | Call subroutine (push PC+1, jump) |
 | RET | `RET` | Return from subroutine (pop PC) |
 | HALT | `HALT` | Terminate execution |
+
+### ICMP / JGT / JLE example
+
+    # Find minimum of R0 and R1; result in R2
+    IMOV R2, R0               # assume R0 is smaller
+    ICMP R0, R1               # compare R0 and R1
+    JLE r0_is_smaller         # branch if R0 <= R1 (assumption holds)
+    IMOV R2, R1               # R1 is actually smaller; overwrite R2
+    LABEL: r0_is_smaller
+    # R2 now holds min(R0, R1)
+
+### ICMPI loop guard example
+
+    # Sum integers 0..N-1 into R1
+    ILDI R0, 0                # counter = 0
+    ILDI R1, 0                # accumulator = 0
+    ILDI R2, 16               # limit = 16
+    LABEL: sum_loop
+      IADD R1, R1, R0         # accumulator += counter
+      IINC R0                 # counter++
+      ICMPI R0, 16            # compare counter with 16
+      JLT sum_loop            # continue while counter < 16 (JLT = JMPF NF)
+    HALT
+
+### JMPFN example
+
+    # Branch if quantum register is NOT active
+    JMPFN QF, no_quantum       # taken if QF is clear
+    # ... quantum code ...
+    LABEL: no_quantum
+    # ... classical fallback ...
+
+### Quantum intent aliases
+
+    QKERNEL GROV, Q0, Q0, R0, R1   # one Grover iteration
+    JSUP superpos_active            # always taken: GROV sets SF
+    JENT entangled                  # always taken: GROV sets EF
+    JINF interference_present       # always taken: GROV sets IF
+
+    QKERNEL ENTG, Q1, Q0, R0, R1   # entangle
+    JENT yes_entangled              # taken
+    JINF no_interference            # NOT taken: ENTG does not set IF
 
 ## System / Interrupt Instructions
 
@@ -427,6 +475,7 @@ This enables data-driven state preparation in loops:
 | HFORK | `HFORK` | Fork hybrid execution (set fork flags) |
 | HMERGE | `HMERGE` | Merge hybrid branches (set merge flags) |
 | JMPF | `JMPF EF, label` | Conditional jump if PSW flag EF is set |
+| JMPFN | `JMPFN QF, label` | Conditional jump if PSW flag QF is NOT set |
 | HREDUCE | `HREDUCE MODEV, H0, R2` | Reduce H0 using MODEV (mode), store result in R2 |
 
 HREDUCE uses mnemonic-first operand order: `HREDUCE MNEM, H_src, R/F/Z_dst`.

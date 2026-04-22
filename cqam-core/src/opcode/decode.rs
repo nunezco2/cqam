@@ -280,6 +280,38 @@ pub fn decode_with_debug(
                 target: format!("@{}", addr),
             })
         }
+        op::JMPFN => {
+            let raw = extract_reg4(word, 20);
+            let flag = crate::instruction::FlagId::try_from(raw)?;
+            let addr = extract_u16(word);
+            Ok(Instruction::JmpFN {
+                flag,
+                target: format!("@{}", addr),
+            })
+        }
+        op::JGT => {
+            let addr = extract_u24(word);
+            Ok(Instruction::Jgt {
+                target: format!("@{}", addr),
+            })
+        }
+        op::JLE => {
+            let addr = extract_u24(word);
+            Ok(Instruction::Jle {
+                target: format!("@{}", addr),
+            })
+        }
+        op::ICMP => {
+            // lhs at bit 16, rhs at bit 12 (dst=0 is ignored)
+            let lhs = extract_reg4(word, 16);
+            let rhs = extract_reg4(word, 12);
+            Ok(Instruction::ICmp { lhs, rhs })
+        }
+        op::ICMPI => {
+            let src = extract_reg4(word, 20);
+            let imm = extract_i16(word);
+            Ok(Instruction::ICmpI { src, imm })
+        }
         op::SETIV => {
             let raw = extract_reg4(word, 20);
             let trap_id = crate::instruction::TrapId::try_from(raw)?;
@@ -662,6 +694,11 @@ pub fn mnemonic(opcode: u8) -> Option<&'static str> {
         op::HFORK => Some("HFORK"),
         op::HMERGE => Some("HMERGE"),
         op::JMPF => Some("JMPF"),
+        op::JMPFN => Some("JMPFN"),
+        op::JGT => Some("JGT"),
+        op::JLE => Some("JLE"),
+        op::ICMP => Some("ICMP"),
+        op::ICMPI => Some("ICMPI"),
         op::HREDUCE => Some("HREDUCE"),
         op::RETI => Some("RETI"),
         op::SETIV => Some("SETIV"),

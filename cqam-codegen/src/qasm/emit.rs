@@ -258,6 +258,15 @@ impl QasmFormat for Instruction {
                 vec![format!("// ECALL {} (host I/O)", proc_id.name())]
             }
 
+            // -- Integer compare (flag-only) ---------------------------------
+
+            Instruction::ICmp { lhs, rhs } => {
+                vec![format!("// @cqam.cmp R{}, R{}", lhs, rhs)]
+            }
+            Instruction::ICmpI { src, imm } => {
+                vec![format!("// @cqam.cmpi R{}, {}", src, imm)]
+            }
+
             // -- Control flow ------------------------------------------------
 
             Instruction::Jmp { target } => {
@@ -274,6 +283,15 @@ impl QasmFormat for Instruction {
             }
             Instruction::Halt => {
                 vec!["// HALT".to_string()]
+            }
+            Instruction::JmpFN { flag, target } => {
+                vec![format!("// @cqam.jmpfn {}, {}", flag.mnemonic(), target)]
+            }
+            Instruction::Jgt { target } => {
+                vec![format!("// @cqam.jgt {}", target)]
+            }
+            Instruction::Jle { target } => {
+                vec![format!("// @cqam.jle {}", target)]
             }
 
             // -- Quantum operations ------------------------------------------

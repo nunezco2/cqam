@@ -145,6 +145,13 @@ pub mod op {
     // -- Quantum register handle swap (0x65) ----------------------------------
     pub const QXCH: u8 = 0x65;
 
+    // -- Conditional jump extensions (0x66-0x6A) ------------------------------
+    pub const ICMP: u8 = 0x66;
+    pub const ICMPI: u8 = 0x67;
+    pub const JMPFN: u8 = 0x68;
+    pub const JGT: u8 = 0x69;
+    pub const JLE: u8 = 0x6A;
+
     // -- Hybrid operations (0x38-0x3B) ----------------------------------------
     pub const HFORK: u8 = 0x38;
     pub const HMERGE: u8 = 0x39;

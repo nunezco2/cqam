@@ -193,6 +193,44 @@ pub fn execute_hybrid<B: QuantumBackend + Clone + Send + 'static>(
             }
         }
 
+        Instruction::JmpFN { flag, target } => {
+            let cond = !ctx.psw.get_flag(u8::from(*flag));
+            ctx.psw.update_from_predicate(cond);
+
+            if cond {
+                ctx.jump_to_label(target)?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+
+        Instruction::Jgt { target } => {
+            // Signed greater-than: ZF=0 AND NF==OF
+            let cond = !ctx.psw.zf && (ctx.psw.nf == ctx.psw.of);
+            ctx.psw.update_from_predicate(cond);
+
+            if cond {
+                ctx.jump_to_label(target)?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+
+        Instruction::Jle { target } => {
+            // Signed less-or-equal: ZF=1 OR NF!=OF
+            let cond = ctx.psw.zf || (ctx.psw.nf != ctx.psw.of);
+            ctx.psw.update_from_predicate(cond);
+
+            if cond {
+                ctx.jump_to_label(target)?;
+                Ok(true)
+            } else {
+                Ok(false)
+            }
+        }
+
         Instruction::HReduce { src, dst, func } => {
             let hybrid_val = ctx.hregs.get(*src)?.clone();
 

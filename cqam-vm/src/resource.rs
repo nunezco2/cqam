@@ -128,6 +128,14 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
             ..Default::default()
         },
 
+        // Integer compare (flag-only): 1 cycle, no register write
+        Instruction::ICmp { .. }
+        | Instruction::ICmpI { .. } => ResourceDelta {
+            time: 1,
+            space: 0,
+            ..Default::default()
+        },
+
         // Float arithmetic: 1 cycle, 1 register write
         Instruction::FAdd { .. }
         | Instruction::FSub { .. }
@@ -429,7 +437,10 @@ pub fn resource_cost(instr: &Instruction) -> ResourceDelta {
         },
 
         // Hybrid conditional exec: 1 cycle
-        Instruction::JmpF { .. } => ResourceDelta {
+        Instruction::JmpF { .. }
+        | Instruction::JmpFN { .. }
+        | Instruction::Jgt { .. }
+        | Instruction::Jle { .. } => ResourceDelta {
             time: 1,
             space: 0,
             ..Default::default()

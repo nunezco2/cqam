@@ -258,6 +258,10 @@ fn format_instruction(instr: &Instruction) -> String {
         }
         Instruction::QXch { qa, qb } => format!("QXCH Q{}, Q{}", qa, qb),
 
+        // Integer compare (flag-only)
+        Instruction::ICmp { lhs, rhs } => format!("ICMP R{}, R{}", lhs, rhs),
+        Instruction::ICmpI { src, imm } => format!("ICMPI R{}, {}", src, imm),
+
         // Hybrid
         Instruction::HFork => "HFORK".to_string(),
         Instruction::HMerge => "HMERGE".to_string(),
@@ -266,6 +270,11 @@ fn format_instruction(instr: &Instruction) -> String {
         Instruction::JmpF { flag, target } => {
             format!("JMPF {}, {}", flag.mnemonic(), target)
         }
+        Instruction::JmpFN { flag, target } => {
+            format!("JMPFN {}, {}", flag.mnemonic(), target)
+        }
+        Instruction::Jgt { target } => format!("JGT {}", target),
+        Instruction::Jle { target } => format!("JLE {}", target),
         Instruction::HReduce { src, dst, func } => {
             format!("HREDUCE {}, H{}, R{}", func.mnemonic(), src, dst)
         }

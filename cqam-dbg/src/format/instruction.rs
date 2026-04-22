@@ -42,6 +42,8 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::IEq { dst, lhs, rhs } => format!("IEQ R{}, R{}, R{}", dst, lhs, rhs),
         Instruction::ILt { dst, lhs, rhs } => format!("ILT R{}, R{}, R{}", dst, lhs, rhs),
         Instruction::IGt { dst, lhs, rhs } => format!("IGT R{}, R{}, R{}", dst, lhs, rhs),
+        Instruction::ICmp { lhs, rhs } => format!("ICMP R{}, R{}", lhs, rhs),
+        Instruction::ICmpI { src, imm } => format!("ICMPI R{}, {}", src, imm),
 
         // Float arithmetic
         Instruction::FAdd { dst, lhs, rhs } => format!("FADD F{}, F{}, F{}", dst, lhs, rhs),
@@ -205,6 +207,11 @@ pub fn format_instruction(instr: &Instruction) -> String {
         Instruction::JmpF { flag, target } => {
             format!("JMPF {}, {}", flag.mnemonic(), target)
         }
+        Instruction::JmpFN { flag, target } => {
+            format!("JMPFN {}, {}", flag.mnemonic(), target)
+        }
+        Instruction::Jgt { target } => format!("JGT {}", target),
+        Instruction::Jle { target } => format!("JLE {}", target),
         Instruction::HReduce { src, dst, func } => {
             format!("HREDUCE {}, H{}, R{}", func.mnemonic(), src, dst)
         }
@@ -254,11 +261,14 @@ pub fn instruction_class(instr: &Instruction) -> Option<&'static str> {
         | Instruction::HAtmS
         | Instruction::HAtmE
         | Instruction::JmpF { .. }
+        | Instruction::JmpFN { .. }
         | Instruction::HReduce { .. } => Some("hybrid"),
 
         // Branch class
         Instruction::Jmp { .. }
         | Instruction::Jif { .. }
+        | Instruction::Jgt { .. }
+        | Instruction::Jle { .. }
         | Instruction::Call { .. }
         | Instruction::Ret
         | Instruction::Halt => Some("branch"),
