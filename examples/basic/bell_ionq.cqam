@@ -18,14 +18,22 @@
 # infidelity on the physical device.
 #
 # Run on IonQ simulator (free):
-#   cargo run --bin cqam-run -- examples/basic/bell_ionq.cqam \
+#   cargo run --bin cqam-run --features ionq  -- examples/basic/bell_ionq.cqam \
 #       --backend ionq --qpu-device simulator \
 #       --ionq-api-key $IONQ_API_KEY --qpu-shots 1000
 #
 # Run on real IonQ Forte hardware:
-#   cargo run --bin cqam-run -- examples/basic/bell_ionq.cqam \
+#   cargo run --bin cqam-run --features ionq -- examples/basic/bell_ionq.cqam \
 #       --backend ionq --qpu-device qpu.forte-1 \
 #       --ionq-api-key $IONQ_API_KEY --qpu-shots 1000
+#
+# Notes:
+#  The IONQ_API_KEY environment variable contains a valid API key string.
+#  See https://docs.ionq.com/guides/managing-api-keys for details how to
+#  get a key and manage it in you environment.
+#
+#  If IONQ_API_KEY is defined in your environment, the --ionq-api-key argument
+#  can be omitted.
 #
 #! qubits 2
 

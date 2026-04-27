@@ -30,14 +30,22 @@
 # end-to-end IonQ connectivity before running heavier circuits.
 #
 # Run on IonQ simulator (free):
-#   cargo run --bin cqam-run -- examples/basic/ghz_ionq.cqam \
+#   cargo run --bin cqam-run --features ionq -- examples/basic/ghz_ionq.cqam \
 #       --backend ionq --qpu-device simulator \
-#       --ionq-api-key $IONQ_API_KEY --qpu-shots 1000
+#       --ionq-api-key $IONQ_API_KEY --qpu-shots 100
 #
 # Run on real IonQ Forte hardware:
-#   cargo run --bin cqam-run -- examples/basic/ghz_ionq.cqam \
+#   cargo run --bin cqam-run --features ionq -- examples/basic/ghz_ionq.cqam \
 #       --backend ionq --qpu-device qpu.forte-1 \
 #       --ionq-api-key $IONQ_API_KEY --qpu-shots 2000
+#
+# Notes:
+#  The IONQ_API_KEY environment variable contains a valid API key string.
+#  See https://docs.ionq.com/guides/managing-api-keys for details how to
+#  get a key and manage it in you environment.
+#
+#  If IONQ_API_KEY is defined in your environment, the --ionq-api-key argument
+#  can be omitted.
 #
 #! qubits 5
 
