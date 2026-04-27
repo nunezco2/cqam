@@ -123,11 +123,27 @@ fn run_program_with_config_metadata_and_data(
                 "ibm" => Err(CqamError::ConfigError(
                     "IBM backend not available. Rebuild with: cargo build --features ibm".to_string()
                 )),
+                #[cfg(feature = "ionq")]
+                "ionq" => {
+                    let api_key = resolve_ionq_api_key(config)?;
+                    let qpu = build_ionq_qpu(&api_key, device.as_deref(), config.qpu_timeout)?;
+                    let convergence = ConvergenceCriterion {
+                        confidence,
+                        ..ConvergenceCriterion::default()
+                    };
+                    let backend = CircuitBackend::new(qpu, convergence, shot_budget);
+                    run_with_backend(program, config, metadata, data, shared, private, backend)
+                }
+                #[cfg(not(feature = "ionq"))]
+                "ionq" => Err(CqamError::ConfigError(
+                    "IonQ backend not available. Rebuild with: cargo build --features ionq".to_string()
+                )),
                 other => Err(CqamError::ConfigError(
                     format!(
-                        "unknown QPU provider: '{}'. Valid: mock{}",
+                        "unknown QPU provider: '{}'. Valid: mock{}{}",
                         other,
-                        if cfg!(feature = "ibm") { ", ibm" } else { "" }
+                        if cfg!(feature = "ibm") { ", ibm" } else { "" },
+                        if cfg!(feature = "ionq") { ", ionq" } else { "" },
                     )
                 )),
             }
@@ -305,6 +321,56 @@ fn build_ibm_qpu(
              Using synthetic defaults.",
             device_name, e
         );
+    }
+
+    Ok(backend)
+}
+
+/// Resolve the IonQ Cloud API key.
+///
+/// Precedence:
+/// 1. `SimConfig.ionq_api_key` (from `--ionq-api-key` CLI flag)
+/// 2. `IONQ_API_KEY` environment variable
+///
+/// Returns `Err(CqamError::ConfigError)` with an actionable message if
+/// no key is found.
+#[allow(dead_code)]
+fn resolve_ionq_api_key(config: &SimConfig) -> Result<String, CqamError> {
+    if let Some(ref key) = config.ionq_api_key {
+        return Ok(key.clone());
+    }
+    if let Ok(key) = std::env::var("IONQ_API_KEY") {
+        if !key.is_empty() {
+            return Ok(key);
+        }
+    }
+    Err(CqamError::ConfigError(
+        "IonQ API key not found. Provide one of:\n  \
+         --ionq-api-key <KEY>\n  \
+         IONQ_API_KEY environment variable".to_string()
+    ))
+}
+
+/// Build an `IonQQpuBackend` configured for the specified device.
+///
+/// Uses `IonQQpuBackend::from_device` to auto-discover qubit count and
+/// calibration data from the IonQ API. Falls back to synthetic calibration
+/// if the characterization endpoint is unavailable.
+#[cfg(feature = "ionq")]
+fn build_ionq_qpu(
+    api_key: &str,
+    device: Option<&str>,
+    poll_timeout: Option<u64>,
+) -> Result<cqam_qpu_ionq::IonQQpuBackend, CqamError> {
+    let target = device.unwrap_or("simulator");
+
+    let mut backend = cqam_qpu_ionq::IonQQpuBackend::from_device(api_key, target)
+        .map_err(|e| CqamError::ConfigError(
+            format!("IonQ backend initialization failed for '{}': {}", target, e)
+        ))?;
+
+    if let Some(secs) = poll_timeout {
+        backend = backend.with_poll_timeout(secs);
     }
 
     Ok(backend)
@@ -761,6 +827,78 @@ mod tests {
                 Ok(_) => unreachable!(),
             };
             assert!(msg.contains("--features ibm"));
+        }
+    }
+
+    // ---- resolve_ionq_api_key -----------------------------------------------
+
+    #[test]
+    fn test_resolve_ionq_api_key_from_env() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("IONQ_API_KEY", "test_ionq_key_abc") };
+        let config = SimConfig::default();
+        let key = resolve_ionq_api_key(&config).unwrap();
+        assert_eq!(key, "test_ionq_key_abc");
+        unsafe { std::env::remove_var("IONQ_API_KEY") };
+    }
+
+    #[test]
+    fn test_resolve_ionq_api_key_config_takes_priority() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("IONQ_API_KEY", "env_key") };
+        let mut config = SimConfig::default();
+        config.ionq_api_key = Some("cli_key".to_string());
+        let key = resolve_ionq_api_key(&config).unwrap();
+        assert_eq!(key, "cli_key"); // config (CLI) wins over env
+        unsafe { std::env::remove_var("IONQ_API_KEY") };
+    }
+
+    #[test]
+    fn test_resolve_ionq_api_key_missing_returns_error() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::remove_var("IONQ_API_KEY") };
+        let config = SimConfig::default();
+        let result = resolve_ionq_api_key(&config);
+        assert!(result.is_err(), "expected error when no key available");
+        let msg = format!("{}", result.unwrap_err());
+        assert!(msg.contains("IonQ API key not found"));
+        assert!(msg.contains("--ionq-api-key"));
+        assert!(msg.contains("IONQ_API_KEY"));
+    }
+
+    #[test]
+    fn test_resolve_ionq_api_key_empty_env_rejected() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        unsafe { std::env::set_var("IONQ_API_KEY", "") };
+        let config = SimConfig::default();
+        // Empty env var must fall through to an error (no file fallback for IonQ).
+        assert!(config.ionq_api_key.is_none());
+        let result = resolve_ionq_api_key(&config);
+        assert!(result.is_err(), "empty env var must not be accepted");
+        unsafe { std::env::remove_var("IONQ_API_KEY") };
+    }
+
+    #[test]
+    fn test_ionq_provider_error_without_feature() {
+        #[cfg(not(feature = "ionq"))]
+        {
+            let config = SimConfig {
+                backend: Some(BackendChoice::Qpu {
+                    provider: "ionq".to_string(),
+                    device: None,
+                    shot_budget: 4096,
+                    confidence: 0.95,
+                }),
+                ..SimConfig::default()
+            };
+            let program = vec![cqam_core::instruction::Instruction::Halt];
+            let result = run_program_with_config(program, &config);
+            assert!(result.is_err(), "expected error for ionq provider without feature");
+            let msg = match result {
+                Err(e) => format!("{}", e),
+                Ok(_) => unreachable!(),
+            };
+            assert!(msg.contains("--features ionq"));
         }
     }
 

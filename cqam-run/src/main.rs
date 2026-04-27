@@ -51,13 +51,14 @@ fn print_help() {
     eprintln!("  --noise <model|path>  Noise model name (superconducting, trapped-ion, neutral-atom,");
     eprintln!("                        photonic, spin) or path to .toml file with custom parameters");
     eprintln!("  --noise-method <m>    Noise method: density-matrix, trajectory (auto if omitted)");
-    eprintln!("  --backend <choice>    Backend: simulation (default), mock, ibm");
+    eprintln!("  --backend <choice>    Backend: simulation (default), mock, ibm, ionq");
     eprintln!("  --qpu-shots <n>       Shot budget for QPU backends (default: 8192)");
     eprintln!("  --qpu-confidence <f>  Bayesian confidence level 0.0-1.0 (default: 0.95)");
     eprintln!("  --qpu-device <name>   QPU device name (provider-specific)");
     eprintln!("  --ibm-token <TOKEN>               IBM Quantum API token");
     eprintln!("  --ibm-optimization-level <N>      Qiskit transpiler optimization level (0-3) [default: 1]");
-    eprintln!("  --qpu-timeout <secs>  Job polling timeout in seconds (default: 1800)");
+    eprintln!("  --ionq-api-key <KEY>              IonQ Cloud API key (or set IONQ_API_KEY env var)");
+    eprintln!("  --qpu-timeout <secs>  Job polling timeout in seconds (default: 14400)");
     eprintln!("  --verbose             Print config and execution summary");
     eprintln!("  --version             Show version");
     eprintln!("  --help                Show this help message");
@@ -83,6 +84,7 @@ struct CliArgs {
     qpu_device: Option<String>,
     ibm_token: Option<String>,
     ibm_optimization_level: Option<u8>,
+    ionq_api_key: Option<String>,
     qpu_timeout: Option<u64>,
 }
 
@@ -118,6 +120,7 @@ fn parse_args() -> Result<CliArgs, String> {
     let mut qpu_device: Option<String> = None;
     let mut ibm_token: Option<String> = None;
     let mut ibm_optimization_level: Option<u8> = None;
+    let mut ionq_api_key: Option<String> = None;
     let mut qpu_timeout: Option<u64> = None;
 
     let mut i = 1;
@@ -187,9 +190,9 @@ fn parse_args() -> Result<CliArgs, String> {
                 i += 1;
                 let val = args.get(i).ok_or("--backend requires a value")?;
                 match val.as_str() {
-                    "simulation" | "mock" | "ibm" => backend = Some(val.clone()),
+                    "simulation" | "mock" | "ibm" | "ionq" => backend = Some(val.clone()),
                     other => return Err(format!(
-                        "unknown backend: '{}'. Valid: simulation, mock, ibm", other
+                        "unknown backend: '{}'. Valid: simulation, mock, ibm, ionq", other
                     )),
                 }
             }
@@ -231,6 +234,10 @@ fn parse_args() -> Result<CliArgs, String> {
                     eprintln!("warning: --ibm-optimization-level {} clamped to 3", n);
                 }
                 ibm_optimization_level = Some(n.min(3));
+            }
+            "--ionq-api-key" => {
+                i += 1;
+                ionq_api_key = Some(args.get(i).ok_or("--ionq-api-key requires a value")?.clone());
             }
             "--qpu-timeout" => {
                 i += 1;
@@ -278,6 +285,7 @@ fn parse_args() -> Result<CliArgs, String> {
         qpu_device,
         ibm_token,
         ibm_optimization_level,
+        ionq_api_key,
         qpu_timeout,
     })
 }
@@ -344,6 +352,12 @@ fn main() {
             shot_budget: cli.qpu_shots.unwrap_or(4096),
             confidence: cli.qpu_confidence.unwrap_or(0.95),
         },
+        Some("ionq") => BackendChoice::Qpu {
+            provider: "ionq".to_string(),
+            device: cli.qpu_device.clone(),
+            shot_budget: cli.qpu_shots.unwrap_or(4096),
+            confidence: cli.qpu_confidence.unwrap_or(0.95),
+        },
         Some(other) => {
             eprintln!("Error: unknown backend '{}'", other);
             process::exit(1);
@@ -351,12 +365,15 @@ fn main() {
     };
     config.backend = Some(backend_choice);
 
-    // Wire IBM-specific CLI args into SimConfig
+    // Wire backend-specific CLI args into SimConfig
     if let Some(ref token) = cli.ibm_token {
         config.ibm_token = Some(token.clone());
     }
     if let Some(level) = cli.ibm_optimization_level {
         config.ibm_optimization_level = Some(level);
+    }
+    if let Some(ref key) = cli.ionq_api_key {
+        config.ionq_api_key = Some(key.clone());
     }
     if let Some(secs) = cli.qpu_timeout {
         config.qpu_timeout = Some(secs);
@@ -394,13 +411,14 @@ fn main() {
     }
 
     if cli.verbose {
-        // Redact ibm_token to prevent accidental token leakage in logs.
-        let saved_token = config.ibm_token.take();
-        if saved_token.is_some() {
-            config.ibm_token = Some("***".to_string());
-        }
+        // Redact secrets to prevent accidental leakage in logs.
+        let saved_ibm_token = config.ibm_token.take();
+        let saved_ionq_key = config.ionq_api_key.take();
+        if saved_ibm_token.is_some() { config.ibm_token = Some("***".to_string()); }
+        if saved_ionq_key.is_some() { config.ionq_api_key = Some("***".to_string()); }
         eprintln!("Config: {:?}", config);
-        config.ibm_token = saved_token;
+        config.ibm_token = saved_ibm_token;
+        config.ionq_api_key = saved_ionq_key;
     }
 
     let parsed = match load_program(&cli.input) {

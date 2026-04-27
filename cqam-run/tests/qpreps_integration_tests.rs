@@ -23,6 +23,7 @@ fn sim_config_3q() -> SimConfig {
         ibm_token: None,
         ibm_optimization_level: None,
         qpu_timeout: None,
+        ionq_api_key: None,
     }
 }
 
@@ -150,6 +151,7 @@ amps:
         ibm_token: None,
         ibm_optimization_level: None,
         qpu_timeout: None,
+        ionq_api_key: None,
     };
     let result = run_program_with_data(
         parsed.instructions,
@@ -210,6 +212,7 @@ amps:
         ibm_token: None,
         ibm_optimization_level: None,
         qpu_timeout: None,
+        ionq_api_key: None,
     };
     let result = run_program_with_data(
         parsed.instructions,

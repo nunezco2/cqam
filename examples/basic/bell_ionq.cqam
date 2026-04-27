@@ -1,0 +1,99 @@
+# examples/basic/bell_ionq.cqam
+# Bell State on IonQ — 2-qubit entanglement
+#
+# Creates |Phi+> = (|00> + |11>) / sqrt(2), the simplest maximally
+# entangled state.  Both qubits always agree when measured: see |00>
+# or |11>, never |01> or |10>.
+#
+# On IonQ trapped-ion hardware this circuit uses exactly 1 CNOT and
+# 0 SWAP gates regardless of qubit assignment (all-to-all connectivity).
+# The cqam-micro routing stage verifies zero SWAPs are inserted.
+#
+# Expected output:
+#   |00> : ~50%    |11> : ~50%    |01>, |10> : ~0%
+#   mean     ≈ 1.50    (midpoint of 0 and 3)
+#   variance ≈ 2.25    (bimodal at 0 and 3)
+#
+# Any deviation in the bar chart reveals readout errors or gate
+# infidelity on the physical device.
+#
+# Run on IonQ simulator (free):
+#   cargo run --bin cqam-run --features ionq  -- examples/basic/bell_ionq.cqam \
+#       --backend ionq --qpu-device simulator \
+#       --ionq-api-key $IONQ_API_KEY --qpu-shots 1000
+#
+# Run on real IonQ Forte hardware:
+#   cargo run --bin cqam-run --features ionq -- examples/basic/bell_ionq.cqam \
+#       --backend ionq --qpu-device qpu.forte-1 \
+#       --ionq-api-key $IONQ_API_KEY --qpu-shots 1000
+#
+# Notes:
+#  The IONQ_API_KEY environment variable contains a valid API key string.
+#  See https://docs.ionq.com/guides/managing-api-keys for details how to
+#  get a key and manage it in you environment.
+#
+#  If IONQ_API_KEY is defined in your environment, the --ionq-api-key argument
+#  can be omitted.
+#
+#! qubits 2
+
+.data
+    .org 1000
+banner:
+    .ascii "=== Bell State |Phi+> on IonQ ===\n"
+expect:
+    .ascii "Ideal: P(|00>) = 50%  P(|11>) = 50%  nothing else\n"
+res_fmt:
+    .ascii "Results: mode=%d, mean=%f, variance=%f\n"
+ideal_fmt:
+    .ascii "Ideal:   mode=0 or 3, mean=1.500000, variance=2.250000\n"
+
+.code
+
+# --- Print banner and expected output ---
+    ILDI R0, @banner
+    ILDI R1, @banner.len
+    IDEC R1
+    ECALL PRINT_STR
+
+    ILDI R0, @expect
+    ILDI R1, @expect.len
+    IDEC R1
+    ECALL PRINT_STR
+
+# --- Prepare Bell state |Phi+> = (|00> + |11>) / sqrt(2) ---
+    QPREP Q0, GHZS                   # Q0 = (|00> + |11>) / sqrt(2)
+
+# --- Measure — only |00> (state 0) and |11> (state 3) should appear ---
+    QOBSERVE H0, Q0
+
+# --- Bar chart: two equal bars at |00> and |11> ---
+    ILDI R0, 0                       # H0
+    ILDI R1, 1                       # mode 1: bar chart
+    ECALL PRINT_HIST
+
+# --- Statistics ---
+    HREDUCE MODEV, H0, R5            # R5 = most-seen state (0 or 3)
+    HREDUCE MEANT, H0, F1            # F1 = mean  (ideal: 1.5)
+    HREDUCE VARNC, H0, F2            # F2 = variance (ideal: 2.25)
+
+# --- Print measured results ---
+    ISTR R5, 0
+    FSTR F1, 1
+    FSTR F2, 2
+
+    ILDI R0, @res_fmt
+    ILDI R1, @res_fmt.len
+    IDEC R1
+    ILDM R2, 0                       # R2 = mode (%d)
+    FLDM F1, 1                       # F1 = mean (%f)
+    FLDM F2, 2                       # F2 = variance (%f)
+    ECALL PRINT_STR
+
+# --- Print ideal reference for comparison ---
+    ILDI R0, @ideal_fmt
+    ILDI R1, @ideal_fmt.len
+    IDEC R1
+    ECALL PRINT_STR
+
+    HALT

@@ -127,6 +127,11 @@ pub struct SimConfig {
     #[serde(skip)]
     pub ibm_token: Option<String>,
 
+    /// IonQ Cloud API key (from --ionq-api-key CLI flag or IONQ_API_KEY env var).
+    /// Not persisted in TOML -- tokens should not be written to config files.
+    #[serde(skip)]
+    pub ionq_api_key: Option<String>,
+
     /// IBM transpiler optimization level (0-3, from --ibm-optimization-level).
     /// Forwarded to `qk_transpile` during circuit compilation.
     #[serde(skip)]
@@ -154,6 +159,7 @@ impl Default for SimConfig {
             backend: None,
             ibm_token: None,
             ibm_optimization_level: None,
+            ionq_api_key: None,
             qpu_timeout: None,
         }
     }
