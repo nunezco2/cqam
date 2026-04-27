@@ -1,0 +1,29 @@
+# simple_qrng.cqam — Generate 10 random numbers via quantum measurement
+#
+#! qubits 4
+
+.data
+    .org 100
+fmt:
+    .ascii "%d\n"
+
+.code
+    ILDI R10, 0
+    ILDI R11, 10
+
+LABEL: rng_loop
+    QPREP Q0, UNIF
+    QOBSERVE H0, Q0, SAMPLE
+    HREDUCE ROUND, H0, R12
+
+    ILDI R0, @fmt
+    ILDI R1, @fmt.len
+    IDEC R1
+    IMOV R2, R12
+    ECALL PRINT_STR
+
+    IINC R10
+    ICMP R10, R11
+    JLT rng_loop
+
+    HALT

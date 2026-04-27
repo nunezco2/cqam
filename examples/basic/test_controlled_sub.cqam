@@ -202,8 +202,8 @@ LABEL: ta1_end
 
     # Check R10 == 6
     ILDI R11, 6
-    IEQ R10, R10, R11
-    JIF R10, ta2_pass
+    ICMP R10, R11
+    JEQ ta2_pass
     ILDI R0, @ta2_fail
     ILDI R1, @ta2_fail.len
     IDEC R1

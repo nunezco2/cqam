@@ -31,10 +31,10 @@ res_fmt:
     ILDI R8, 1
     ILDI R9, 0
 LABEL: grov_pow2
-    IEQ R14, R9, R15
-    JIF R14, grov_pow2_done
+    ICMP R9, R15
+    JEQ grov_pow2_done
     IADD R8, R8, R8
-    IADD R9, R9, R3
+    IINC R9
     JMP grov_pow2
 LABEL: grov_pow2_done
     # R8 = 2^n = N (Hilbert space dimension)
@@ -59,14 +59,12 @@ LABEL: grov_pow2_done
     ISTR R2, 501          # save iteration count to CMEM[501]
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 42
     ILDM R3, 500
     ECALL PRINT_STR
@@ -87,8 +85,8 @@ LABEL: grover_loop
     QKERNEL GROV, Q0, Q0, R0, R1   # kernel=4 (grover_iter), target=R0
 
 # Increment counter, decrement remaining
-    IADD R4, R4, R3      # R4 += 1
-    ISUB R2, R2, R3      # R2 -= 1
+    IINC R4  # R4++
+    IDEC R2  # R2 -= 1
 
 # Loop while R2 > 0
     JIF R2, grover_loop
@@ -116,8 +114,7 @@ LABEL: grover_loop
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0            # CMEM[0] = found state
     ILDM R3, 1            # CMEM[1] = iterations
     ECALL PRINT_STR

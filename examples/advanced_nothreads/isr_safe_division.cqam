@@ -53,8 +53,8 @@ bit_fmt:
     ILDI R4, 8                    # max
 
 LABEL: main_loop
-    IGT R6, R3, R4
-    JIF R6, bitwise_demo
+    ICMP R3, R4
+    JGT bitwise_demo
 
     # Compute K! via subroutine (R0=K in, R1=K! out)
     IADD R0, R3, R15
@@ -102,13 +102,13 @@ LABEL: bitwise_demo
 
     # ZF flag test
     ISUB R9, R15, R15             # 0 → sets ZF
-    JMPF ZF, zf_ok
+    JEQ zf_ok
     JMP zf_ok
 LABEL: zf_ok
 
     # NF flag test
     ILDI R9, -5                   # negative
-    JMPF NF, nf_ok
+    JLT nf_ok
     JMP nf_ok
 LABEL: nf_ok
 
@@ -131,8 +131,8 @@ LABEL: factorial
     ILDI R10, 1
     ILDI R11, 0
 LABEL: fact_loop
-    IEQ R12, R11, R0
-    JIF R12, fact_done
+    ICMP R11, R0
+    JEQ fact_done
     IADD R11, R11, R10
     IMUL R1, R1, R11
     JMP fact_loop

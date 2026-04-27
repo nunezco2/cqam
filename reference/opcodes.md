@@ -138,8 +138,13 @@ bits [31:24] contain the 8-bit opcode.
 | 0x63 | FMOV     | RR     | F[dst] = F[src]; no PSW update |
 | 0x64 | ZMOV     | RR     | Z[dst] = Z[src]; no PSW update |
 | 0x65 | QXCH     | Q2     | Swap Q-file handles between Q[qa] and Q[qb]; zero-cost, no gates emitted; self-swap (qa==qb) encodes as NOP |
+| 0x66 | ICMP     | RR     | PSW ← flags(R[ra] - R[rb]); ZF/NF/OF updated; no destination written |
+| 0x67 | ICMPI    | RI     | PSW ← flags(R[ra] - sign_extend(imm16)); ZF/NF/OF updated; no destination written |
+| 0x68 | JMPFN    | JR     | if !PSW.flag[pred]: PC = addr16 |
+| 0x69 | JGT      | J      | if ZF=0 AND NF==OF: PC = addr24 (signed greater-than) |
+| 0x6A | JLE      | J      | if ZF=1 OR NF!=OF: PC = addr24 (signed less-or-equal) |
 
-Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0x5F (reserved), 0x66-0xFF (future).
+Reserved: 0x2F (interrupt), 0x40 (formerly QSAMPLE, removed), 0x50 (reserved), 0x5D-0x5F (reserved), 0x6B-0xFF (future).
 
 ## 4. Distribution IDs (QPREP / QPREPR / QPREPN dist field)
 
@@ -188,6 +193,7 @@ are intent-based flags set by kernel identity, not dynamic state inspection.
 | 7  | HF   | Hybrid mode active |
 | 12 | IF   | Interference exploited by last kernel |
 | 13 | AF   | Atomic section active (set on elected leader between HATMS and HATME) |
+| 14 | NW   | Normalization warning: set by QPREPS/QPREPSM when auto-correction was applied |
 
 ## 7. Reduction Function IDs (HREDUCE func field)
 

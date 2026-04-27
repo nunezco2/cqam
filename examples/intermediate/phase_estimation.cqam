@@ -30,14 +30,12 @@ res:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp
     ILDI R1, @inp.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -67,8 +65,8 @@ LABEL: qpe_loop
     FMUL F2, F2, F1
 
 # Increment counter
-    IADD R0, R0, R2
-    ISUB R1, R1, R2
+    IINC R0
+    IDEC R1
 
 # Continue if R1 > 0
     JIF R1, qpe_loop
@@ -102,10 +100,10 @@ LABEL: qpe_loop
     ILDI R7, 1           # R7 = accumulator for 2^N
     ILDI R8, 0           # R8 = loop counter
 LABEL: pe_pow2
-    IEQ R9, R8, R6
-    JIF R9, pe_pow2_done
+    ICMP R8, R6
+    JEQ pe_pow2_done
     IADD R7, R7, R7
-    IADD R8, R8, R2      # R2 = constant 1
+    IINC R8              # R2 = constant 1
     JMP pe_pow2
 LABEL: pe_pow2_done
     CVTIF F9, R7         # F9 = 2^N as float
@@ -118,12 +116,11 @@ LABEL: pe_pow2_done
 
 # --- Print results ---
     # R5 still holds argmax (integer peak bin index)
-    IADD R2, R5, R4      # R2 = argmax (first %d arg; R4=0)
+    IMOV R2, R5           # R2 = argmax (first %d arg)
     FLDM F1, 2           # F1 = estimated phase (CMEM[2], stored via FSTR)
     ILDI R0, @res
     ILDI R1, @res.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

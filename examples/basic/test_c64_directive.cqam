@@ -78,8 +78,8 @@ edge_lowj:
 # ===========================================================================
     ILDI R0, @diag.len
     ILDI R1, 4
-    IEQ R2, R0, R1       # R2 = (@diag.len == 4)
-    JIF R2, len_ok
+    ICMP R0, R1           # Compare @diag.len with 4
+    JEQ len_ok
 
     # FAIL
     ILDI R0, @len_fail
@@ -133,8 +133,8 @@ LABEL: len_done
 
     # Check mode == 1
     ILDI R3, 1
-    IEQ R4, R2, R3
-    JIF R4, diag_ok
+    ICMP R2, R3
+    JEQ diag_ok
 
     # FAIL
     ILDI R0, @diag_fail
@@ -168,8 +168,8 @@ LABEL: diag_done
     FMUL F3, F0, F2        # F3 = 1.5e-3 * 10000 = 15.0
     CVTFI R3, F3           # R3 should be 15
     ILDI R4, 15
-    IEQ R5, R3, R4
-    JIF R5, sci_ok_1
+    ICMP R3, R4
+    JEQ sci_ok_1
     ILDI R13, 1
 LABEL: sci_ok_1
 
@@ -180,8 +180,8 @@ LABEL: sci_ok_1
     FLDX F0, R6           # F0 = im(first) = -20.0
     CVTFI R3, F0           # R3 = -20
     ILDI R4, -20
-    IEQ R5, R3, R4
-    JIF R5, sci_ok_2
+    ICMP R3, R4
+    JEQ sci_ok_2
     ILDI R13, 1
 LABEL: sci_ok_2
 
@@ -206,9 +206,8 @@ LABEL: sci_ok_3
 LABEL: sci_ok_4
 
     # Print sci result
-    ILDI R5, 0
-    IEQ R5, R13, R5       # R5 = (R13 == 0) = pass?
-    JIF R5, sci_pass_print
+    ICMPI R13, 0           # Compare failure count with 0
+    JEQ sci_pass_print
 
     ILDI R0, @sci_fail
     ILDI R1, @sci_fail.len
@@ -262,8 +261,8 @@ LABEL: edge_preal_ok1
     FMUL F3, F0, F2
     CVTFI R3, F3
     ILDI R4, 314
-    IEQ R5, R3, R4
-    JIF R5, edge_preal_ok2
+    ICMP R3, R4
+    JEQ edge_preal_ok2
     ILDI R13, 1
 LABEL: edge_preal_ok2
 
@@ -280,13 +279,13 @@ LABEL: edge_preal_ok2
     CVTFI R3, F0
     CVTFI R4, F1
     ILDI R5, 3
-    IEQ R7, R3, R5
-    JIF R7, edge_neg_ok1
+    ICMP R3, R5
+    JEQ edge_neg_ok1
     ILDI R13, 1
 LABEL: edge_neg_ok1
     ILDI R5, 5
-    IEQ R7, R4, R5
-    JIF R7, edge_neg_ok2
+    ICMP R4, R5
+    JEQ edge_neg_ok2
     ILDI R13, 1
 LABEL: edge_neg_ok2
 
@@ -306,9 +305,8 @@ LABEL: edge_lowj_ok1
 LABEL: edge_lowj_ok2
 
     # Print edge case result
-    ILDI R5, 0
-    IEQ R5, R13, R5       # R5 = (R13 == 0) = pass?
-    JIF R5, edge_pass_print
+    ICMPI R13, 0           # Compare failure count with 0
+    JEQ edge_pass_print
 
     ILDI R0, @edge_fail
     ILDI R1, @edge_fail.len
@@ -328,9 +326,8 @@ LABEL: edge_done
 # ===========================================================================
 # Overall result
 # ===========================================================================
-    ILDI R5, 0
-    IEQ R5, R14, R5       # R5 = (R14 == 0) = all pass?
-    JIF R5, all_pass
+    ICMPI R14, 0           # Compare overall failure count with 0
+    JEQ all_pass
 
     ILDI R0, @overall_fail
     ILDI R1, @overall_fail.len

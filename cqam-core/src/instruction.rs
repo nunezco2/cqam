@@ -106,6 +106,12 @@ pub enum Instruction {
     /// Integer greater-than: R[dst] = (R[lhs] > R[rhs]) ? 1 : 0
     IGt { dst: u8, lhs: u8, rhs: u8 },
 
+    /// Integer compare: compute R[lhs] - R[rhs], set ZF/NF/OF, discard result.
+    ICmp { lhs: u8, rhs: u8 },
+
+    /// Integer compare immediate: compute R[src] - imm, set ZF/NF/OF, discard result.
+    ICmpI { src: u8, imm: i16 },
+
     // -- Float arithmetic (F-file: f64 x 16) ----------------------------------
 
     /// Float addition: F[dst] = F[lhs] + F[rhs]
@@ -476,6 +482,16 @@ pub enum Instruction {
     /// flag: flag ID (see flag_id module)
     JmpF { flag: FlagId, target: String },
 
+    /// Conditional jump if PSW flag is NOT set.
+    /// if !PSW.flag[flag] then PC = address_of(target)
+    JmpFN { flag: FlagId, target: String },
+
+    /// Signed greater-than jump: jump if ZF=0 AND NF==OF.
+    Jgt { target: String },
+
+    /// Signed less-or-equal jump: jump if ZF=1 OR NF!=OF.
+    Jle { target: String },
+
     /// Reduce hybrid value to classical value.
     /// The output register file depends on the reduction function:
     /// - round/floor/ceil/trunc/abs/negate (0-5): H[src] -> R[dst] (int)
@@ -762,6 +778,8 @@ pub enum FlagId {
     If = 12,
     /// Atomic section flag.
     Af = 13,
+    /// Normalization warning flag (set by QPREPS/QPREPSM on unnormalized input).
+    Nw = 14,
 }
 
 impl TryFrom<u8> for FlagId {
@@ -782,6 +800,7 @@ impl TryFrom<u8> for FlagId {
             11 => Ok(FlagId::Mg),
             12 => Ok(FlagId::If),
             13 => Ok(FlagId::Af),
+            14 => Ok(FlagId::Nw),
             _ => Err(CqamError::InvalidId { domain: "FlagId", value: v }),
         }
     }
@@ -815,6 +834,7 @@ impl FlagId {
             FlagId::Mg => "MG",
             FlagId::If => "IF",
             FlagId::Af => "AF",
+            FlagId::Nw => "NW",
         }
     }
 
@@ -835,6 +855,7 @@ impl FlagId {
             "MG" => Some(FlagId::Mg),
             "IF" => Some(FlagId::If),
             "AF" => Some(FlagId::Af),
+            "NW" => Some(FlagId::Nw),
             _ => None,
         }
     }

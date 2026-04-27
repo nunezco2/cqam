@@ -75,13 +75,12 @@ res_fmt:
 #   State 4 (100) -> error on qubit 2
 # QFLIP corrects by re-flipping the identified qubit.
 
-    IEQ R9, R7, R1       # Is it state 1? (error on q0)
-    JIF R9, correct_q0
-    ILDI R10, 2
-    IEQ R9, R7, R10      # Is it state 2? (error on q1)
-    JIF R9, correct_q1
-    IEQ R9, R7, R3       # Is it state 4? (error on q2)
-    JIF R9, correct_q2
+    ICMP R7, R1           # Compare syndrome with state 1 (error on q0)
+    JEQ correct_q0
+    ICMPI R7, 2           # Compare syndrome with state 2 (error on q1)
+    JEQ correct_q1
+    ICMP R7, R3           # Compare syndrome with state 4 (error on q2)
+    JEQ correct_q2
     JMP verify_correction # No error detected
 
 LABEL: correct_q0

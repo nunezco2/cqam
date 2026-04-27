@@ -105,7 +105,7 @@
       "patterns": [
         {
           "name": "keyword.other.opcode.integer.cqam",
-          "match": "\\b(?:IADD|ISUB|IMUL|IDIV|IMOD|IAND|IOR|IXOR|INOT|IINC|IDEC|IMOV|ISHL|ISHR|ILDI|ILDM|ISTR|ILDX|ISTRX|IEQ|ILT|IGT)\\b"
+          "match": "\\b(?:IADD|ISUB|IMUL|IDIV|IMOD|IAND|IOR|IXOR|INOT|IINC|IDEC|IMOV|ISHL|ISHR|ILDI|ILDM|ISTR|ILDX|ISTRX|IEQ|ILT|IGT|ICMP|ICMPI)\\b"
         },
         {
           "name": "keyword.other.opcode.float.cqam",
@@ -121,7 +121,7 @@
         },
         {
           "name": "keyword.control.flow.cqam",
-          "match": "\\b(?:JMP|JIF|JMPF|CALL|RET|HALT|NOP)\\b"
+          "match": "\\b(?:JMP|JIF|JMPF|JMPFN|JGT|JLE|JEQ|JNE|JLT|JGE|JZ|JNZ|JOV|JNO|JQACT|JSUP|JENT|JINF|JCOL|JDEC|JNRM|CALL|RET|HALT|NOP)\\b"
         },
         {
           "name": "keyword.control.interrupt.cqam",
@@ -155,7 +155,7 @@
     },
     "flags": {
       "name": "support.constant.flag.cqam",
-      "match": "\\b(?:ZF|NF|OF|PF|QF|SF|EF|HF|DF|CF|FK|MG|IF|AF)\\b"
+      "match": "\\b(?:ZF|NF|OF|PF|QF|SF|EF|HF|DF|CF|FK|MG|IF|AF|NW)\\b"
     },
     "mode-constants": {
       "name": "support.constant.mode.cqam",

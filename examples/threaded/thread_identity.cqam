@@ -41,8 +41,7 @@ done_msg:
 # --- Print banner ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # --- Fork into 2 threads ---
@@ -79,8 +78,7 @@ done_msg:
     ILDM R4, 0                 # R4 = tag[0]
     ILDI R0, @id_fmt
     ILDI R1, @id_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # --- Print identity for thread 1 ---
@@ -89,15 +87,13 @@ done_msg:
     ILDM R4, 1                 # R4 = tag[1]
     ILDI R0, @id_fmt
     ILDI R1, @id_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # --- Done ---
     ILDI R0, @done_msg
     ILDI R1, @done_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
     HALT

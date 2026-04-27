@@ -31,14 +31,12 @@ res:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp
     ILDI R1, @inp.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ILDI R3, 5
     ECALL PRINT_STR
@@ -64,9 +62,9 @@ LABEL: count_loop
     ILDI R7, 0           # R7 = inner iteration counter
 LABEL: grover_count_inner
     QKERNEL GROV, Q0, Q0, R0, R1   # Grover iteration
-    IADD R7, R7, R3
-    ILT R8, R7, R5      # R8 = (R7 < R5)
-    JIF R8, grover_count_inner
+    IINC R7
+    ICMP R7, R5          # compare R7 with R5
+    JLT grover_count_inner
 
 # --- Apply QFT to extract phase ---
     QKERNEL QFFT, Q1, Q0, R1, R1   # Q1 = QFT(Grover^k state)
@@ -91,15 +89,15 @@ LABEL: grover_count_inner
 
 # --- Store phase estimate ---
     ISTRX R9, R6         # CMEM[R6] = phase index for this depth
-    IADD R6, R6, R3      # Advance storage pointer
+    IINC R6  # Advance storage pointer
     FSTR F0, 300         # Store mean (fixed address, overwritten each iteration)
 
 # --- Double the Grover depth for next trial ---
     IADD R5, R5, R5      # R5 *= 2
 
 # --- Advance outer loop ---
-    IADD R4, R4, R3
-    ISUB R2, R2, R3
+    IINC R4
+    IDEC R2
     JIF R2, count_loop
 
 # === Classical post-processing ===
@@ -139,8 +137,7 @@ LABEL: store_results
     ILDM R3, 4           # R3 = CMEM[4] = final Grover depth
     ILDI R0, @res
     ILDI R1, @res.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

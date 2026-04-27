@@ -76,14 +76,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 2               # n = 2
     ILDI R3, 3               # s = 3 (binary 11)
     ILDI R4, 4               # rounds
@@ -185,32 +183,28 @@ LABEL: simon_round
 
 # Update round counter
     ILDM R5, 101
-    ILDI R15, 1
-    IADD R5, R5, R15
+    IINC R5
     ISTR R5, 101
 
 # Print round result
     ILDI R0, @round_fmt
     ILDI R1, @round_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 101           # round number
-    IADD R3, R6, R9        # y value (R9=0)
-    IADD R4, R14, R9       # y.s value
+    IMOV R3, R6             # y value
+    IMOV R4, R14            # y.s value
     ECALL PRINT_STR
 
 # Store y value for post-processing
     ILDM R5, 101           # round number (1-based)
-    ILDI R15, 1
-    ISUB R5, R5, R15       # 0-based index
+    IDEC R5  # 0-based index
     ILDI R15, 110
     IADD R5, R5, R15       # CMEM address 110 + index
     ISTRX R6, R5           # Store y value
 
 # Decrement remaining
     ILDM R12, 100
-    ILDI R15, 1
-    ISUB R12, R12, R15
+    IDEC R12
     ISTR R12, 100
 
     JIF R12, simon_round
@@ -230,41 +224,40 @@ LABEL: simon_round
     ILDI R5, 110
     ILDX R6, R5           # y_0
     IXOR R14, R14, R6
-    ILDI R15, 1
-    IADD R5, R5, R15
+    IINC R5
     ILDX R6, R5           # y_1
     IXOR R14, R14, R6
-    IADD R5, R5, R15
+    IINC R5
     ILDX R6, R5           # y_2
     IXOR R14, R14, R6
-    IADD R5, R5, R15
+    IINC R5
     ILDX R6, R5           # y_3
     IXOR R14, R14, R6
 
 # If XOR of all y's is 0, try using a single nonzero y
     ILDI R15, 0
-    IEQ R10, R14, R15
-    JIF R10, try_single_y
+    ICMP R14, R15
+    JEQ try_single_y
     JMP have_candidate
 
 LABEL: try_single_y
 # Use the first nonzero y value
     ILDI R5, 110
     ILDX R14, R5          # try y_0
-    IEQ R10, R14, R15
-    JIF R10, try_y1
+    ICMP R14, R15
+    JEQ try_y1
     JMP have_candidate
 LABEL: try_y1
     ILDI R5, 111
     ILDX R14, R5          # try y_1
-    IEQ R10, R14, R15
-    JIF R10, try_y2
+    ICMP R14, R15
+    JEQ try_y2
     JMP have_candidate
 LABEL: try_y2
     ILDI R5, 112
     ILDX R14, R5          # try y_2
-    IEQ R10, R14, R15
-    JIF R10, try_y3
+    ICMP R14, R15
+    JEQ try_y3
     JMP have_candidate
 LABEL: try_y3
     ILDI R5, 113
@@ -281,8 +274,7 @@ LABEL: have_candidate
 
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0
     ILDM R3, 1
     ILDM R4, 2

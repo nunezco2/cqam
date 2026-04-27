@@ -74,14 +74,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 2               # a = 2
     ILDI R3, 15              # N = 15
     ILDI R4, 4               # expected period
@@ -169,8 +167,7 @@ res_fmt:
 # ===========================================================================
     ILDI R0, @t1_hdr
     ILDI R1, @t1_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # Prepare |1>: start from |0000>, flip qubit 3 (LSB).
@@ -195,8 +192,7 @@ res_fmt:
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 0
     ECALL PRINT_STR
 
@@ -216,8 +212,7 @@ res_fmt:
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 1
     ECALL PRINT_STR
 
@@ -237,8 +232,7 @@ res_fmt:
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 2
     ECALL PRINT_STR
 
@@ -258,8 +252,7 @@ res_fmt:
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 3
     ECALL PRINT_STR
 
@@ -279,8 +272,7 @@ res_fmt:
 
     ILDI R0, @t1_step
     ILDI R1, @t1_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 4
     ECALL PRINT_STR
 
@@ -288,19 +280,17 @@ res_fmt:
     QOBSERVE H0, Q0
     HREDUCE ARGMX, H0, R10
     ILDI R11, 1
-    IEQ R10, R10, R11
-    JIF R10, t1_pass
+    ICMP R10, R11
+    JEQ t1_pass
     ILDI R0, @t1_fail
     ILDI R1, @t1_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t1_end
 LABEL: t1_pass
     ILDI R0, @t1_ok
     ILDI R1, @t1_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: t1_end
 
@@ -314,8 +304,7 @@ LABEL: t1_end
 
     ILDI R0, @t2_hdr
     ILDI R1, @t2_hdr.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R7, 300          # R7 = base address of U^2 permutation
@@ -334,8 +323,7 @@ LABEL: t1_end
 
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 0
     ECALL PRINT_STR
 
@@ -349,8 +337,7 @@ LABEL: t1_end
 
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 1
     ECALL PRINT_STR
 
@@ -364,8 +351,7 @@ LABEL: t1_end
 
     ILDI R0, @t2_step
     ILDI R1, @t2_step.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDI R2, 2
     ECALL PRINT_STR
 
@@ -373,19 +359,17 @@ LABEL: t1_end
     QOBSERVE H0, Q1
     HREDUCE ARGMX, H0, R10
     ILDI R11, 1
-    IEQ R10, R10, R11
-    JIF R10, t2_pass
+    ICMP R10, R11
+    JEQ t2_pass
     ILDI R0, @t2_fail
     ILDI R1, @t2_fail.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
     JMP t2_end
 LABEL: t2_pass
     ILDI R0, @t2_ok
     ILDI R1, @t2_ok.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 LABEL: t2_end
 
@@ -399,8 +383,7 @@ LABEL: t2_end
 
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 0
     ILDM R3, 1
     ECALL PRINT_STR

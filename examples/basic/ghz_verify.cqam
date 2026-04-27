@@ -54,8 +54,8 @@ res_fmt:
     ILDI R11, 1          # R11 = accumulator for 2^N
     ILDI R12, 0          # R12 = loop counter
 LABEL: ghz_pow2
-    IEQ R14, R12, R15
-    JIF R14, ghz_pow2_done
+    ICMP R12, R15
+    JEQ ghz_pow2_done
     IADD R11, R11, R11   # R11 *= 2
     IINC R12
     JMP ghz_pow2
@@ -111,13 +111,13 @@ LABEL: ghz_pow2_done
     HREDUCE MEANT, H5, F10  # F10 = mean of encoded state
 
 # ===============================================
-# Entanglement verification via JMPF
+# Entanglement verification via JENT alias
 # ===============================================
     HFORK
 # Check if entanglement flag (EF) is set
     QPREP Q3, GHZS          # GHZ should set EF
     QKERNEL ENTG, Q3, Q3, R2, R2   # Entangle (should set SF and EF)
-    JMPF EF, entangled_branch   # Jump if EF set
+    JENT entangled_branch        # Jump if entangled (EF set)
 
 # Not entangled path
     ILDI R7, 0

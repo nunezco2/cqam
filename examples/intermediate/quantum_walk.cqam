@@ -31,14 +31,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -77,8 +75,8 @@ LABEL: walk_loop
 # Runs blind — no mid-step observation (physical realism)
 
 # Increment step, decrement remaining
-    IADD R2, R2, R1
-    ISUB R0, R0, R1
+    IINC R2
+    IDEC R0
 
 # Continue if steps remain
     JIF R0, walk_loop
@@ -104,8 +102,7 @@ LABEL: walk_loop
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 202             # modal position
     ILDM R3, 203             # total steps
     ECALL PRINT_STR

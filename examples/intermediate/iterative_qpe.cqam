@@ -35,14 +35,12 @@ res:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp
     ILDI R1, @inp.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -100,10 +98,10 @@ LABEL: iter_loop
     QHADM Q2, Q2, R3     # Hadamard → |+⟩
 
 # --- Decrement k ---
-    ISUB R2, R2, R3
+    IDEC R2
     ILDI R9, 0
-    ILT R9, R9, R2       # R9 = (0 < R2)? → continue if k > 0
-    JIF R9, iter_loop
+    ICMP R9, R2           # compare 0 with R2 → continue if k > 0
+    JLT iter_loop
 
 # --- One more iteration for k=0 ---
     ISTR R2, 101
@@ -122,8 +120,7 @@ LABEL: iter_loop
     ILDM R3, 1           # R3 = CMEM[1] = iterations
     ILDI R0, @res
     ILDI R1, @res.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT

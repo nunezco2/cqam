@@ -43,14 +43,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -69,7 +67,6 @@ res_fmt:
     ILDI R0, 3           # R0 = target state for Grover oracle
     ILDI R1, 0           # R1 = unused ctx1
     ILDI R2, 6           # R2 = polynomial degree d (number of phi angles)
-    ILDI R3, 1           # R3 = constant 1
     ILDI R4, 0           # R4 = QSVT iteration counter
     ILDI R5, 0           # R5 = signal qubit index (qubit 0)
     ILDI R6, 1           # R6 = control qubit index (qubit 1)
@@ -111,9 +108,9 @@ LABEL: qsvt_loop
     QCNOT Q0, Q0, R5, R6       # CNOT(qubit 0 -> qubit 1)
 
 # Advance to next phi angle
-    IADD R7, R7, R3      # CMEM pointer++
-    IADD R4, R4, R3      # iteration counter++
-    ISUB R2, R2, R3      # remaining--
+    IINC R7  # CMEM pointer++
+    IINC R4  # iteration counter++
+    IDEC R2  # remaining--
     JIF R2, qsvt_loop
 
 # === Final signal processing rotation (closing angle) ===
@@ -138,8 +135,7 @@ LABEL: qsvt_loop
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ILDM R2, 4               # most probable state
     ECALL PRINT_STR
 

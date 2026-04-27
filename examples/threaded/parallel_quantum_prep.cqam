@@ -52,8 +52,7 @@ done_msg:
 # --- Print banner ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # ===================================================================
@@ -69,12 +68,10 @@ done_msg:
     HREDUCE MODEV, H0, R3      # R3 = Q0 measurement (0 or 2)
     ISTR R3, 0                 # shared CMEM[0] = Q0 result
 
-    ILDI R14, 0
-    IADD R2, R3, R14           # R2 = R3 (for %d)
+    IMOV R2, R3                # R2 = R3 (for %d)
     ILDI R0, @q0_msg
     ILDI R1, @q0_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # Q1: Bell state (entangled 2-qubit pair)
@@ -84,11 +81,10 @@ done_msg:
     HREDUCE MODEV, H1, R3      # R3 = Q1 measurement (0 or 3)
     ISTR R3, 1                 # shared CMEM[1] = Q1 result
 
-    IADD R2, R3, R14           # R2 = R3 (for %d)
+    IMOV R2, R3                # R2 = R3 (for %d)
     ILDI R0, @q1_msg
     ILDI R1, @q1_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
 # ===================================================================
@@ -108,8 +104,7 @@ done_msg:
     ILDM R9, 0                 # R9 = Q0 measurement
     ILDI R10, 100
     IMUL R9, R9, R10           # R9 = Q0_meas * 100
-    ILDI R10, 1
-    IADD R9, R9, R10           # R9 = Q0_meas * 100 + 1
+    IINC R9, R9                # R9 = Q0_meas * 100 + 1
     ISTR R9, 2                 # shared[2] = derived from Q0
 
     # Read Q1 measurement and compute derived value
@@ -130,21 +125,18 @@ done_msg:
     ILDM R2, 2
     ILDI R0, @r0_msg
     ILDI R1, @r0_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
     ILDM R2, 3
     ILDI R0, @r1_msg
     ILDI R1, @r1_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
     ILDI R0, @done_msg
     ILDI R1, @done_msg.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1, R1
     ECALL PRINT_STR
 
     HALT

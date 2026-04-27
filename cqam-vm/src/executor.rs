@@ -218,6 +218,20 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
             ctx.psw.nf = a < b;
         }
 
+        Instruction::ICmp { lhs, rhs } => {
+            let a = ctx.iregs.get(*lhs)?;
+            let b = ctx.iregs.get(*rhs)?;
+            let (result, overflowed) = a.overflowing_sub(b);
+            ctx.psw.update_from_arithmetic_with_overflow(result, overflowed);
+        }
+
+        Instruction::ICmpI { src, imm } => {
+            let a = ctx.iregs.get(*src)?;
+            let b = *imm as i64;
+            let (result, overflowed) = a.overflowing_sub(b);
+            ctx.psw.update_from_arithmetic_with_overflow(result, overflowed);
+        }
+
         // =====================================================================
         // Float arithmetic (F-file)
         // =====================================================================
@@ -745,12 +759,15 @@ pub fn execute_instruction<B: QuantumBackend + Clone + Send + 'static>(
         Instruction::HFork
         | Instruction::HMerge
         | Instruction::JmpF { .. }
+        | Instruction::JmpFN { .. }
+        | Instruction::Jgt { .. }
+        | Instruction::Jle { .. }
         | Instruction::HReduce { .. }
         | Instruction::HAtmS
         | Instruction::HAtmE => {
             let jumped = execute_hybrid(ctx, instr, fork_mgr, backend)?;
             if jumped {
-                return Ok(()); // JmpF took a jump: do NOT advance PC
+                return Ok(()); // jump taken: do NOT advance PC
             }
         }
 

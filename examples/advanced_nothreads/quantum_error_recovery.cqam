@@ -72,7 +72,7 @@ res_fmt:
 # After mid-circuit measurement, the DF flag may be set
 # if purity dropped below the configured threshold.
 # ============================================
-    JMPF DF, df_set
+    JDEC df_set
     ILDI R8, 0
     JMP after_df
 LABEL: df_set
@@ -97,7 +97,7 @@ LABEL: after_df
 # Measurement and CF flag check
 # ============================================
     QOBSERVE H0, Q2              # destructive measurement of |+>
-    JMPF CF, cf_set
+    JCOL cf_set
     ILDI R9, 0
     JMP after_cf
 LABEL: cf_set

@@ -58,7 +58,7 @@ done_msg:
 # ============================================
     QPREP Q0, UNIF                  # UNIF
     QKERNEL UNIT, Q0, Q0, R14, R14
-    JMPF SF, sf_yes
+    JSUP sf_yes
     ILDI R2, 0
     JMP sf_print
 LABEL: sf_yes
@@ -74,7 +74,7 @@ LABEL: sf_print
 # ============================================
     QPREP Q1, ZERO                  # ZERO
     QKERNEL ENTG, Q1, Q1, R14, R14
-    JMPF EF, ef_yes
+    JENT ef_yes
     ILDI R2, 0
     JMP ef_print
 LABEL: ef_yes
@@ -190,7 +190,7 @@ LABEL: ef_print
     QPHASE Q2, Q2, R7
 
     # Check QF (should be set — Q registers active)
-    JMPF QF, qf_ok
+    JQACT qf_ok
 LABEL: qf_ok
 
     # Observe and reduce

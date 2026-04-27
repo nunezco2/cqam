@@ -157,10 +157,30 @@ pub fn encode(instr: &Instruction, label_map: &HashMap<String, u32>) -> Result<u
             let addr = resolve_label_u16(target, label_map)?;
             encode_jr(op::JMPF, u8::from(*flag), addr)
         }
+        Instruction::JmpFN { flag, target } => {
+            let addr = resolve_label_u16(target, label_map)?;
+            encode_jr(op::JMPFN, u8::from(*flag), addr)
+        }
         Instruction::SetIV { trap_id, target } => {
             let addr = resolve_label_u16(target, label_map)?;
             encode_jr(op::SETIV, u8::from(*trap_id), addr)
         }
+
+        // -- J-format (label-only) for JGT, JLE ---------------------------
+        Instruction::Jgt { target } => {
+            let addr = resolve_label(target, label_map)?;
+            encode_j(op::JGT, addr)
+        }
+        Instruction::Jle { target } => {
+            let addr = resolve_label(target, label_map)?;
+            encode_j(op::JLE, addr)
+        }
+
+        // -- RRR-format (ICmp: dst=0, lhs, rhs) ---------------------------
+        Instruction::ICmp { lhs, rhs } => encode_rrr(op::ICMP, 0, *lhs, *rhs),
+
+        // -- RI-format (ICmpI: src register, immediate) -------------------
+        Instruction::ICmpI { src, imm } => encode_ri(op::ICMPI, *src, *imm),
 
         // -- QP-format (quantum prepare) --------------------------------------
         Instruction::QPrep { dst, dist } => encode_qp(op::QPREP, *dst, u8::from(*dist)),

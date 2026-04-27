@@ -97,6 +97,8 @@ GROV).
 | SF | 5 | Superposition created: set by kernels that create superposition |
 | EF | 6 | Entanglement created: set by kernels that create entanglement |
 | IF | 12 | Interference: set by kernels that exploit interference |
+| AF | 13 | Atomic section: set on the elected leader thread between HATMS and HATME |
+| NW | 14 | Normalization warning: set by QPREPS/QPREPSM when auto-correction applied |
 | DF | — | Decohered: set after measurement |
 | CF | — | Collapsed distribution |
 
@@ -415,12 +417,21 @@ atomic sections and do not observe partial writes from a concurrent leader.
 At `HMERGE`, the final live data is written back to thread 0's CMEM via
 `write_back()`.
 
-### 8.5 JMPF
+### 8.5 JMPF and JMPFN
 
-Conditional execution based on PSW flags. Uses flag name syntax:
-`JMPF FLAG_NAME, target` (e.g., `JMPF EF, entangled_path`). The flag name
-is assembled to the corresponding flag ID in the binary encoding. Jumps to
-the target label if the named flag is set.
+Conditional execution based on PSW flags. Both instructions use flag-name syntax:
+`JMPF FLAG_NAME, target` and `JMPFN FLAG_NAME, target`. The flag name is assembled
+to the corresponding flag ID in the binary encoding.
+
+- `JMPF`: jumps if the named flag **is set**.
+- `JMPFN`: jumps if the named flag **is not set** (negated sense).
+
+All 15 named flags (ZF through NW, IDs 0–14) are valid operands for both instructions.
+
+The signed-comparison jumps JGT and JLE test a compound two-flag condition
+(ZF and the NF==OF relationship) and require a preceding ICMP or ICMPI to have
+set those flags correctly. They use the J encoding format and do not take a flag
+operand.
 
 ### 8.6 HREDUCE
 
@@ -608,6 +619,70 @@ PSW is not modified by ZMOV.
                               PSW.ZF := (TID == 0),
                               PC := PC + 1]
 ```
+
+**Register Compare (ICMP):**
+```
+                  temp = R[ra] - R[rb]
+  -------------------------------------------------------
+  sigma --ICMP(ra, rb)--> sigma[PSW.ZF := (temp == 0),
+                                 PSW.NF := (temp < 0),
+                                 PSW.OF := signed_overflow(R[ra], R[rb]),
+                                 PC := PC + 1]
+```
+
+No destination register is written. The temporary difference is computed and discarded after flag update.
+
+**Immediate Compare (ICMPI):**
+```
+                  v = sign_extend(imm)
+                  temp = R[ra] - v
+  -------------------------------------------------------
+  sigma --ICMPI(ra, imm)--> sigma[PSW.ZF := (temp == 0),
+                                   PSW.NF := (temp < 0),
+                                   PSW.OF := signed_overflow(R[ra], v),
+                                   PC := PC + 1]
+```
+
+**Negated Flag-Conditional Jump (JMPFN):**
+```
+          PSW[flag] == false     addr = labels(target)
+  -------------------------------------------------------
+  sigma --JMPFN(flag, target)--> sigma[PC := addr]
+
+          PSW[flag] == true
+  -------------------------------------------------------
+  sigma --JMPFN(flag, target)--> sigma[PC := PC + 1]
+```
+
+This is the exact complement of JMPF: the branch is taken when the flag is **clear**.
+
+**Signed Greater-Than Jump (JGT):**
+```
+          PSW.ZF == false  AND  PSW.NF == PSW.OF
+          addr = labels(target)
+  -------------------------------------------------------
+  sigma --JGT(target)--> sigma[PC := addr]
+
+          PSW.ZF == true  OR  PSW.NF != PSW.OF
+  -------------------------------------------------------
+  sigma --JGT(target)--> sigma[PC := PC + 1]
+```
+
+The condition `NF == OF` ensures that signed overflow does not invert the branch direction: when both flags agree, the subtraction result was non-negative and non-zero, meaning the left operand of the preceding ICMP was strictly greater.
+
+**Signed Less-or-Equal Jump (JLE):**
+```
+          PSW.ZF == true  OR  PSW.NF != PSW.OF
+          addr = labels(target)
+  -------------------------------------------------------
+  sigma --JLE(target)--> sigma[PC := addr]
+
+          PSW.ZF == false  AND  PSW.NF == PSW.OF
+  -------------------------------------------------------
+  sigma --JLE(target)--> sigma[PC := PC + 1]
+```
+
+JLE is the exact logical complement of JGT. For any machine state, exactly one of JGT and JLE will be taken.
 
 **Atomic Section Start (HATMS):**
 ```

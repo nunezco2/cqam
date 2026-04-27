@@ -40,8 +40,8 @@ ghz_fmt:
     ILDI R11, 1
     ILDI R12, 0
 LABEL: pow2_loop
-    IEQ R13, R12, R10
-    JIF R13, pow2_done
+    ICMP R12, R10
+    JEQ pow2_done
     IADD R11, R11, R11
     IADD R12, R12, R15
     JMP pow2_loop
@@ -78,8 +78,8 @@ LABEL: pow2_done
     ILDI R14, 0                  # zero ctx
 
 LABEL: grover_loop
-    IEQ R7, R6, R4
-    JIF R7, grover_done
+    ICMP R6, R4
+    JEQ grover_done
 
     CALL grover_step
 
@@ -122,7 +122,7 @@ LABEL: grover_done
 # GHZ entanglement flag verification
 # ============================================
     QPREP Q1, GHZS                  # GHZ → sets EF
-    JMPF EF, ef_set
+    JENT ef_set
     ILDI R2, 0
     JMP ef_print
 LABEL: ef_set

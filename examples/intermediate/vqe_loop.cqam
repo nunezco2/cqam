@@ -28,14 +28,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -74,7 +72,7 @@ LABEL: vqe_loop
 
 LABEL: update_best
 # New best found — store it
-    FADD F3, F4, F1      # F3 = F4 (copy: best = current, F1=0 so F3=F4+0)
+    FMOV F3, F4           # F3 = F4 (best = current energy)
     FADD F0, F0, F2      # theta += delta (continue in this direction)
 
 LABEL: check_convergence
@@ -83,12 +81,12 @@ LABEL: check_convergence
     FLT R6, F5, F6       # R6 = (variance < threshold) ? 1 : 0
 
 # Store intermediate results
-    IADD R2, R2, R1      # iteration++
+    IINC R2  # iteration++
     FSTR F4, 0           # CMEM[0] = current energy
     FSTR F0, 1           # CMEM[1] = current theta
 
 # Decrement remaining iterations
-    ISUB R0, R0, R1
+    IDEC R0
 
 # Exit if converged or max iterations reached
     JIF R6, vqe_done     # converged
@@ -114,8 +112,7 @@ LABEL: vqe_done
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     # R2 still holds iteration count from the loop
     FLDM F1, 10          # F1 = best energy found (CMEM[10], stored via FSTR)
     ECALL PRINT_STR

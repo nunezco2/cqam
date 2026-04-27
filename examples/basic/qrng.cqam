@@ -95,8 +95,8 @@ LABEL: rng_loop
     ILDI R10, 1           # R10 = accumulator for 2^N
     ILDI R11, 0           # R11 = loop counter
 LABEL: rng_pow2
-    IEQ R12, R11, R9
-    JIF R12, rng_pow2_done
+    ICMP R11, R9
+    JEQ rng_pow2_done
     IADD R10, R10, R10
     IINC R11
     JMP rng_pow2

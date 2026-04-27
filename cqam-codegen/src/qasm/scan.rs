@@ -86,6 +86,14 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
             used.int_regs.insert(*rhs);
         }
 
+        Instruction::ICmp { lhs, rhs } => {
+            used.int_regs.insert(*lhs);
+            used.int_regs.insert(*rhs);
+        }
+        Instruction::ICmpI { src, .. } => {
+            used.int_regs.insert(*src);
+        }
+
         // -- Float arithmetic --
         Instruction::FAdd { dst, lhs, rhs }
         | Instruction::FSub { dst, lhs, rhs }
@@ -364,7 +372,10 @@ fn scan_instruction(instr: &Instruction, used: &mut UsedRegisters) {
 
         // -- Hybrid operations --
         Instruction::HFork | Instruction::HMerge => {}
-        Instruction::JmpF { .. } => {}
+        Instruction::JmpF { .. }
+        | Instruction::JmpFN { .. }
+        | Instruction::Jgt { .. }
+        | Instruction::Jle { .. } => {}
         Instruction::HReduce { src, dst, func } => {
             used.hybrid_regs.insert(*src);
             match func.output_file() {

@@ -35,14 +35,12 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     IQCFG R2              # R2 = qubit count from config
     ECALL PRINT_STR
 
@@ -95,14 +93,14 @@ LABEL: tomo_z_loop
 
 # Store individual outcome
     ISTRX R11, R8        # CMEM[R8] = outcome
-    IADD R8, R8, R1      # R8++ advance pointer
+    IINC R8  # R8++ advance pointer
 
 # Observe remaining state (cleanup)
     QOBSERVE H0, Q0
 
 # Loop control
-    IADD R3, R3, R1
-    ISUB R2, R2, R1
+    IINC R3
+    IDEC R2
     JIF R2, tomo_z_loop
 
 # ===============================================
@@ -128,12 +126,12 @@ LABEL: tomo_x_loop
     IADD R6, R6, R12     # X_zero_count += (outcome == 0)
 
     ISTRX R11, R9
-    IADD R9, R9, R1
+    IINC R9
 
     QOBSERVE H0, Q0
 
-    IADD R3, R3, R1
-    ISUB R2, R2, R1
+    IINC R3
+    IDEC R2
     JIF R2, tomo_x_loop
 
 # ===============================================
@@ -159,12 +157,12 @@ LABEL: tomo_y_loop
     IADD R7, R7, R12     # Y_zero_count += (outcome == 0)
 
     ISTRX R11, R10
-    IADD R10, R10, R1
+    IINC R10
 
     QOBSERVE H0, Q0
 
-    IADD R3, R3, R1
-    ISUB R2, R2, R1
+    IINC R3
+    IDEC R2
     JIF R2, tomo_y_loop
 
 # ===============================================
@@ -217,8 +215,7 @@ LABEL: tomo_y_loop
 # --- Print results ---
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     FLDM F1, 0               # F1 = sigma_z (%f arg 1)
     FLDM F2, 1               # F2 = sigma_x (%f arg 2)
     FLDM F3, 2               # F3 = sigma_y (%f arg 3)

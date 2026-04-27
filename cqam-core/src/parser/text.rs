@@ -143,6 +143,40 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
         "IEQ" => parse_rrr(&ops, |dst, lhs, rhs| Instruction::IEq { dst, lhs, rhs }, "IEQ", line_num),
         "ILT" => parse_rrr(&ops, |dst, lhs, rhs| Instruction::ILt { dst, lhs, rhs }, "ILT", line_num),
         "IGT" => parse_rrr(&ops, |dst, lhs, rhs| Instruction::IGt { dst, lhs, rhs }, "IGT", line_num),
+        "ICMP" => {
+            if ops.len() != 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("ICMP requires 2 operands, got {}", ops.len()),
+                });
+            }
+            let lhs = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("ICMP: invalid lhs register '{}'", ops[0]),
+            })?;
+            let rhs = parse_reg(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("ICMP: invalid rhs register '{}'", ops[1]),
+            })?;
+            Ok(Instruction::ICmp { lhs, rhs })
+        }
+        "ICMPI" => {
+            if ops.len() != 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("ICMPI requires 2 operands, got {}", ops.len()),
+                });
+            }
+            let src = parse_reg(ops[0]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("ICMPI: invalid register '{}'", ops[0]),
+            })?;
+            let imm = parse_i16(ops[1]).ok_or_else(|| CqamError::ParseError {
+                line: line_num,
+                message: format!("ICMPI: invalid immediate '{}'", ops[1]),
+            })?;
+            Ok(Instruction::ICmpI { src, imm })
+        }
 
         // -- Float arithmetic ------------------------------------------------
         "FADD" => parse_rrr(&ops, |dst, lhs, rhs| Instruction::FAdd { dst, lhs, rhs }, "FADD", line_num),
@@ -846,7 +880,7 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
             } else {
                 let raw = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
                     line: line_num,
-                    message: format!("JMPF: unknown flag '{}' (expected ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG, IF, AF, or numeric ID)", ops[0]),
+                    message: format!("JMPF: unknown flag '{}' (expected ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG, IF, AF, NW, or numeric ID)", ops[0]),
                 })?;
                 crate::instruction::FlagId::try_from(raw).map_err(|_| CqamError::ParseError {
                     line: line_num,
@@ -861,6 +895,195 @@ pub fn parse_instruction_at(line: &str, line_num: usize) -> ParseResult {
                 });
             }
             Ok(Instruction::JmpF { flag, target })
+        }
+        "JMPFN" => {
+            if ops.len() != 2 {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("JMPFN requires 2 operands, got {}", ops.len()),
+                });
+            }
+            let flag = if let Some(id) = crate::instruction::FlagId::from_mnemonic(ops[0]) {
+                id
+            } else {
+                let raw = parse_u8(ops[0]).ok_or_else(|| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("JMPFN: unknown flag '{}' (expected ZF, NF, OF, PF, QF, SF, EF, HF, DF, CF, FK, MG, IF, AF, NW, or numeric ID)", ops[0]),
+                })?;
+                crate::instruction::FlagId::try_from(raw).map_err(|_| CqamError::ParseError {
+                    line: line_num,
+                    message: format!("JMPFN: invalid flag ID {}", raw),
+                })?
+            };
+            let target = ops[1].to_string();
+            if target.is_empty() {
+                return Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JMPFN: missing target label".to_string(),
+                });
+            }
+            Ok(Instruction::JmpFN { flag, target })
+        }
+        "JGT" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JGT requires a target label".to_string(),
+                })
+            } else {
+                Ok(Instruction::Jgt { target: label.to_string() })
+            }
+        }
+        "JLE" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JLE requires a target label".to_string(),
+                })
+            } else {
+                Ok(Instruction::Jle { target: label.to_string() })
+            }
+        }
+
+        // -- Signed comparison aliases ----------------------------------------
+        // JEQ/JZ -> JmpF ZF
+        "JEQ" | "JZ" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("{} requires a target label", opcode),
+                })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Zf, target: label.to_string() })
+            }
+        }
+        // JNE/JNZ -> JmpFN ZF
+        "JNE" | "JNZ" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: format!("{} requires a target label", opcode),
+                })
+            } else {
+                Ok(Instruction::JmpFN { flag: crate::instruction::FlagId::Zf, target: label.to_string() })
+            }
+        }
+        // JLT -> JmpF NF
+        "JLT" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JLT requires a target label".to_string(),
+                })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Nf, target: label.to_string() })
+            }
+        }
+        // JGE -> JmpFN NF
+        "JGE" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JGE requires a target label".to_string(),
+                })
+            } else {
+                Ok(Instruction::JmpFN { flag: crate::instruction::FlagId::Nf, target: label.to_string() })
+            }
+        }
+        // JOV -> JmpF OF
+        "JOV" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JOV requires a target label".to_string(),
+                })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Of, target: label.to_string() })
+            }
+        }
+        // JNO -> JmpFN OF
+        "JNO" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError {
+                    line: line_num,
+                    message: "JNO requires a target label".to_string(),
+                })
+            } else {
+                Ok(Instruction::JmpFN { flag: crate::instruction::FlagId::Of, target: label.to_string() })
+            }
+        }
+
+        // -- Quantum condition aliases -----------------------------------------
+        // JQACT -> JmpF QF
+        "JQACT" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JQACT requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Qf, target: label.to_string() })
+            }
+        }
+        // JSUP -> JmpF SF
+        "JSUP" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JSUP requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Sf, target: label.to_string() })
+            }
+        }
+        // JENT -> JmpF EF
+        "JENT" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JENT requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Ef, target: label.to_string() })
+            }
+        }
+        // JINF -> JmpF IF
+        "JINF" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JINF requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::If, target: label.to_string() })
+            }
+        }
+        // JCOL -> JmpF CF
+        "JCOL" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JCOL requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Cf, target: label.to_string() })
+            }
+        }
+        // JDEC -> JmpF DF
+        "JDEC" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JDEC requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Df, target: label.to_string() })
+            }
+        }
+        // JNRM -> JmpF NW
+        "JNRM" => {
+            let label = remainder.trim();
+            if label.is_empty() {
+                Err(CqamError::ParseError { line: line_num, message: "JNRM requires a target label".to_string() })
+            } else {
+                Ok(Instruction::JmpF { flag: crate::instruction::FlagId::Nw, target: label.to_string() })
+            }
         }
         "HREDUCE" => {
             if ops.len() != 3 {

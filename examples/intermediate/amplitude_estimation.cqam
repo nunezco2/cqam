@@ -28,15 +28,13 @@ res_fmt:
 # --- Print banner and inputs ---
     ILDI R0, @banner
     ILDI R1, @banner.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     IQCFG R2                 # R2 = N (qubit count) for %d
     ILDI R0, @inp_fmt
     ILDI R1, @inp_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
 # --- Setup ---
@@ -54,10 +52,10 @@ LABEL: ae_outer_loop
     ILDI R5, 1
     ILDI R6, 0           # R6 = shift counter
 LABEL: shift_loop
-    IEQ R7, R6, R4       # R7 = (R6 == R4)
-    JIF R7, shift_done
+    ICMP R6, R4           # compare R6 with R4
+    JEQ shift_done
     IADD R5, R5, R5      # R5 *= 2
-    IADD R6, R6, R3      # R6++
+    IINC R6  # R6++
     JMP shift_loop
 LABEL: shift_done
 
@@ -67,7 +65,7 @@ LABEL: shift_done
 # --- Apply 2^k Grover iterations ---
 LABEL: grover_inner
     QKERNEL GROV, Q0, Q0, R0, R1   # One Grover iteration targeting R0
-    ISUB R5, R5, R3              # iterations--
+    IDEC R5  # iterations--
     JIF R5, grover_inner
 
     ISTR R4, 100                 # CMEM[100+?] = k
@@ -86,8 +84,8 @@ LABEL: grover_inner
     FSTR F2, 120         # Mean frequency at depth k
 
 # --- Advance outer loop ---
-    IADD R4, R4, R3      # k++
-    ISUB R2, R2, R3      # remaining bits--
+    IINC R4  # k++
+    IDEC R2  # remaining bits--
     JIF R2, ae_outer_loop
 
 # === Final amplitude estimate ===
@@ -110,8 +108,7 @@ LABEL: grover_inner
     ILDM R3, 2               # R3 = CMEM[2] = target state
     ILDI R0, @res_fmt
     ILDI R1, @res_fmt.len
-    ILDI R15, 1
-    ISUB R1, R1, R15
+    IDEC R1
     ECALL PRINT_STR
 
     HALT
